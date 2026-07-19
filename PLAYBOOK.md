@@ -254,8 +254,9 @@ kept both trees side by side — preserve that discipline.
 | Lints as errors | `clippy -D warnings` (+ overflow/cast lints) | CI |
 | Don't re-port a C vuln | `c-flaw-scan/scan_c_flaws.py` at Phase 0 | review |
 
-See `harnesses/ci/porting-ci.template.yml` for the wiring and
-`make -C porting-kit check-kit` to smoke-test every harness.
+See `harnesses/ci/porting-ci.template.yml` for the wiring, and smoke-test every
+harness with the kit's `make check-kit` — run from the kit root, or as
+`make -C porting-kit check-kit` in a repo that vendors the kit at `porting-kit/`.
 
 ---
 

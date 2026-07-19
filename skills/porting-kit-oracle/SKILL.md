@@ -35,4 +35,4 @@ semantic-comparison stage, not build time — "it builds" tells you almost nothi
 
 ## Integrity
 Harness paths/subcommands/flags must match the kit. If they drift, fix the reference
-and re-run `make -C porting-kit check-kit`.
+and re-run the kit's `make check-kit` (`make -C porting-kit check-kit` when vendored).

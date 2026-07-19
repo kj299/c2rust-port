@@ -35,4 +35,4 @@ sure the hunt *happens* before translation, not after a CVE is faithfully reprod
 
 ## Integrity
 Paths/flags/categories must match `scan_c_flaws.py`. If they drift, fix the reference
-and re-run `make -C porting-kit check-kit`.
+and re-run the kit's `make check-kit` (`make -C porting-kit check-kit` when vendored).

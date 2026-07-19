@@ -28,8 +28,8 @@ port *safe* and *verifiable*.
 ## The gates (non-negotiable, wired into CI)
 
 Every module clears all six before merge:
-`ported → differential → fuzzed → sanitized → unsafe-audited`. A module that
-compiles and matches the oracle is at step 2 of 6, not done.
+`ported → differential → fuzzed → sanitized → unsafe-audited → pinned+merged`.
+A module that compiles and matches the oracle is at step 2 of 6, not done.
 
 | Control | Command |
 |---|---|
@@ -41,8 +41,9 @@ compiles and matches the oracle is at step 2 of 6, not done.
 | no silent drift | `harnesses/differential/diff_run.py` + `DIVERGENCES.md` |
 | don't re-port a vuln | `harnesses/c-flaw-scan/scan_c_flaws.py` at Phase 0 |
 
-Smoke-test the harnesses anytime with `make -C porting-kit check-kit` (python3 +
-bash only; no toolchain needed).
+Smoke-test the harnesses anytime with `make check-kit` from the kit root —
+`make -C porting-kit check-kit` in a repo that vendors the kit at `porting-kit/`
+(python3 + bash only; no toolchain needed).
 
 ## Habits the retrospective bought in blood
 

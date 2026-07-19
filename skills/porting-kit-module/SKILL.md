@@ -48,4 +48,4 @@ and let the vector suite pick the winner (diversity beats any single method).
 
 ## Integrity
 Commands/paths/gate-names must match the kit and PLAYBOOK Phase 4. Fix the reference on
-drift; re-run `make -C porting-kit check-kit`.
+drift; re-run the kit's `make check-kit` (`make -C porting-kit check-kit` when vendored).

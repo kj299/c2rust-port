@@ -35,7 +35,7 @@ retrospective and **patch the Porting Kit** with what you learned.
 3. **Patch the kit** — make the concrete edits, don't just describe them:
    - amend `PLAYBOOK.md` phases/criteria,
    - fix/extend a harness (add the normalization rule, the flaw pattern, the
-     gate) and re-run `make -C porting-kit check-kit`,
+     gate) and re-run the kit's `make check-kit`,
    - update `ARCHITECTURE-TEMPLATE.md` / prompts if the shape or loop changed.
 
 4. **Append to `LESSONS.md`** — one entry per lesson, in the required format

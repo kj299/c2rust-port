@@ -10,7 +10,7 @@ per-skill card.
 Copy or symlink each `porting-kit-*` directory into the target repo's
 `.claude/skills/` so Claude Code discovers it. They assume the kit lives at
 repo-root `porting-kit/`; if you vendor it elsewhere, adjust the paths inside each
-`SKILL.md` and re-run `make -C porting-kit check-kit`.
+`SKILL.md` and re-run the kit's `make check-kit`.
 
 ## The suite
 

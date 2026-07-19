@@ -38,4 +38,4 @@ unless every applicable gate is green (or a divergence is ledgered with justific
 
 ## Integrity
 Gate commands must match the harnesses and SECURITY-CHECKLIST. Fix the reference on
-drift; re-run `make -C porting-kit check-kit`.
+drift; re-run the kit's `make check-kit` (`make -C porting-kit check-kit` when vendored).
