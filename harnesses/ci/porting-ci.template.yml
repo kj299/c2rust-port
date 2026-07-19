@@ -126,3 +126,11 @@ jobs:
             --oracle ./c-oracle --rust ./target/release/<binary> \
             --matrix porting-kit/harnesses/differential/input-matrix.example.toml \
             --ledger DIVERGENCES.md
+          # Differential FUZZING smoke: same mutated input to both, hunt semantic
+          # divergences the matrix never had. Short + fixed-seed here for
+          # reproducibility; schedule a long `--max-time` sweep nightly.
+          python3 porting-kit/harnesses/diff-fuzz/diff_fuzz.py \
+            --oracle ./c-oracle --rust ./target/release/<binary> \
+            --matrix porting-kit/harnesses/differential/input-matrix.example.toml \
+            --ledger DIVERGENCES.md --findings-dir fuzz-findings \
+            --seed 0 --iterations 2000

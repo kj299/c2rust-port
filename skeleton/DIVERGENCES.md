@@ -19,6 +19,8 @@ the old acceptance. An unpinned entry suppresses by name alone (legacy).
 ```
 - [x] <matrix-case-name> [sha256:<12-hex>]: <why the Rust intentionally differs; CWE if a security fix>
 - [x] <matrix-case-name>: <why>            (unpinned/legacy — diff_run prints the pin to add)
+- [x] fuzz:<short-desc> [sha256:<hex>]: <why>   (a differential-FUZZING divergence; MUST be pinned —
+                                                 diff_fuzz suppresses only by fingerprint, never by name)
 ```
 
 ## Security fixes (C defect closed by the port)

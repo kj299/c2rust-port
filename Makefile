@@ -12,6 +12,7 @@ check-kit:
 	@echo "== diff_run ==";         $(PY) $(H)/differential/diff_run.py --self-test
 	@echo "== golden ==";           $(PY) $(H)/golden/golden.py --self-test
 	@echo "== c-flaw-scan ==";      $(PY) $(H)/c-flaw-scan/scan_c_flaws.py --self-test
+	@echo "== diff-fuzz ==";        $(PY) $(H)/diff-fuzz/diff_fuzz.py --self-test
 	@echo "== progress ==";         $(PY) $(H)/progress/progress.py --self-test
 	@echo "== fuzz scaffolder ==";  bash  $(H)/fuzz/gen_fuzz_target.sh --check
 	@echo "== supply-chain ==";     bash  $(H)/supply-chain/run_supply_chain.sh --check

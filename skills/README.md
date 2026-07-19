@@ -20,6 +20,7 @@ repo-root `porting-kit/`; if you vendor it elsewhere, adjust the paths inside ea
 | `porting-kit-cflaw-scan` | 0 | once / per subsystem | low (tool + triage) | ∥ with oracle |
 | `porting-kit-oracle` | 2 | once, pre-Rust | medium (build corpus) | ∥ with cflaw-scan |
 | `porting-kit-module` | 4 | **per module (hot path)** | high (translate + iterate) | per-module ∥ (leaf order) |
+| `porting-kit-diff-fuzz` | 4–5 | per module (after matrix green) + nightly | medium (fuzz + triage) | ∥ per module |
 | `porting-kit-audit` | 4–5 | per module + release | low (runs gates, reads verdicts) | — |
 | `porting-kit-retrospective` | end | once per phase — **never skip** | medium | — |
 
@@ -36,6 +37,9 @@ repo-root `porting-kit/`; if you vendor it elsewhere, adjust the paths inside ea
 - **`porting-kit-module`** — the six-gate loop for one module: spike-if-hazardous →
   port → differential → fuzz → sanitize → unsafe-audit → pin+merge. Advances
   `progress.json`.
+- **`porting-kit-diff-fuzz`** — differential-fuzz the port: same mutated input to C
+  and Rust over many iterations; minimize + triage each divergence the fixed matrix
+  missed. Run after the matrix differential is green; sweep longer nightly.
 - **`porting-kit-audit`** — run the full safety-gate suite; report a gate-status
   table; refuse a "safe" verdict unless every applicable gate is green or a
   divergence is ledgered. Gate every merge/release with it.
@@ -47,7 +51,7 @@ repo-root `porting-kit/`; if you vendor it elsewhere, adjust the paths inside ea
 ```
 kickoff
   → (cflaw-scan  ∥  oracle)
-  → for each leaf in topological order:  module  →  audit
+  → for each leaf in topological order:  module  →  (diff-fuzz)  →  audit
   → retrospective   (patch the kit + LESSONS; keep skills in integrity)
 ```
 
