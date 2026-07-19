@@ -49,7 +49,7 @@ fn main() {
         std::process::exit(1);
     }
 
-    match core::parse(&input) {
+    match port_core::parse(&input) {
         Ok(records) if json => {
             println!("[");
             for (i, r) in records.iter().enumerate() {

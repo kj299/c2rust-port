@@ -12,7 +12,7 @@ and which cross a privilege boundary (audit those hardest).
 List each entry point and mark it. These are the fuzz + validation priorities.
 | Entry point | Source | Trust | Ported module |
 |---|---|---|---|
-| CLI args / stdin | user / pipe | untrusted | `cli`, `core::parser` |
+| CLI args / stdin | user / pipe | untrusted | `cli`, `port_core::parser` |
 | files parsed | filesystem | semi-trusted | |
 | network / IPC | remote | untrusted | |
 | environment / config | operator | trusted-ish | |

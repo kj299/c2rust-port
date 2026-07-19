@@ -10,7 +10,7 @@ name = "port"        # rename to your tool's binary name
 path = "src/main.rs"
 
 [dependencies]
-core = { path = "../core" }
+port_core = { path = "../core" }
 sys = { path = "../sys" }
 
 [lints]
