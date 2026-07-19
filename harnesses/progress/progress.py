@@ -12,7 +12,8 @@ A module's status is the highest gate it has cleared. "Done" = unsafe_audited.
   show   [--json]                   render the table
   ingest --unsafe-json FILE ...     auto-advance from a harness's --json output
 
-Usage: progress.py {init,set,show,ingest} [--file progress.json] ...
+Usage: progress.py [--file progress.json] {init,set,show,ingest} ...
+       (--file may be given before or after the subcommand)
 """
 from __future__ import annotations
 
@@ -126,6 +127,16 @@ def _self_test():
         check("render marks the done module", "DONE" in out)
         check("render shows partial progress", "differential" in out)
         check("render counts 1/3 fully gated", "1/3 modules fully gated" in out)
+
+        # The CLI accepts --file on either side of the subcommand (the
+        # docstring's paste-able order used to be rejected).
+        p2 = os.path.join(d, "p2.json")
+        check("--file before the subcommand works",
+              main(["--file", p2, "init", "--modules", "a"]) == 0)
+        check("--file after the subcommand works",
+              main(["set", "a", "ported", "--file", p2]) == 0)
+        check("both orders hit the same state file",
+              load(p2)["modules"]["a"] == "ported")
     print("\nself-test:", "OK" if ok else "FAILED")
     return 0 if ok else 1
 
@@ -139,6 +150,12 @@ def main(argv=None):
     ps = sub.add_parser("set"); ps.add_argument("module"); ps.add_argument("gate")
     psh = sub.add_parser("show"); psh.add_argument("--json", action="store_true")
     pg = sub.add_parser("ingest"); pg.add_argument("--unsafe-json", nargs="+", default=[])
+    # Accept --file AFTER the subcommand too (the natural paste order, and the
+    # order the docstring shows). SUPPRESS keeps a pre-subcommand --file (or
+    # the top-level default) intact when the flag isn't repeated here.
+    for sp in (pi, ps, psh, pg):
+        sp.add_argument("--file", default=argparse.SUPPRESS,
+                        help="state file (default progress.json)")
     args = ap.parse_args(argv)
 
     if args.self_test:
