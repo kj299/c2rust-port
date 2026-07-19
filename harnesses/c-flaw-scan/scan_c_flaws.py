@@ -98,6 +98,57 @@ def _call_args(src, open_paren):
     return args, n
 
 
+def _mask_c_comments(src):
+    """Return src with // and /* */ comment contents (delimiters included)
+    replaced by spaces, preserving every byte offset and newline so line
+    numbers in the masked text match the original. String and char literals
+    are left intact — a `//` inside "http://x" is not a comment, and the
+    format-string pass needs the literals to tell a constant format from a
+    variable one. C block comments do not nest.
+
+    This replaces the old skip-lines-starting-with-*-or-// heuristic, which
+    also swallowed real code: `*out = malloc(a * b);` (pointer-deref
+    assignment) begins with `*` and was silently never scanned — a false
+    negative, the one direction a Phase-0 security scanner must not err in."""
+    out = []
+    i, n = 0, len(src)
+    while i < n:
+        two = src[i : i + 2]
+        if two == "//":
+            while i < n and src[i] != "\n":
+                out.append(" ")
+                i += 1
+            continue
+        if two == "/*":
+            out.append("  ")
+            i += 2
+            while i < n and src[i : i + 2] != "*/":
+                out.append("\n" if src[i] == "\n" else " ")
+                i += 1
+            if i < n:
+                out.append("  ")
+                i += 2
+            continue
+        c = src[i]
+        if c in "\"'":
+            out.append(c)
+            i += 1
+            while i < n and src[i] != c:
+                if src[i] == "\\" and i + 1 < n:
+                    out.append(src[i]); out.append(src[i + 1])
+                    i += 2
+                    continue
+                out.append(src[i])
+                i += 1
+            if i < n:
+                out.append(c)
+                i += 1
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
 def _scan_format_strings(src):
     hits = []
     for m in _FMT_CALL.finditer(src):
@@ -119,16 +170,18 @@ def _scan_format_strings(src):
 
 
 def scan_text(src):
+    # Mask comments ONCE and scan the masked text with both passes: commented-
+    # out code can't fire (no noise), and real code lines that merely *look*
+    # comment-like (`*out = ...`) are still scanned (no silent false negatives).
+    masked = _mask_c_comments(src)
+    orig_lines = src.splitlines()
     hits = []
-    for lineno, line in enumerate(src.splitlines(), 1):
-        # skip obvious comment-only lines to cut noise
-        stripped = line.strip()
-        if stripped.startswith(("*", "//", "/*")):
-            continue
+    for lineno, line in enumerate(masked.splitlines(), 1):
         for cat, cwe, rx in CHECKS:
             if rx.search(line):
-                hits.append({"line": lineno, "category": cat, "cwe": cwe, "text": stripped[:120]})
-    hits.extend(_scan_format_strings(src))
+                text = orig_lines[lineno - 1].strip() if lineno <= len(orig_lines) else ""
+                hits.append({"line": lineno, "category": cat, "cwe": cwe, "text": text[:120]})
+    hits.extend(_scan_format_strings(masked))
     hits.sort(key=lambda h: h["line"])
     return hits
 
@@ -170,17 +223,24 @@ def run(paths, as_json, strict):
 
 SELF_TEST_C = r'''
 #include <stdio.h>
-void bad(char *u, char *dynfmt) {
+void bad(char *u, char *dynfmt, char **dst) {
     char buf[16];
     strcpy(buf, u);                     /* unbounded-copy */
+    *dst = strcpy(buf, u);              /* unbounded-copy: deref-assign line
+                                           starts with '*' but IS code */
+    r = "http://x"; q = strcat(p, u);   /* unbounded-copy; the // inside the
+                                           string literal is NOT a comment */
     printf(u);                          /* format-string: arg 0 non-literal */
     fprintf(stderr, "literal %s\n", u); /* SAFE: format arg is a literal */
     fprintf(stderr, dynfmt, u);         /* format-string: arg 1 non-literal */
     snprintf(buf, sizeof buf, "%d", 1); /* SAFE: format arg (idx 2) literal */
     char *p = malloc(n * width);        /* int-overflow-mul */
+    *dst = malloc(n * m);               /* int-overflow-mul: deref-assign */
     system(cmd);                        /* command-exec */
     if (access(path, R_OK)) {}          /* toctou */
-    /* strcpy(x, y);  in a comment - should be ignored */
+    /* strcpy(x, y);  in a comment - must be ignored */
+    /* printf(old_fmt);  commented-out format call - must be ignored */
+    // fprintf(stderr, dynfmt, u);      commented-out too - must be ignored
 }
 '''
 
@@ -201,12 +261,19 @@ def _self_test():
     check("flags int-overflow-mul", "int-overflow-mul" in cats)
     check("flags command-exec", "command-exec" in cats)
     check("flags toctou", "toctou" in cats)
-    check("ignores the commented strcpy (no double count)",
-          sum(1 for h in hits if h["category"] == "unbounded-copy") == 1)
+    # Comment masking, both directions: commented-out strcpy must NOT count,
+    # while the deref-assign line (`*dst = strcpy(...)`, starts with '*') and
+    # the call after a "//"-containing string literal MUST. 3 real copy sites.
+    check("copy sites: deref-assign + string-'//' lines scanned, comment ignored",
+          sum(1 for h in hits if h["category"] == "unbounded-copy") == 3)
+    check("deref-assign malloc line scanned (2 mul sites)",
+          sum(1 for h in hits if h["category"] == "int-overflow-mul") == 2)
     # The Pass-1 fix: only NON-LITERAL format args flag; the stream/buffer/size
     # arg is not mistaken for the format. Exactly 2 real hits (printf(u), the
-    # variable-format fprintf); the two literal-format calls must NOT flag.
-    check("format-string flags exactly the 2 non-literal calls", len(fmt_hits) == 2)
+    # variable-format fprintf); the two literal-format calls must NOT flag, and
+    # neither must the two commented-out format calls.
+    check("format-string flags exactly the 2 real non-literal calls "
+          "(literal + commented-out calls ignored)", len(fmt_hits) == 2)
     check("literal-format fprintf/snprintf NOT flagged",
           not any("literal" in h["text"] or '"%d"' in h["text"] for h in fmt_hits))
     print("\nself-test:", "OK" if ok else "FAILED")
