@@ -192,3 +192,93 @@ code), not the playbook prose — evidence that a kit is only as good as its too
 are exercised. `PROMPTS/90-retrospective.md` already says "run against the real
 code"; these passes prove that half is where the findings live, and it is now
 the emphasized half.
+
+---
+
+## 006. Gates fail open on "nothing ran" — self-test the degenerate case, not just detection
+
+- **Date:** 2026-07-19
+- **Codebase:** the Porting Kit itself (full-repo code review + fix pass; PR #1
+  of the lifted `c2rust-port` repo, 26 findings, all fixed)
+- **What happened:** All six High findings were safety gates that *passed when
+  nothing meaningful ran* — and `make check-kit` was green through every one of
+  them. Both binaries timing out produced identical `<<TIMEOUT>>` sentinels and
+  a `MATCH` verdict (a faithfully re-ported hang — the kit's founding bug class
+  — sailed through the liveness backstop PLAYBOOK explicitly promised would
+  fail it). `golden.py` enshrined a hung oracle's `<<TIMEOUT>>` as golden truth
+  and dropped the exit-code half of the verdict on exactly the
+  oracle-substitution path it exists for. The scanner's skip-`*`-lines
+  heuristic silently never scanned `*out = malloc(a * b);`. The CI template's
+  fuzz job looped over an empty `cargo fuzz list` and reported green with zero
+  targets, and its sanitizer job could never succeed (no `rust-src` for
+  `-Zbuild-std`) — an always-red gate that would have been deleted, not fixed.
+  The pattern: every self-test proved its tool *detects* the bad case it was
+  built for; none proved the tool *refuses to pass* when its inputs degenerate
+  (a hang on both sides, an empty target list, a missing component). Detection
+  was tested; fail-closed was not.
+- **Kit change:** every hole fixed with the degenerate case pinned in the same
+  change: rust-side/both-side timeouts are a non-ledgerable `TIMEOUT` verdict;
+  capture refuses a timed-out golden; `.rc` sidecars restore exit-code
+  fidelity; real comment masking replaces the `*`-prefix skip; the fuzz CI job
+  fails on an empty target list; sanitizers install `rust-src`. The general
+  rule — **a gate that finds nothing to check must fail, not pass; add the
+  degenerate-input case to its self-test in the same change** — is now in the
+  playbook, and the retrospective prompt's step 0 requires probing each gate's
+  fail-closed behavior, not just its signal-to-noise.
+- **Section amended:** PLAYBOOK · cross-cutting controls ("Gates fail closed");
+  PROMPTS/90 · step 0; harnesses/differential/diff_run.py,
+  harnesses/golden/golden.py, harnesses/c-flaw-scan/scan_c_flaws.py,
+  harnesses/ci/porting-ci.template.yml (+ their self-tests).
+
+---
+
+## 007. Documented commands are code — phantom flags and paste-broken examples drift silently
+
+- **Date:** 2026-07-19
+- **Codebase:** the Porting Kit itself (same review pass)
+- **What happened:** The operative docs promised behavior the tools did not
+  have, and nothing could catch it: `diff_run.py`'s own docstring advertised a
+  `--update-ledger` flag that was never implemented; the scanner's header
+  listed an `unchecked-malloc` (CWE-690) category with no corresponding check;
+  `progress.py`'s usage line showed `set MODULE GATE --file F` — an order its
+  argparse rejected with exit 2; CLAUDE.md's canonical smoke-test command
+  (`make -C porting-kit check-kit`) failed in the kit's own repo; and the gate
+  chain said "all six" while listing five. The kit already knew this failure
+  class for *skills* (`check_skills.py` hard-fails dangling paths) but had no
+  equivalent for the docs' *flag/CLI claims* — the paste-able surface agents
+  actually execute.
+- **Kit change:** every drifted claim fixed, and the class got a mechanical
+  gate: `harnesses/doc-check/check_doc_flags.py` (wired into `make check-kit`)
+  attributes each `--flag` in the operative docs to the nearest preceding
+  harness name on the line and hard-fails if the flag is absent from that
+  script's source — it would have caught `--update-ledger` on day one.
+  Corollary lived immediately: the OPERATING-GUIDE backlog stopped naming
+  precise flags for unimplemented features (the phantom pattern at birth).
+- **Section amended:** harnesses/doc-check/check_doc_flags.py (new); Makefile ·
+  check-kit; README · harness table; OPERATING-GUIDE · backlog #3/#9;
+  progress.py CLI + docstring; scan_c_flaws.py docstring; diff_run.py usage;
+  CLAUDE.md · gates + smoke-test command (and every SKILL.md integrity footer).
+
+---
+
+## 008. An acceptance list that matches by name becomes a permanent mute button
+
+- **Date:** 2026-07-19
+- **Codebase:** the Porting Kit itself (same review pass)
+- **What happened:** The divergence ledger suppressed by *case name alone*:
+  once `json-format` was ledgered for an intentional fix-of-C-defect, any
+  future, unrelated regression in that case — wrong values, new crash output —
+  reported `DIVERGE(ledgered)` and exited 0, forever. The most-exercised cases
+  are the most likely to be ledgered, so the differential gate was weakest
+  exactly where behavior changes most. This generalizes: any allow-list entry
+  that names a *thing* rather than an *instance* (a case, a file, a finding
+  id) rots from "we accepted this divergence" into "we no longer look at this
+  case."
+- **Kit change:** ledger entries can pin the accepted divergence's fingerprint
+  — `- [x] <case> [sha256:<12-hex>]: <why>` — hashed over the normalized diff
+  text. A pinned case re-fails with an explicit "the divergence changed;
+  re-triage" when the diff no longer matches; unpinned (legacy) entries still
+  suppress but the tool prints the exact pin to add. Pin-accept and
+  stale-pin-refail are self-tested.
+- **Section amended:** harnesses/differential/diff_run.py (`load_ledger`,
+  `compare`, output hint, self-test); skeleton/DIVERGENCES.md · format.
