@@ -22,11 +22,15 @@ in CI (capture once, replay the stored output forever) and for locking output
 Golden files are plain text under DIR/<case>.golden (+ DIR/<case>.rc for the
 exit code) — diff-friendly, reviewable, committed. An oracle-substitution
 wrapper for diff_run.py should emit the .golden and exit with the .rc value.
+capture also records its --sort/--mask-numbers/--ignore-exit flags in
+DIR/corpus.meta; replay warns when invoked with different flags (a silent
+mismatch produces baffling false failures).
 Usage: golden.py {capture,replay,--self-test} ...
 """
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 
@@ -36,8 +40,37 @@ import normalize as N          # noqa: E402
 import diff_run as D           # noqa: E402  (reuse run_one / load_matrix)
 
 
+META_NAME = "corpus.meta"
+
+
+def _write_meta(corpus, sort, mask_numbers, ignore_exit):
+    meta = {"sort": sort, "mask_numbers": mask_numbers, "ignore_exit": ignore_exit}
+    with open(os.path.join(corpus, META_NAME), "w", encoding="utf-8") as f:
+        json.dump(meta, f, indent=2)
+
+
+def _check_meta(corpus, sort, mask_numbers, ignore_exit):
+    """Warn when replay flags differ from the flags the corpus was captured
+    with — a mismatch produces baffling false failures with no other hint."""
+    mpath = os.path.join(corpus, META_NAME)
+    if not os.path.exists(mpath):
+        return
+    try:
+        meta = json.load(open(mpath, encoding="utf-8"))
+    except (OSError, ValueError):
+        print(f"warn: unreadable {mpath}; cannot verify capture flags", file=sys.stderr)
+        return
+    now = {"sort": sort, "mask_numbers": mask_numbers, "ignore_exit": ignore_exit}
+    drift = {k: (meta.get(k), v) for k, v in now.items() if k in meta and meta[k] != v}
+    if drift:
+        detail = ", ".join(f"{k}: captured={c} replay={r}" for k, (c, r) in sorted(drift.items()))
+        print(f"warn: replay flags differ from capture flags ({detail}) — "
+              f"expect false failures; re-capture or match the flags", file=sys.stderr)
+
+
 def capture(oracle, matrix_path, corpus, repeats, sort, mask_numbers, ignore_exit=False):
     os.makedirs(corpus, exist_ok=True)
+    _write_meta(corpus, sort, mask_numbers, ignore_exit)
     matrix = D.load_matrix(matrix_path)
     norm = lambda t: N.normalize_text(t, sort=sort, strip_blank=True, mask_numbers=mask_numbers)
     nondet, timeouts, stored = [], [], 0
@@ -47,11 +80,11 @@ def capture(oracle, matrix_path, corpus, repeats, sort, mask_numbers, ignore_exi
         # A hang is not truth: a timing-out oracle produces the <<TIMEOUT>>
         # sentinel "stably" on every repeat, and storing that as golden would
         # make replay REQUIRE the Rust to hang. Refuse and fail instead.
-        if any(timed_out for _out, _rc, timed_out in runs):
+        if any(timed_out for _out, _rc, timed_out, _err in runs):
             timeouts.append(name)
             continue
-        outs = [norm(out) for out, _rc, _t in runs]
-        rcs = sorted({rc for _out, rc, _t in runs})
+        outs = [norm(out) for out, _rc, _t, _e in runs]
+        rcs = sorted({rc for _out, rc, _t, _e in runs})
         if len(set(outs)) != 1:
             nondet.append((name, _unstable_lines(outs)))
         elif not ignore_exit and len(rcs) != 1:
@@ -84,6 +117,7 @@ def _unstable_lines(runs):
 
 
 def replay(rust, matrix_path, corpus, sort, mask_numbers, ignore_exit=False):
+    _check_meta(corpus, sort, mask_numbers, ignore_exit)
     matrix = D.load_matrix(matrix_path)
     norm = lambda t: N.normalize_text(t, sort=sort, strip_blank=True, mask_numbers=mask_numbers)
     fails = missing = 0
@@ -95,7 +129,7 @@ def replay(rust, matrix_path, corpus, sort, mask_numbers, ignore_exit=False):
             missing += 1
             continue
         golden = open(gpath, encoding="utf-8").read()
-        out, rc, timed_out = D.run_one(rust, case)
+        out, rc, timed_out, _err = D.run_one(rust, case)
         if timed_out:
             print(f"[TIMEOUT] {name} (rust exceeded the case timeout — hard fail)")
             fails += 1
@@ -188,6 +222,21 @@ def _self_test():
         open(os.path.join(tc, "hang.golden"), "w").write("hi\n")
         check("hanging rust → replay FAIL",
               replay(slow, tm, tc, False, False) == 1)
+
+        # capture flags are recorded; replay with different flags warns
+        import contextlib
+        import io
+        check("capture records its flags in corpus.meta",
+              json.load(open(os.path.join(ecc, META_NAME)))["sort"] is False)
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            replay(o, ecm, ecc, True, False)  # captured with sort=False
+        check("replay with mismatched flags warns",
+              "replay flags differ from capture flags" in buf.getvalue())
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            replay(o, ecm, ecc, False, False)
+        check("replay with matching flags is quiet", "differ" not in buf.getvalue())
     print("\nself-test:", "OK" if ok else "FAILED")
     return 0 if ok else 1
 
