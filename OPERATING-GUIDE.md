@@ -153,7 +153,9 @@ audit → retrospective`.
 
 **P2 — polish / breadth:**
 8. `normalize.py` rules as a per-project data file (currently code constants).
-9. `progress.py ingest` to parse harness JSON directly and auto-advance gates.
+9. ~~`progress.py ingest`~~ — partially done: `ingest` exists for unsafe-audit
+   `--json` reports (final gate only, exact-stem module matching); extend to the
+   other harnesses' JSON and the earlier gates.
 10. Document the Windows/cross-platform caveats (sanitizers/Miri assume a Linux
     nightly toolchain).
 11. A `porting-kit-diff-fuzz` skill once #4 lands.

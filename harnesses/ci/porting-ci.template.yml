@@ -16,9 +16,12 @@ name: porting-ci
 # change triggers only the pipeline that can be affected by it. Tune the globs.
 on:
   push:
-    paths: ['crates/**', 'Cargo.toml', 'Cargo.lock', '.github/workflows/porting-ci.yml']
+    # porting-kit/** is included because several jobs below EXECUTE kit scripts
+    # (unsafe-audit, sanitizers, supply-chain, differential) — a kit update must
+    # re-run the pipeline that depends on it.
+    paths: ['crates/**', 'Cargo.toml', 'Cargo.lock', 'porting-kit/**', '.github/workflows/porting-ci.yml']
   pull_request:
-    paths: ['crates/**', 'Cargo.toml', 'Cargo.lock', '.github/workflows/porting-ci.yml']
+    paths: ['crates/**', 'Cargo.toml', 'Cargo.lock', 'porting-kit/**', '.github/workflows/porting-ci.yml']
 
 permissions:
   contents: read

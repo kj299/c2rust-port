@@ -45,6 +45,7 @@ args = ["-n", "-1"]
 [[case]]
 name = "utf8-and-control-bytes"
 args = ["-"]
-# ESC + ANSI color escape, then multibyte UTF-8; control byte via TOML escape.
-stdin = "safe \u001B[31m manana"
+# ESC + ANSI color escape, then multibyte UTF-8 (the ñ); control byte via
+# TOML escape. Keep a real multibyte character here or the case name lies.
+stdin = "safe \u001B[31m mañana"
 timeout = 10
