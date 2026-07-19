@@ -15,7 +15,14 @@ have() { command -v "$1" >/dev/null 2>&1; }
 
 if [[ "${1:-}" == "--check" ]]; then
   bash -n "$0" && echo "PASS  script syntax ok"
-  test -f "$HERE/deny.template.toml" && echo "PASS  deny.template.toml present"
+  # Explicit failure branch: under `set -e` a bare `test -f X && echo ok`
+  # exits 1 with NO message when X is missing — a silent death in check-kit.
+  if [[ -f "$HERE/deny.template.toml" ]]; then
+    echo "PASS  deny.template.toml present"
+  else
+    echo "FAIL  deny.template.toml missing from $HERE" >&2
+    exit 1
+  fi
   # tomllib validate the deny config if python is around
   if have python3; then
     python3 - "$HERE/deny.template.toml" <<'PY'

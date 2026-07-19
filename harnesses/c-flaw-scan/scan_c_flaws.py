@@ -12,7 +12,7 @@ real SAST pass (clang analyzer, CodeQL, cppcheck) — it bootstraps the flaw
 inventory when you have minutes, not hours.
 
 Categories flagged (CWE in parens):
-  unbounded-copy    strcpy/strcat/sprintf/gets/scanf %s          (CWE-120/787)
+  unbounded-copy    strcpy/strcat/sprintf/gets/scanf-family %s   (CWE-120/787)
   format-string     printf-family with a non-literal format      (CWE-134)
   stack-vla-alloca  alloca / variable-length arrays              (CWE-770)
   int-overflow-mul  malloc(a * b) style size math                (CWE-190)
@@ -38,7 +38,7 @@ CHECKS = [
     ("unbounded-copy", "CWE-120",
      re.compile(r"\b(strcpy|strcat|sprintf|vsprintf|gets)\s*\(")),
     ("unbounded-copy", "CWE-120",
-     re.compile(r"\bscanf\s*\([^)]*%s")),
+     re.compile(r"\b(scanf|fscanf|sscanf|vscanf|vfscanf|vsscanf)\s*\([^)]*%s")),
     ("stack-vla-alloca", "CWE-770",
      re.compile(r"\balloca\s*\(")),
     ("int-overflow-mul", "CWE-190",
@@ -232,6 +232,7 @@ void bad(char *u, char *dynfmt, char **dst) {
                                            starts with '*' but IS code */
     r = "http://x"; q = strcat(p, u);   /* unbounded-copy; the // inside the
                                            string literal is NOT a comment */
+    sscanf(u, "%s", buf);               /* unbounded-copy: scanf-family %s */
     printf(u);                          /* format-string: arg 0 non-literal */
     fprintf(stderr, "literal %s\n", u); /* SAFE: format arg is a literal */
     fprintf(stderr, dynfmt, u);         /* format-string: arg 1 non-literal */
@@ -264,10 +265,11 @@ def _self_test():
     check("flags command-exec", "command-exec" in cats)
     check("flags toctou", "toctou" in cats)
     # Comment masking, both directions: commented-out strcpy must NOT count,
-    # while the deref-assign line (`*dst = strcpy(...)`, starts with '*') and
-    # the call after a "//"-containing string literal MUST. 3 real copy sites.
-    check("copy sites: deref-assign + string-'//' lines scanned, comment ignored",
-          sum(1 for h in hits if h["category"] == "unbounded-copy") == 3)
+    # while the deref-assign line (`*dst = strcpy(...)`, starts with '*'), the
+    # call after a "//"-containing string literal, and the scanf-family %s
+    # MUST. 4 real copy sites.
+    check("copy sites: deref-assign + string-'//' + sscanf scanned, comment ignored",
+          sum(1 for h in hits if h["category"] == "unbounded-copy") == 4)
     check("deref-assign malloc line scanned (2 mul sites)",
           sum(1 for h in hits if h["category"] == "int-overflow-mul") == 2)
     # The Pass-1 fix: only NON-LITERAL format args flag; the stream/buffer/size

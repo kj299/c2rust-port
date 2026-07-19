@@ -272,7 +272,7 @@ def self_test():
 
     check("1 documented block + 1 documented impl", len(doc) == 2)
     check("exactly 1 undocumented block", len(undoc) == 1)
-    check("undocumented is the block on line 5", undoc and undoc[0][1] == "block")
+    check("undocumented is the block on line 5", undoc == [(5, "block")])
     check("string/comment `unsafe` ignored (no extra findings)", len(doc) + len(undoc) == 3)
     print("\nself-test:", "OK" if ok else "FAILED")
     return 0 if ok else 1
