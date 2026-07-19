@@ -38,7 +38,21 @@ undermine a gate, not by classic crash severity.
 > all` states that TSan is excluded and errors clearly when `rustc` is
 > missing), M8 (CLAUDE.md's gate chain now lists all six). Bonus: the phantom
 > `--update-ledger` flag in `diff_run.py`'s usage line (never implemented) was
-> removed. Low findings remain open.
+> removed.
+>
+> The **Low findings are fixed as well**: L1 (audit self-test pins the exact
+> line), L2 (`diff_run.py --with-stderr` opts stderr into the verdict; default
+> documented), L3 (case names with path separators are rejected in
+> `load_matrix`), L4 (capture flags recorded in `corpus.meta`; replay warns on
+> mismatch), L5 (`progress.py set` errors on unknown modules unless `--add`),
+> L6 (`ingest` matches report stems exactly, not substrings), L7
+> (`run_supply_chain.sh --check` fails loudly when the deny template is
+> missing), L8 (the skeleton package is `port_core` — naming it `core`
+> shadowed libcore; lockfile regenerated, builds and tests clean), L9 (CI
+> `paths:` include `porting-kit/**`), L10 (the `utf8-and-control-bytes` case
+> actually contains multibyte UTF-8 again — `mañana`), L11 (OPERATING-GUIDE
+> backlog #9 marked partially done), L12 (the CWE-120 check covers
+> `fscanf`/`sscanf`/`v*scanf`). Every finding in this review is now resolved.
 
 ---
 
