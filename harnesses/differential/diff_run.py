@@ -8,7 +8,15 @@ ones live in a ledger (DIVERGENCES.md) that suppresses them on future runs.
 Two comparison modes:
   * same-binary-both-platforms: --oracle and --rust are real binaries.
   * oracle-substitution: when the reference can't run here, point --oracle at a
-    wrapper that emits the captured golden output (see harnesses/golden).
+    wrapper that emits the captured golden output (see harnesses/golden) — and
+    exits with the captured `<case>.rc` code, so exit-code fidelity survives
+    the substitution.
+
+Timeouts are failures, not behavior (the liveness backstop, LESSONS #1): a case
+where the RUST side exceeds its timeout gets the verdict TIMEOUT — never MATCH,
+and the ledger cannot excuse it (two hangs matching each other is not fidelity).
+An oracle-only timeout is an ordinary DIVERGE to triage: "C hangs on this input,
+Rust errors cleanly" is a legitimate ledgered fix-of-C-defect.
 
 Matrix (TOML or JSON): a list of cases, each with a name and argv, e.g.
 
@@ -22,7 +30,8 @@ Usage:
               [--sort] [--mask-numbers] [--update-ledger] [--json]
   diff_run.py --self-test
 
-Exit: 0 = all match or all divergences are ledgered; 1 = unexplained divergence.
+Exit: 0 = all match or all divergences are ledgered; 1 = unexplained divergence
+or any TIMEOUT.
 """
 from __future__ import annotations
 
@@ -67,6 +76,11 @@ def load_ledger(path):
 
 
 def run_one(binary, case, default_timeout=15):
+    """Run one case; returns (stdout, returncode, timed_out). On timeout the
+    output is the <<TIMEOUT>> sentinel and rc 124 — callers must treat
+    timed_out=True as a failed run, never as comparable behavior: two sides
+    that both hang produce identical sentinels, and comparing those as if they
+    were output would pass the exact hang class this harness exists to catch."""
     argv = [binary] + [str(a) for a in case.get("args", [])]
     env = dict(os.environ)
     env.update({k: str(v) for k, v in case.get("env", {}).items()})
@@ -78,9 +92,9 @@ def run_one(binary, case, default_timeout=15):
             timeout=case.get("timeout", default_timeout),
             env=env,
         )
-        return p.stdout.decode("utf-8", "replace"), p.returncode
+        return p.stdout.decode("utf-8", "replace"), p.returncode, False
     except subprocess.TimeoutExpired:
-        return "<<TIMEOUT>>\n", 124
+        return "<<TIMEOUT>>\n", 124, True
     except FileNotFoundError:
         sys.exit(f"error: binary not found: {binary}")
 
@@ -90,8 +104,8 @@ def compare(oracle_bin, rust_bin, matrix, ledger, sort, mask_numbers, ignore_exi
     results = []
     for case in matrix:
         name = case["name"]
-        o_out, o_rc = run_one(oracle_bin, case)
-        r_out, r_rc = run_one(rust_bin, case)
+        o_out, o_rc, o_to = run_one(oracle_bin, case)
+        r_out, r_rc, r_to = run_one(rust_bin, case)
         norm = lambda t: N.normalize_text(t, sort=sort, strip_blank=True, mask_numbers=mask_numbers)
         o_n, r_n = norm(o_out), norm(r_out)
         # Fidelity is stdout AND exit code: a rewrite that prints the right thing
@@ -100,19 +114,32 @@ def compare(oracle_bin, rust_bin, matrix, ledger, sort, mask_numbers, ignore_exi
         # (LESSONS #4). `--ignore-exit` opts out for tools without stable codes.
         stdout_match = o_n == r_n
         exit_match = ignore_exit or (o_rc == r_rc)
-        if stdout_match and exit_match:
+        # A rust-side timeout is TIMEOUT outright: never MATCH (both sides
+        # hanging yields identical <<TIMEOUT>> sentinels, which is two hangs,
+        # not fidelity) and never ledgered (nothing ran; there is no behavior
+        # to accept). Oracle-only timeouts fall through to the normal DIVERGE
+        # triage — fixing a C hang is a legitimate ledgered divergence.
+        if r_to:
+            verdict = "TIMEOUT"
+        elif stdout_match and exit_match:
             verdict = "MATCH"
         elif name in known:
             verdict = "DIVERGE(ledgered)"
         else:
             verdict = "DIVERGE"
-        note = "" if exit_match else f"exit code differs: oracle={o_rc} rust={r_rc}\n"
+        note = ""
+        if o_to or r_to:
+            which = "both" if (o_to and r_to) else ("rust" if r_to else "oracle")
+            note += f"timed out: {which} (case timeout {case.get('timeout', 15)}s)\n"
+        if not exit_match:
+            note += f"exit code differs: oracle={o_rc} rust={r_rc}\n"
         body = "" if stdout_match else "".join(difflib.unified_diff(
             o_n.splitlines(keepends=True), r_n.splitlines(keepends=True),
             fromfile=f"oracle:{name}", tofile=f"rust:{name}"))
         results.append({
             "name": name, "verdict": verdict,
             "oracle_rc": o_rc, "rust_rc": r_rc, "exit_match": exit_match,
+            "timed_out": {"oracle": o_to, "rust": r_to},
             "diff": None if verdict == "MATCH" else (note + body),
         })
     return results
@@ -141,18 +168,23 @@ def main(argv=None):
     results = compare(args.oracle, args.rust, load_matrix(args.matrix),
                       args.ledger, args.sort, args.mask_numbers, args.ignore_exit)
     unexplained = [r for r in results if r["verdict"] == "DIVERGE"]
+    timeouts = [r for r in results if r["verdict"] == "TIMEOUT"]
     if args.json:
         print(json.dumps(results, indent=2))
     else:
         for r in results:
             print(f"[{r['verdict']:18}] {r['name']}")
-            if r["verdict"] == "DIVERGE" and r["diff"]:
+            if r["verdict"] in ("DIVERGE", "TIMEOUT") and r["diff"]:
                 sys.stdout.write(r["diff"])
-        print(f"\n{len(results)} cases, {len(unexplained)} unexplained divergence(s)")
+        print(f"\n{len(results)} cases, {len(unexplained)} unexplained divergence(s), "
+              f"{len(timeouts)} timeout(s)")
         if unexplained:
             print("Triage each: fix the Rust, OR record an intentional fix-of-C-defect in",
                   args.ledger, "as `- [x] <case>: <why>`.")
-    return 1 if unexplained else 0
+        if timeouts:
+            print("A TIMEOUT is a hard failure (a hang is a design smell — design the "
+                  "blocking call out); it cannot be ledgered.")
+    return 1 if (unexplained or timeouts) else 0
 
 
 def _self_test():
@@ -195,6 +227,26 @@ def _self_test():
         check("divergence note names the exit codes", "exit code differs" in (res[0]["diff"] or ""))
         res = compare(o, r, ec, ledger=None, sort=False, mask_numbers=False, ignore_exit=True)
         check("--ignore-exit suppresses an exit-only divergence → MATCH", res[0]["verdict"] == "MATCH")
+
+    # Timeouts are failures, not fidelity: two hangs produce identical
+    # <<TIMEOUT>> sentinels, which must never compare as MATCH, and the ledger
+    # must not be able to excuse a hung rewrite.
+    with tempfile.TemporaryDirectory() as d:
+        slow = os.path.join(d, "slow.sh")
+        open(slow, "w").write("#!/bin/sh\nsleep 2\n"); os.chmod(slow, 0o755)
+        fast = os.path.join(d, "fast.sh")
+        open(fast, "w").write("#!/bin/sh\necho hi\n"); os.chmod(fast, 0o755)
+        tc = [{"name": "hang", "args": [], "timeout": 0.4}]
+        res = compare(slow, slow, tc, ledger=None, sort=False, mask_numbers=False)
+        check("both sides hanging → TIMEOUT, not MATCH", res[0]["verdict"] == "TIMEOUT")
+        res = compare(fast, slow, tc, ledger=None, sort=False, mask_numbers=False)
+        check("rust-side hang → TIMEOUT", res[0]["verdict"] == "TIMEOUT")
+        ledger = os.path.join(d, "ledger.md")
+        open(ledger, "w").write("- [x] hang: pretend this is fine\n")
+        res = compare(fast, slow, tc, ledger=ledger, sort=False, mask_numbers=False)
+        check("ledger cannot excuse a rust-side hang", res[0]["verdict"] == "TIMEOUT")
+        res = compare(slow, fast, tc, ledger=None, sort=False, mask_numbers=False)
+        check("oracle-only hang → DIVERGE (triaged, ledgerable)", res[0]["verdict"] == "DIVERGE")
 
     print("\nself-test:", "OK" if ok else "FAILED")
     return 0 if ok else 1
