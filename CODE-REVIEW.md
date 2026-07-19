@@ -25,7 +25,20 @@ undermine a gate, not by classic crash severity.
 > `porting-ci.template.yml` (fuzz job fails on an empty target list; sanitizers
 > job installs `rust-src`). Each behavioral fix landed with a pinned self-test,
 > per the kit's fix-forward rule; the reproduction commands below now show the
-> failing/refusing behavior. Medium (except M5) and Low findings remain open.
+> failing/refusing behavior.
+>
+> The **Medium findings are fixed too**: M1 (`progress.py` accepts `--file` on
+> either side of the subcommand), M2 (phantom `unchecked-malloc` category
+> removed from the docstring, with an honest note on why), M3 (skeleton CLI
+> emits RFC-8259 JSON via `json_escape` and exits 1 on a failed stdin read),
+> M4 (`make check-kit` phrasing is layout-aware everywhere), M5 (via H4),
+> M6 (ledger entries can pin a `[sha256:...]` fingerprint of the accepted
+> divergence — pinned entries re-fail when the divergence changes shape, and
+> the tool prints the pin to add for unpinned ones), M7 (`run_sanitizers.sh
+> all` states that TSan is excluded and errors clearly when `rustc` is
+> missing), M8 (CLAUDE.md's gate chain now lists all six). Bonus: the phantom
+> `--update-ledger` flag in `diff_run.py`'s usage line (never implemented) was
+> removed. Low findings remain open.
 
 ---
 
