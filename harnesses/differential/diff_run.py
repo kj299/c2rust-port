@@ -138,69 +138,79 @@ def run_one(binary, case, default_timeout=15):
         sys.exit(f"error: binary not found: {binary}")
 
 
+def compare_one(name, oracle_bin, rust_bin, case, known, sort, mask_numbers,
+                ignore_exit=False, with_stderr=False):
+    """Run one case on both binaries and return its verdict dict. This is the
+    single source of differential fidelity — the matrix runner (`compare`) and
+    the differential FUZZER (`diff-fuzz/diff_fuzz.py`) both call it, so the
+    stdout+exit-code rule (LESSONS #4), the fail-closed timeout handling
+    (LESSONS #6) and the ledger fingerprint (LESSONS #8) live in exactly one
+    place. `known` is a {name: pin} map from `load_ledger`."""
+    o_out, o_rc, o_to, o_err = run_one(oracle_bin, case)
+    r_out, r_rc, r_to, r_err = run_one(rust_bin, case)
+    norm = lambda t: N.normalize_text(t, sort=sort, strip_blank=True, mask_numbers=mask_numbers)
+    o_n, r_n = norm(o_out), norm(r_out)
+    # Fidelity is stdout AND exit code: a rewrite that prints the right thing
+    # but returns the wrong status (lsof exits 1 on no-match; scripts branch
+    # on it) is NOT a match. Exit-code drift was a real winlsof bug.
+    # (LESSONS #4). `--ignore-exit` opts out for tools without stable codes.
+    # `--with-stderr` opts stderr in (error text is behavior too).
+    stdout_match = o_n == r_n
+    exit_match = ignore_exit or (o_rc == r_rc)
+    o_e, r_e = (norm(o_err), norm(r_err)) if with_stderr else ("", "")
+    stderr_match = (not with_stderr) or o_e == r_e
+    note = ""
+    if o_to or r_to:
+        which = "both" if (o_to and r_to) else ("rust" if r_to else "oracle")
+        note += f"timed out: {which} (case timeout {case.get('timeout', 15)}s)\n"
+    if not exit_match:
+        note += f"exit code differs: oracle={o_rc} rust={r_rc}\n"
+    body = "" if stdout_match else "".join(difflib.unified_diff(
+        o_n.splitlines(keepends=True), r_n.splitlines(keepends=True),
+        fromfile=f"oracle:{name}", tofile=f"rust:{name}"))
+    if not stderr_match:
+        body += "".join(difflib.unified_diff(
+            o_e.splitlines(keepends=True), r_e.splitlines(keepends=True),
+            fromfile=f"oracle-stderr:{name}", tofile=f"rust-stderr:{name}"))
+    # Fingerprint of the observed divergence (over the stable diff text,
+    # before any mismatch message is appended) — what a ledger pin locks.
+    fp = hashlib.sha256((note + body).encode("utf-8")).hexdigest()
+    # A rust-side timeout is TIMEOUT outright: never MATCH (both sides
+    # hanging yields identical <<TIMEOUT>> sentinels, which is two hangs,
+    # not fidelity) and never ledgered (nothing ran; there is no behavior
+    # to accept). Oracle-only timeouts fall through to the normal DIVERGE
+    # triage — fixing a C hang is a legitimate ledgered divergence.
+    pin = known.get(name) if name in known else None
+    if r_to:
+        verdict = "TIMEOUT"
+    elif stdout_match and exit_match and stderr_match:
+        verdict = "MATCH"
+    elif name in known:
+        if pin is not None and not fp.startswith(pin):
+            verdict = "DIVERGE"
+            note += (f"ledgered fingerprint mismatch: accepted [sha256:{pin}], "
+                     f"observed [sha256:{fp[:12]}] — the divergence changed; re-triage\n")
+        else:
+            verdict = "DIVERGE(ledgered)"
+    else:
+        verdict = "DIVERGE"
+    return {
+        "name": name, "verdict": verdict,
+        "oracle_rc": o_rc, "rust_rc": r_rc, "exit_match": exit_match,
+        "timed_out": {"oracle": o_to, "rust": r_to},
+        "fingerprint": None if verdict == "MATCH" else fp[:12],
+        "fingerprint_full": None if verdict == "MATCH" else fp,
+        "pinned": pin is not None,
+        "diff": None if verdict == "MATCH" else (note + body),
+    }
+
+
 def compare(oracle_bin, rust_bin, matrix, ledger, sort, mask_numbers, ignore_exit=False,
             with_stderr=False):
     known = load_ledger(ledger)
-    results = []
-    for case in matrix:
-        name = case["name"]
-        o_out, o_rc, o_to, o_err = run_one(oracle_bin, case)
-        r_out, r_rc, r_to, r_err = run_one(rust_bin, case)
-        norm = lambda t: N.normalize_text(t, sort=sort, strip_blank=True, mask_numbers=mask_numbers)
-        o_n, r_n = norm(o_out), norm(r_out)
-        # Fidelity is stdout AND exit code: a rewrite that prints the right thing
-        # but returns the wrong status (lsof exits 1 on no-match; scripts branch
-        # on it) is NOT a match. Exit-code drift was a real winlsof bug.
-        # (LESSONS #4). `--ignore-exit` opts out for tools without stable codes.
-        # `--with-stderr` opts stderr in (error text is behavior too).
-        stdout_match = o_n == r_n
-        exit_match = ignore_exit or (o_rc == r_rc)
-        o_e, r_e = (norm(o_err), norm(r_err)) if with_stderr else ("", "")
-        stderr_match = (not with_stderr) or o_e == r_e
-        note = ""
-        if o_to or r_to:
-            which = "both" if (o_to and r_to) else ("rust" if r_to else "oracle")
-            note += f"timed out: {which} (case timeout {case.get('timeout', 15)}s)\n"
-        if not exit_match:
-            note += f"exit code differs: oracle={o_rc} rust={r_rc}\n"
-        body = "" if stdout_match else "".join(difflib.unified_diff(
-            o_n.splitlines(keepends=True), r_n.splitlines(keepends=True),
-            fromfile=f"oracle:{name}", tofile=f"rust:{name}"))
-        if not stderr_match:
-            body += "".join(difflib.unified_diff(
-                o_e.splitlines(keepends=True), r_e.splitlines(keepends=True),
-                fromfile=f"oracle-stderr:{name}", tofile=f"rust-stderr:{name}"))
-        # Fingerprint of the observed divergence (over the stable diff text,
-        # before any mismatch message is appended) — what a ledger pin locks.
-        fp = hashlib.sha256((note + body).encode("utf-8")).hexdigest()
-        # A rust-side timeout is TIMEOUT outright: never MATCH (both sides
-        # hanging yields identical <<TIMEOUT>> sentinels, which is two hangs,
-        # not fidelity) and never ledgered (nothing ran; there is no behavior
-        # to accept). Oracle-only timeouts fall through to the normal DIVERGE
-        # triage — fixing a C hang is a legitimate ledgered divergence.
-        pin = known.get(name) if name in known else None
-        if r_to:
-            verdict = "TIMEOUT"
-        elif stdout_match and exit_match and stderr_match:
-            verdict = "MATCH"
-        elif name in known:
-            if pin is not None and not fp.startswith(pin):
-                verdict = "DIVERGE"
-                note += (f"ledgered fingerprint mismatch: accepted [sha256:{pin}], "
-                         f"observed [sha256:{fp[:12]}] — the divergence changed; re-triage\n")
-            else:
-                verdict = "DIVERGE(ledgered)"
-        else:
-            verdict = "DIVERGE"
-        results.append({
-            "name": name, "verdict": verdict,
-            "oracle_rc": o_rc, "rust_rc": r_rc, "exit_match": exit_match,
-            "timed_out": {"oracle": o_to, "rust": r_to},
-            "fingerprint": None if verdict == "MATCH" else fp[:12],
-            "pinned": pin is not None,
-            "diff": None if verdict == "MATCH" else (note + body),
-        })
-    return results
+    return [compare_one(case["name"], oracle_bin, rust_bin, case, known,
+                        sort, mask_numbers, ignore_exit, with_stderr)
+            for case in matrix]
 
 
 def main(argv=None):

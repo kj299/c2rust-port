@@ -201,7 +201,12 @@ Then the loop — each step is a CI-enforced gate:
    call, not wrap it.
 3. **Fuzz** the module's parse/input surface (`harnesses/fuzz/gen_fuzz_target.sh`
    scaffolds a `cargo-fuzz` target). Any crash/panic on untrusted input is a
-   release blocker.
+   release blocker. Where a C oracle exists, also run **differential fuzzing**
+   (`harnesses/diff-fuzz/diff_fuzz.py`): cargo-fuzz proves the Rust doesn't
+   *crash*; diff-fuzz proves it doesn't silently *disagree* with the C on inputs
+   the fixed matrix never had. Each divergence is minimized to a committable
+   reproducer and triaged like any other (fix the Rust, or ledger-pin the
+   intentional fix-of-C-defect by fingerprint).
 4. **Sanitize** (`harnesses/sanitizers/run_sanitizers.sh`): Miri over the pure
    logic and, for the `sys` layer, ASan/UBSan (and TSan if threaded). winlsof's
    worker-thread hang fix is exactly the class TSan/Miri reasoning catches.

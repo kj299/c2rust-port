@@ -1,0 +1,53 @@
+---
+name: porting-kit-diff-fuzz
+description: Differential-fuzz a C-to-Rust port — feed the same mutated input to the C oracle and the Rust rewrite over many iterations and triage every divergence. Use after the fixed-matrix differential passes, when the user wants to hunt semantic divergences the matrix never covered, or asks to fuzz the port against C / find where Rust and C disagree / stress the parser against the oracle.
+---
+
+# Porting Kit — differential fuzzing (C vs Rust on shared inputs)
+
+Wraps `porting-kit/harnesses/diff-fuzz/diff_fuzz.py`. Complements the fixed-matrix
+differential (`porting-kit-oracle` / `diff_run.py`) and the crash-only fuzz gate
+(`porting-kit-module` gate 3, `cargo-fuzz`): cargo-fuzz proves the Rust doesn't
+**panic**; this proves it doesn't silently **disagree** with the C oracle on inputs
+nobody wrote a case for. OPERATING-GUIDE §3 calls it "the highest-value single
+addition for a security-critical port."
+
+## When
+After the matrix differential is green (a port that fails fixed cases isn't ready
+to fuzz). Run a short budget per module/PR and a long `--max-time` sweep nightly.
+Needs a runnable C oracle (or a golden-replay wrapper, `porting-kit/harnesses/golden`).
+
+## Procedure
+1. **Run it** against both binaries, seeded from the real corpus:
+   `python3 porting-kit/harnesses/diff-fuzz/diff_fuzz.py --oracle <c> --rust <rust>
+   --seed-file corpus/* --matrix <m> --ledger DIVERGENCES.md --findings-dir fuzz-findings
+   --max-time 300`
+   Inputs are fuzzed on stdin by default; fixed argv goes in `--args`. `--seed N`
+   makes the run reproducible; `--iterations N` bounds it instead of wall-clock.
+2. **Read verdicts, not corpora** (the token-firewall rule): the tool prints one
+   line per *distinct* divergence (deduped and minimized), not per input. Use
+   `--json` for machine output. Each finding is saved as `<fp>.input` (the smallest
+   reproducer) + `<fp>.diff` under `--findings-dir` — committable.
+3. **Triage each finding** exactly like a matrix divergence: fix the Rust, OR — if
+   the C is the buggy side — record the intentional fix-of-C-defect in
+   `DIVERGENCES.md`. Fuzz findings are suppressed **only by fingerprint** (an
+   arbitrary input has no stable name), so the entry MUST be pinned:
+   `- [x] fuzz:<desc> [sha256:<fingerprint>]: <why + CWE>`.
+4. **Pin the reproducer as a matrix case** (fix-forward, then immediately pin): add
+   the minimized input to the golden/matrix so `diff_run.py` covers it forever, not
+   just this fuzz seed.
+5. A **rust-side TIMEOUT** finding is a hang on some input — a design smell, not a
+   wrap-it target (LESSONS #1/#6); design the blocking path out.
+
+## Notes
+- Fidelity is shared, not reimplemented: every input is judged by
+  `diff_run.compare_one`, so the stdout-AND-exit-code verdict (LESSONS #4), the
+  fail-closed timeout handling (LESSONS #6), and the ledger fingerprint (LESSONS #8)
+  are identical to the matrix differential.
+- Determinism: a finding always reproduces — re-run with the same `--seed`, or just
+  feed the saved `<fp>.input` back through `diff_run.py`.
+
+## Integrity
+Paths/flags must match `diff_fuzz.py`. If they drift, fix the reference and re-run
+the kit's `make check-kit` (`make -C porting-kit check-kit` when vendored) — its
+doc-flag check hard-fails on a documented flag the harness doesn't have.

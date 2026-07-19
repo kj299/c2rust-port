@@ -38,6 +38,7 @@ any skill references a kit path that no longer exists, so they can't drift.
 | `porting-kit-cflaw-scan` | hunt C vulnerabilities before porting and triage them into the ledger |
 | `porting-kit-oracle` | establish the differential oracle + test-vector harness before translating |
 | `porting-kit-module` | port one module through the six safety gates |
+| `porting-kit-diff-fuzz` | differential-fuzz the port: same input to C & Rust, minimize divergences |
 | `porting-kit-audit` | run the full safety-gate suite and report a gate-status table |
 | `porting-kit-retrospective` | close a port and patch the kit (the compounding loop) |
 
@@ -51,6 +52,7 @@ repo-root `porting-kit/`; adjust the paths inside if you vendor it elsewhere).
 |---|---|---|
 | `harnesses/unsafe-audit/audit_unsafe.py` | every `unsafe {}` needs a `// SAFETY:` | **hard-fail CI** |
 | `harnesses/differential/diff_run.py` (+`normalize.py`) | diff Rust vs C oracle; triage divergences via a ledger; timeout = liveness backstop | CI |
+| `harnesses/diff-fuzz/diff_fuzz.py` | differential fuzzing: same generated input to C & Rust, minimize divergences | CI + nightly |
 | `harnesses/golden/golden.py` | capture/version/replay the oracle; flag oracle nondeterminism | CI |
 | `harnesses/fuzz/gen_fuzz_target.sh` | scaffold a cargo-fuzz target per module | CI smoke + nightly |
 | `harnesses/sanitizers/run_sanitizers.sh` | Miri / ASan / UBSan / TSan over the unsafe layer | CI |

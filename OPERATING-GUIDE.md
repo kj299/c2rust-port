@@ -93,9 +93,11 @@ The checklist is the floor. To make this a *security* rewrite you'd defend:
   threat-model's untrusted boundaries first**. Use `arbitrary` for typed fuzzing of
   structured parsers, and **cap allocations derived from untrusted length fields**
   (integer-overflow-before-alloc is a top C class you must not re-port).
-- **Differential fuzzing** (§5 P1): feed the *same* fuzz input to the C oracle and
+- **Differential fuzzing** (`harnesses/diff-fuzz/diff_fuzz.py`, or the
+  `porting-kit-diff-fuzz` skill): feed the *same* mutated input to the C oracle and
   the Rust and compare — finds semantic divergences the fixed matrix never covers.
-  The highest-value single addition for a security-critical port.
+  The highest-value single addition for a security-critical port; run a short
+  budget per PR and a long `--max-time` sweep nightly, seeded from the fuzz corpus.
 - **Stricter unsafe lints:** beyond `undocumented_unsafe_blocks` / `missing_safety_doc`
   (wired), consider `clippy::multiple_unsafe_ops_per_block` (isolate each unsafe op),
   `clippy::transmute_ptr_to_ptr`, `clippy::as_conversions` in the `sys` crate.
@@ -116,6 +118,7 @@ The skills are the operational surface; use them, don't re-derive their steps.
 | Phase 0 vuln hunt | `porting-kit-cflaw-scan` | once (re-run per subsystem) |
 | Phase 2 oracle | `porting-kit-oracle` | once, before any Rust |
 | Phase 4 per module | `porting-kit-module` | **repeated — the hot path** |
+| Phase 4 after matrix green | `porting-kit-diff-fuzz` | per module + nightly sweep |
 | Pre-merge / "is it safe?" | `porting-kit-audit` | per module + per release |
 | Port/phase done | `porting-kit-retrospective` | once per phase — **never skip** |
 
@@ -142,7 +145,12 @@ audit → retrospective`.
    C before it may judge Rust").
 
 **P1 — materially stronger:**
-4. **Differential fuzzing** harness (C vs Rust on shared fuzz inputs).
+4. ~~**Differential fuzzing** harness (C vs Rust on shared fuzz inputs).~~ **Done:**
+   `harnesses/diff-fuzz/diff_fuzz.py` — feeds the same mutated input to both binaries,
+   judges via `diff_run.compare_one` (so timeout/exit/fingerprint fidelity is shared,
+   not copied), minimizes each divergence to its smallest reproducer, and suppresses
+   ledger-pinned fingerprints. Runs `--iterations`/`--max-time` budgets;
+   `porting-kit-diff-fuzz` skill wraps it.
 5. **CI template hardening**: SHA-pin actions; split smoke/nightly for fuzz+sanitizers;
    add `cargo vet`, SBOM, `gitleaks` jobs.
 6. **`scan_c_flaws.py` depth**: add double-free / use-after-free / uninitialized-read
@@ -159,7 +167,7 @@ audit → retrospective`.
    other harnesses' JSON and the earlier gates.
 10. Document the Windows/cross-platform caveats (sanitizers/Miri assume a Linux
     nightly toolchain).
-11. A `porting-kit-diff-fuzz` skill once #4 lands.
+11. ~~A `porting-kit-diff-fuzz` skill once #4 lands.~~ **Done** — `skills/porting-kit-diff-fuzz`.
 
 **How the kit closes these:** each is a candidate for a normal port's
 `porting-kit-retrospective` pass (the compounding loop is the delivery mechanism —
