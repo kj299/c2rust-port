@@ -17,8 +17,10 @@ Categories flagged (CWE in parens):
   stack-vla-alloca  alloca / variable-length arrays              (CWE-770)
   int-overflow-mul  malloc(a * b) style size math                (CWE-190)
   command-exec      system/popen/exec* with composed strings     (CWE-78)
-  unchecked-malloc  malloc/calloc/realloc result used w/o check   (CWE-690) [weak]
   toctou            access()/stat() then open()/fopen()          (CWE-367)
+
+(No unchecked-malloc/CWE-690 check: use-after-NULL needs flow analysis this
+grep can't do honestly — a real SAST pass covers it.)
 
 Usage:
   scan_c_flaws.py PATH [PATH ...] [--json] [--self-test]
