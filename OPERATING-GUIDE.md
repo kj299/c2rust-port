@@ -137,8 +137,9 @@ audit → retrospective`.
 1. **`cando`-style function-level differential harness** for C-ABI libraries — the
    current differential is executable-shaped (argv/stdin→stdout+exit). Biggest gap.
 2. **Performance gate harness** — measure module runtime vs the C median, fail >1.3×.
-3. **Held-back vectors + C-baseline validation** in `golden.py` (`--holdout`, and
-   "a vector must pass on C before it may judge Rust").
+3. **Held-back vectors + C-baseline validation** in `golden.py` (a holdout mode —
+   named flags only once implemented, per LESSONS #7 — and "a vector must pass on
+   C before it may judge Rust").
 
 **P1 — materially stronger:**
 4. **Differential fuzzing** harness (C vs Rust on shared fuzz inputs).
