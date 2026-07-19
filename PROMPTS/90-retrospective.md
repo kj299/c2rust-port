@@ -16,6 +16,10 @@ retrospective and **patch the Porting Kit** with what you learned.
    doesn't execute the tools against the actual codebase is theater. Run
    `scan_c_flaws.py`, `audit_unsafe.py`, the differential, etc. against this
    project and eyeball the signal-to-noise before trusting any of it.
+   **Probe each gate's fail-closed behavior too** (LESSONS #6): feed it the
+   degenerate case — no targets, a hung binary on both sides, a missing
+   component — and confirm it goes red. A gate that passes when nothing ran is
+   the failure class reading can't find and green CI actively hides.
 
 1. **Reconstruct the experience from artifacts**, the way
    `RETROSPECTIVE-lsof.md` was built — lean on git history, especially:
