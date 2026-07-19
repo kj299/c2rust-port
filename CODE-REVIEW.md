@@ -15,6 +15,18 @@ The kit's stated bar is that its gates are load-bearing safety controls
 ("non-negotiable, wired into CI"). Findings are therefore ranked by how badly they
 undermine a gate, not by classic crash severity.
 
+> **Status:** the six High findings (H1–H6) are **fixed on this branch** —
+> `diff_run.py` (TIMEOUT verdict: rust-side/both-side timeouts hard-fail and
+> cannot be ledgered; oracle-only timeouts DIVERGE for triage), `golden.py`
+> (refuses to store a timed-out oracle as golden; captures/compares exit codes
+> via a `<case>.rc` sidecar, with `--ignore-exit` mirroring `diff_run`),
+> `scan_c_flaws.py` (real comment masking replaces the `*`-prefix skip — which
+> also fixes **M5**, the format pass scanning comments), and
+> `porting-ci.template.yml` (fuzz job fails on an empty target list; sanitizers
+> job installs `rust-src`). Each behavioral fix landed with a pinned self-test,
+> per the kit's fix-forward rule; the reproduction commands below now show the
+> failing/refusing behavior. Medium (except M5) and Low findings remain open.
+
 ---
 
 ## High — a safety gate can pass when it should fail
