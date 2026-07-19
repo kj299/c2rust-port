@@ -10,10 +10,15 @@ diverges is an unexplained regression and fails CI.
 be buggy; where you fixed a C defect, the Rust *should* diverge — record it here
 and ship it as a release note. Seed this from the Phase-0 C-flaw scan.
 
-Format — one bullet per case name, ticked when reviewed and accepted:
+Format — one bullet per case name, ticked when reviewed and accepted. **Pin the
+entry** with the fingerprint `diff_run.py` prints: a pinned entry suppresses only
+that exact divergence, so if the case's behavior changes shape again (a new
+regression arriving in a ledgered case) it fails again instead of hiding behind
+the old acceptance. An unpinned entry suppresses by name alone (legacy).
 
 ```
-- [x] <matrix-case-name>: <why the Rust intentionally differs; CWE if a security fix>
+- [x] <matrix-case-name> [sha256:<12-hex>]: <why the Rust intentionally differs; CWE if a security fix>
+- [x] <matrix-case-name>: <why>            (unpinned/legacy — diff_run prints the pin to add)
 ```
 
 ## Security fixes (C defect closed by the port)

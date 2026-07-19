@@ -41,5 +41,5 @@ the order is agreed. Then copy `porting-kit/skeleton/` and invoke `porting-kit-o
 
 ## Integrity
 Commands and file paths above must match the kit exactly. If a harness path/flag has
-changed, fix the kit reference (and re-run `make -C porting-kit check-kit`) rather than
+changed, fix the kit reference (and re-run the kit's `make check-kit`) rather than
 diverging here — the playbook is the single source of truth.

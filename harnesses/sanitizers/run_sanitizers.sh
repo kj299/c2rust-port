@@ -43,6 +43,11 @@ run_miri() {
 
 run_san() {
   local san="$1"
+  if [[ -z "$TRIPLE" ]]; then
+    echo "!! rustc not found — cannot determine the target triple for -Zsanitizer=$san" >&2
+    rc=1
+    return
+  fi
   if rustup toolchain list 2>/dev/null | grep -q nightly; then
     echo ">> cargo +nightly test with -Zsanitizer=$san"
     RUSTFLAGS="-Zsanitizer=$san" RUSTDOCFLAGS="-Zsanitizer=$san" \
@@ -58,7 +63,11 @@ case "$MODE" in
   asan)  run_san address;;
   ubsan) run_san undefined;;
   tsan)  run_san thread;;
-  all)   run_miri; run_san address; run_san undefined;;
+  all)   run_miri; run_san address; run_san undefined
+         # Say the omission out loud: a silent skip reads as coverage.
+         echo "note: 'all' = miri + asan + ubsan. TSan is NOT included (slow;"
+         echo "      only meaningful with threaded tests) — run '$0 tsan' explicitly"
+         echo "      for threaded code (the winlsof hang class).";;
   *) echo "usage: $0 [miri|asan|ubsan|tsan|all] [CRATE_DIR] | --check" >&2; exit 2;;
 esac
 exit "$rc"

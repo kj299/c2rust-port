@@ -1,4 +1,6 @@
-//! `core` — the platform-agnostic heart of the port. This is where MOST of the
+//! `port_core` — the platform-agnostic heart of the port (the "core" layer;
+//! the package is not literally named `core`, which would shadow Rust's
+//! built-in core crate). This is where MOST of the
 //! translated C logic lives: data model, parsing, algorithm, rendering.
 //!
 //! `#![forbid(unsafe_code)]` is the single highest-leverage line in the project

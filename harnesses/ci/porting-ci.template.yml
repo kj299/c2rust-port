@@ -16,9 +16,12 @@ name: porting-ci
 # change triggers only the pipeline that can be affected by it. Tune the globs.
 on:
   push:
-    paths: ['crates/**', 'Cargo.toml', 'Cargo.lock', '.github/workflows/porting-ci.yml']
+    # porting-kit/** is included because several jobs below EXECUTE kit scripts
+    # (unsafe-audit, sanitizers, supply-chain, differential) — a kit update must
+    # re-run the pipeline that depends on it.
+    paths: ['crates/**', 'Cargo.toml', 'Cargo.lock', 'porting-kit/**', '.github/workflows/porting-ci.yml']
   pull_request:
-    paths: ['crates/**', 'Cargo.toml', 'Cargo.lock', '.github/workflows/porting-ci.yml']
+    paths: ['crates/**', 'Cargo.toml', 'Cargo.lock', 'porting-kit/**', '.github/workflows/porting-ci.yml']
 
 permissions:
   contents: read
@@ -68,7 +71,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # rust-src is REQUIRED: run_sanitizers.sh uses `-Zbuild-std`, which
+      # rebuilds the standard library from source; without the component the
+      # job fails on first use (and an always-red gate gets deleted, not fixed).
       - uses: dtolnay/rust-toolchain@nightly
+        with: { components: rust-src }
       - run: bash porting-kit/harnesses/sanitizers/run_sanitizers.sh asan .
       - run: bash porting-kit/harnesses/sanitizers/run_sanitizers.sh ubsan .
 
@@ -79,9 +86,17 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
       - run: cargo install cargo-fuzz
-      # Short smoke in CI; schedule a nightly deep run separately.
+      # Short smoke in CI; schedule a nightly deep run separately. An empty
+      # target list FAILS: "no panic on input" is a hard gate, and a repo with
+      # no fuzz/ directory must not get a vacuous green (gen_fuzz_target.sh
+      # scaffolds a target per module).
       - run: |
-          for t in $(cargo fuzz list 2>/dev/null); do
+          targets="$(cargo fuzz list)"
+          if [ -z "$targets" ]; then
+            echo "::error::no cargo-fuzz targets found — the fuzz gate cannot pass vacuously"
+            exit 1
+          fi
+          for t in $targets; do
             cargo fuzz run "$t" -- -max_total_time=60
           done
 

@@ -2,6 +2,7 @@
 # your new project root and rename the crates. The layering (see
 # ../ARCHITECTURE-TEMPLATE.md) makes safety STRUCTURAL:
 #   core : #![forbid(unsafe_code)]  — all pure logic lives here, testable anywhere
+#          (package `port_core`: literally naming it `core` shadows libcore)
 #   sys  : the ONLY crate allowed unsafe — FFI wrapped in audited safe fns + RAII
 #   cli  : thin — parse -> core -> render
 [workspace]

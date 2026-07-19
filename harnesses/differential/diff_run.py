@@ -8,7 +8,15 @@ ones live in a ledger (DIVERGENCES.md) that suppresses them on future runs.
 Two comparison modes:
   * same-binary-both-platforms: --oracle and --rust are real binaries.
   * oracle-substitution: when the reference can't run here, point --oracle at a
-    wrapper that emits the captured golden output (see harnesses/golden).
+    wrapper that emits the captured golden output (see harnesses/golden) — and
+    exits with the captured `<case>.rc` code, so exit-code fidelity survives
+    the substitution.
+
+Timeouts are failures, not behavior (the liveness backstop, LESSONS #1): a case
+where the RUST side exceeds its timeout gets the verdict TIMEOUT — never MATCH,
+and the ledger cannot excuse it (two hangs matching each other is not fidelity).
+An oracle-only timeout is an ordinary DIVERGE to triage: "C hangs on this input,
+Rust errors cleanly" is a legitimate ledgered fix-of-C-defect.
 
 Matrix (TOML or JSON): a list of cases, each with a name and argv, e.g.
 
@@ -17,19 +25,32 @@ Matrix (TOML or JSON): a list of cases, each with a name and argv, e.g.
   args = ["-nP", "-iTCP"]
   # optional: stdin = "...", env = {FOO="bar"}, timeout = 10
 
+Ledger entries come in two strengths. `- [x] <case>: <why>` suppresses by case
+name alone (legacy). `- [x] <case> [sha256:<12-hex>]: <why>` pins the entry to
+ONE accepted divergence — the tool prints the fingerprint to pin, and if the
+case's divergence ever changes shape (a NEW regression arriving in a ledgered
+case), the pin no longer matches and the case fails again. Pin your entries.
+
+The verdict covers stdout AND exit code by default; stderr is compared too when
+--with-stderr is given (error text is behavior for a CLI, but many tools put
+nondeterministic noise there — opt in per port).
+
 Usage:
   diff_run.py --oracle PATH --rust PATH --matrix FILE [--ledger DIVERGENCES.md]
-              [--sort] [--mask-numbers] [--update-ledger] [--json]
+              [--sort] [--mask-numbers] [--ignore-exit] [--with-stderr] [--json]
   diff_run.py --self-test
 
-Exit: 0 = all match or all divergences are ledgered; 1 = unexplained divergence.
+Exit: 0 = all match or all divergences are ledgered; 1 = unexplained divergence
+or any TIMEOUT.
 """
 from __future__ import annotations
 
 import argparse
 import difflib
+import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -37,36 +58,67 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import normalize as N  # noqa: E402
 
 
+def _validate_matrix(cases):
+    """Case names become file names (golden corpus: <name>.golden) and report
+    labels; a separator or '..' would escape the corpus directory. The test
+    harness is software with a hostile host — reject, don't sanitize."""
+    for case in cases:
+        name = case.get("name")
+        if not name or not isinstance(name, str):
+            sys.exit("error: every matrix case needs a non-empty string `name`")
+        if re.search(r"[/\\]", name) or name in (".", ".."):
+            sys.exit(f"error: case name {name!r} contains a path separator / traversal "
+                     "(names become corpus file names)")
+    return cases
+
+
 def load_matrix(path):
     if path.endswith(".json"):
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
-        return data["case"] if isinstance(data, dict) and "case" in data else data
+        return _validate_matrix(data["case"] if isinstance(data, dict) and "case" in data else data)
     try:
         import tomllib
     except ModuleNotFoundError:
         sys.exit("error: TOML matrix needs Python 3.11+ (tomllib); use a .json matrix instead")
     with open(path, "rb") as f:
         data = tomllib.load(f)
-    return data.get("case", data if isinstance(data, list) else [])
+    return _validate_matrix(data.get("case", data if isinstance(data, list) else []))
+
+
+_FP_RE = re.compile(r"\[sha256:([0-9a-fA-F]{6,64})\]")
 
 
 def load_ledger(path):
-    """Case names marked as known-intentional divergences. The ledger is
-    human-readable Markdown; we harvest lines like `- [x] case-name: reason`."""
-    known = set()
+    """Known-intentional divergences as {case-name: fingerprint-or-None}. The
+    ledger is human-readable Markdown; we harvest `- [x] case-name: reason`
+    lines and, when present, a pinned fingerprint of the accepted diff:
+    `- [x] case-name [sha256:abcdef123456]: reason`. A pinned entry suppresses
+    only that exact divergence; an unpinned one suppresses by name alone
+    (legacy) — pin them, or a new regression can hide behind an old acceptance."""
+    known = {}
     if path and os.path.exists(path):
         for line in open(path, encoding="utf-8"):
             s = line.strip()
             if s.startswith(("- [x]", "* [x]")):
                 body = s[5:].strip()
+                m = _FP_RE.search(body)
+                fp = m.group(1).lower() if m else None
+                if m:  # remove the pin before splitting on ':' (the pin has one)
+                    body = body[: m.start()] + body[m.end():]
                 name = body.split(":", 1)[0].strip().strip("`")
                 if name:
-                    known.add(name)
+                    known[name] = fp
     return known
 
 
 def run_one(binary, case, default_timeout=15):
+    """Run one case; returns (stdout, returncode, timed_out, stderr). On
+    timeout the output is the <<TIMEOUT>> sentinel and rc 124 — callers must
+    treat timed_out=True as a failed run, never as comparable behavior: two
+    sides that both hang produce identical sentinels, and comparing those as if
+    they were output would pass the exact hang class this harness exists to
+    catch."""
     argv = [binary] + [str(a) for a in case.get("args", [])]
     env = dict(os.environ)
     env.update({k: str(v) for k, v in case.get("env", {}).items()})
@@ -78,41 +130,74 @@ def run_one(binary, case, default_timeout=15):
             timeout=case.get("timeout", default_timeout),
             env=env,
         )
-        return p.stdout.decode("utf-8", "replace"), p.returncode
+        return (p.stdout.decode("utf-8", "replace"), p.returncode, False,
+                p.stderr.decode("utf-8", "replace"))
     except subprocess.TimeoutExpired:
-        return "<<TIMEOUT>>\n", 124
+        return "<<TIMEOUT>>\n", 124, True, ""
     except FileNotFoundError:
         sys.exit(f"error: binary not found: {binary}")
 
 
-def compare(oracle_bin, rust_bin, matrix, ledger, sort, mask_numbers, ignore_exit=False):
+def compare(oracle_bin, rust_bin, matrix, ledger, sort, mask_numbers, ignore_exit=False,
+            with_stderr=False):
     known = load_ledger(ledger)
     results = []
     for case in matrix:
         name = case["name"]
-        o_out, o_rc = run_one(oracle_bin, case)
-        r_out, r_rc = run_one(rust_bin, case)
+        o_out, o_rc, o_to, o_err = run_one(oracle_bin, case)
+        r_out, r_rc, r_to, r_err = run_one(rust_bin, case)
         norm = lambda t: N.normalize_text(t, sort=sort, strip_blank=True, mask_numbers=mask_numbers)
         o_n, r_n = norm(o_out), norm(r_out)
         # Fidelity is stdout AND exit code: a rewrite that prints the right thing
         # but returns the wrong status (lsof exits 1 on no-match; scripts branch
         # on it) is NOT a match. Exit-code drift was a real winlsof bug.
         # (LESSONS #4). `--ignore-exit` opts out for tools without stable codes.
+        # `--with-stderr` opts stderr in (error text is behavior too).
         stdout_match = o_n == r_n
         exit_match = ignore_exit or (o_rc == r_rc)
-        if stdout_match and exit_match:
-            verdict = "MATCH"
-        elif name in known:
-            verdict = "DIVERGE(ledgered)"
-        else:
-            verdict = "DIVERGE"
-        note = "" if exit_match else f"exit code differs: oracle={o_rc} rust={r_rc}\n"
+        o_e, r_e = (norm(o_err), norm(r_err)) if with_stderr else ("", "")
+        stderr_match = (not with_stderr) or o_e == r_e
+        note = ""
+        if o_to or r_to:
+            which = "both" if (o_to and r_to) else ("rust" if r_to else "oracle")
+            note += f"timed out: {which} (case timeout {case.get('timeout', 15)}s)\n"
+        if not exit_match:
+            note += f"exit code differs: oracle={o_rc} rust={r_rc}\n"
         body = "" if stdout_match else "".join(difflib.unified_diff(
             o_n.splitlines(keepends=True), r_n.splitlines(keepends=True),
             fromfile=f"oracle:{name}", tofile=f"rust:{name}"))
+        if not stderr_match:
+            body += "".join(difflib.unified_diff(
+                o_e.splitlines(keepends=True), r_e.splitlines(keepends=True),
+                fromfile=f"oracle-stderr:{name}", tofile=f"rust-stderr:{name}"))
+        # Fingerprint of the observed divergence (over the stable diff text,
+        # before any mismatch message is appended) — what a ledger pin locks.
+        fp = hashlib.sha256((note + body).encode("utf-8")).hexdigest()
+        # A rust-side timeout is TIMEOUT outright: never MATCH (both sides
+        # hanging yields identical <<TIMEOUT>> sentinels, which is two hangs,
+        # not fidelity) and never ledgered (nothing ran; there is no behavior
+        # to accept). Oracle-only timeouts fall through to the normal DIVERGE
+        # triage — fixing a C hang is a legitimate ledgered divergence.
+        pin = known.get(name) if name in known else None
+        if r_to:
+            verdict = "TIMEOUT"
+        elif stdout_match and exit_match and stderr_match:
+            verdict = "MATCH"
+        elif name in known:
+            if pin is not None and not fp.startswith(pin):
+                verdict = "DIVERGE"
+                note += (f"ledgered fingerprint mismatch: accepted [sha256:{pin}], "
+                         f"observed [sha256:{fp[:12]}] — the divergence changed; re-triage\n")
+            else:
+                verdict = "DIVERGE(ledgered)"
+        else:
+            verdict = "DIVERGE"
         results.append({
             "name": name, "verdict": verdict,
             "oracle_rc": o_rc, "rust_rc": r_rc, "exit_match": exit_match,
+            "timed_out": {"oracle": o_to, "rust": r_to},
+            "fingerprint": None if verdict == "MATCH" else fp[:12],
+            "pinned": pin is not None,
             "diff": None if verdict == "MATCH" else (note + body),
         })
     return results
@@ -127,6 +212,7 @@ def main(argv=None):
     ap.add_argument("--sort", action="store_true", help="order-independent compare")
     ap.add_argument("--mask-numbers", action="store_true", help="mask bare numbers (PIDs) too")
     ap.add_argument("--ignore-exit", action="store_true", help="don't treat an exit-code difference as a divergence")
+    ap.add_argument("--with-stderr", action="store_true", help="also compare (normalized) stderr")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args(argv)
@@ -139,20 +225,29 @@ def main(argv=None):
         return 2
 
     results = compare(args.oracle, args.rust, load_matrix(args.matrix),
-                      args.ledger, args.sort, args.mask_numbers, args.ignore_exit)
+                      args.ledger, args.sort, args.mask_numbers, args.ignore_exit,
+                      args.with_stderr)
     unexplained = [r for r in results if r["verdict"] == "DIVERGE"]
+    timeouts = [r for r in results if r["verdict"] == "TIMEOUT"]
     if args.json:
         print(json.dumps(results, indent=2))
     else:
         for r in results:
             print(f"[{r['verdict']:18}] {r['name']}")
-            if r["verdict"] == "DIVERGE" and r["diff"]:
+            if r["verdict"] == "DIVERGE(ledgered)" and not r["pinned"]:
+                print(f"    (unpinned ledger entry — pin it as `- [x] {r['name']} "
+                      f"[sha256:{r['fingerprint']}]: <why>` so a changed divergence fails again)")
+            if r["verdict"] in ("DIVERGE", "TIMEOUT") and r["diff"]:
                 sys.stdout.write(r["diff"])
-        print(f"\n{len(results)} cases, {len(unexplained)} unexplained divergence(s)")
+        print(f"\n{len(results)} cases, {len(unexplained)} unexplained divergence(s), "
+              f"{len(timeouts)} timeout(s)")
         if unexplained:
             print("Triage each: fix the Rust, OR record an intentional fix-of-C-defect in",
                   args.ledger, "as `- [x] <case>: <why>`.")
-    return 1 if unexplained else 0
+        if timeouts:
+            print("A TIMEOUT is a hard failure (a hang is a design smell — design the "
+                  "blocking call out); it cannot be ledgered.")
+    return 1 if (unexplained or timeouts) else 0
 
 
 def _self_test():
@@ -183,6 +278,18 @@ def _self_test():
         ledger_path = f.name
     res = compare(echo, printf, diff_case, ledger=ledger_path, sort=False, mask_numbers=False)
     check("ledgered divergence → suppressed", res[0]["verdict"] == "DIVERGE(ledgered)")
+    check("unpinned ledger entry is reported as such (so it gets pinned)",
+          res[0]["pinned"] is False and res[0]["fingerprint"])
+    # a PINNED entry accepts exactly the accepted divergence...
+    fp = compare(echo, printf, diff_case, ledger=None, sort=False, mask_numbers=False)[0]["fingerprint"]
+    open(ledger_path, "w").write(f"- [x] diverging [sha256:{fp}]: printf drops the newline\n")
+    res = compare(echo, printf, diff_case, ledger=ledger_path, sort=False, mask_numbers=False)
+    check("pinned fingerprint matches → suppressed", res[0]["verdict"] == "DIVERGE(ledgered)")
+    # ...and re-fails when the divergence changes shape (stale pin ≠ observed)
+    open(ledger_path, "w").write("- [x] diverging [sha256:000000000000]: stale acceptance\n")
+    res = compare(echo, printf, diff_case, ledger=ledger_path, sort=False, mask_numbers=False)
+    check("changed divergence breaks the pin → DIVERGE again",
+          res[0]["verdict"] == "DIVERGE" and "fingerprint mismatch" in res[0]["diff"])
     os.unlink(ledger_path)
 
     # exit-code fidelity: same stdout, different exit status must DIVERGE.
@@ -195,6 +302,49 @@ def _self_test():
         check("divergence note names the exit codes", "exit code differs" in (res[0]["diff"] or ""))
         res = compare(o, r, ec, ledger=None, sort=False, mask_numbers=False, ignore_exit=True)
         check("--ignore-exit suppresses an exit-only divergence → MATCH", res[0]["verdict"] == "MATCH")
+
+    # Timeouts are failures, not fidelity: two hangs produce identical
+    # <<TIMEOUT>> sentinels, which must never compare as MATCH, and the ledger
+    # must not be able to excuse a hung rewrite.
+    with tempfile.TemporaryDirectory() as d:
+        slow = os.path.join(d, "slow.sh")
+        open(slow, "w").write("#!/bin/sh\nsleep 2\n"); os.chmod(slow, 0o755)
+        fast = os.path.join(d, "fast.sh")
+        open(fast, "w").write("#!/bin/sh\necho hi\n"); os.chmod(fast, 0o755)
+        tc = [{"name": "hang", "args": [], "timeout": 0.4}]
+        res = compare(slow, slow, tc, ledger=None, sort=False, mask_numbers=False)
+        check("both sides hanging → TIMEOUT, not MATCH", res[0]["verdict"] == "TIMEOUT")
+        res = compare(fast, slow, tc, ledger=None, sort=False, mask_numbers=False)
+        check("rust-side hang → TIMEOUT", res[0]["verdict"] == "TIMEOUT")
+        ledger = os.path.join(d, "ledger.md")
+        open(ledger, "w").write("- [x] hang: pretend this is fine\n")
+        res = compare(fast, slow, tc, ledger=ledger, sort=False, mask_numbers=False)
+        check("ledger cannot excuse a rust-side hang", res[0]["verdict"] == "TIMEOUT")
+        res = compare(slow, fast, tc, ledger=None, sort=False, mask_numbers=False)
+        check("oracle-only hang → DIVERGE (triaged, ledgerable)", res[0]["verdict"] == "DIVERGE")
+
+    # stderr: ignored by default (documented), compared with --with-stderr
+    with tempfile.TemporaryDirectory() as d:
+        o = os.path.join(d, "o.sh")
+        open(o, "w").write("#!/bin/sh\necho hi\necho err-one >&2\n"); os.chmod(o, 0o755)
+        r = os.path.join(d, "r.sh")
+        open(r, "w").write("#!/bin/sh\necho hi\necho err-two >&2\n"); os.chmod(r, 0o755)
+        sc = [{"name": "stderr-drift", "args": []}]
+        res = compare(o, r, sc, ledger=None, sort=False, mask_numbers=False)
+        check("stderr drift ignored by default → MATCH", res[0]["verdict"] == "MATCH")
+        res = compare(o, r, sc, ledger=None, sort=False, mask_numbers=False, with_stderr=True)
+        check("--with-stderr catches stderr drift → DIVERGE",
+              res[0]["verdict"] == "DIVERGE" and "stderr" in (res[0]["diff"] or ""))
+
+    # hostile case names must be rejected, not become corpus file paths
+    with tempfile.TemporaryDirectory() as d:
+        bad = os.path.join(d, "bad.json")
+        open(bad, "w").write('[{"name": "../evil", "args": []}]')
+        try:
+            load_matrix(bad)
+            check("path-traversal case name rejected", False)
+        except SystemExit:
+            check("path-traversal case name rejected", True)
 
     print("\nself-test:", "OK" if ok else "FAILED")
     return 0 if ok else 1

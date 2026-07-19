@@ -26,7 +26,7 @@ A port that ships without this wastes its most valuable output.
    control)? **Did a failure occur the playbook would NOT have prevented?** — the most
    important finding.
 3. **Patch the kit — make the edits, don't just describe them:** amend `PLAYBOOK.md`;
-   fix/extend a harness and re-run `make -C porting-kit check-kit`; update
+   fix/extend a harness and re-run the kit's `make check-kit`; update
    `ARCHITECTURE-TEMPLATE.md`, the `PROMPTS/`, or these skills if the shape/loop changed.
    **Keep the skills in integrity with the kit** — if you renamed a harness or changed a
    flag, update every skill that references it (the skills-integrity check enforces this).
@@ -42,4 +42,5 @@ prevented (the next port's target).
 ## Integrity
 This skill and the rest of the suite are part of "all elements of the kit" — keep them
 consistent with `PLAYBOOK.md`, the harnesses, and `LESSONS.md`. Run
-`make -C porting-kit check-kit` (which includes the skills-integrity check) after edits.
+the kit's `make check-kit` — it includes the skills-integrity check — after edits
+(`make -C porting-kit check-kit` when the kit is vendored at `porting-kit/`).

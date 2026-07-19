@@ -254,8 +254,17 @@ kept both trees side by side — preserve that discipline.
 | Lints as errors | `clippy -D warnings` (+ overflow/cast lints) | CI |
 | Don't re-port a C vuln | `c-flaw-scan/scan_c_flaws.py` at Phase 0 | review |
 
-See `harnesses/ci/porting-ci.template.yml` for the wiring and
-`make -C porting-kit check-kit` to smoke-test every harness.
+**Gates fail closed.** A gate that finds *nothing to check* must fail, not pass:
+no fuzz targets, both sides of a differential timing out, a golden captured from
+a hung oracle, a missing toolchain component. "Nothing ran" is the easiest state
+for a pipeline to reach silently, so it is the state a gate must refuse loudest
+(LESSONS #6 — six such holes shipped green through `check-kit`). When you add or
+change a gate, add the degenerate-input case to its self-test *in the same
+change*: prove it goes red when there is nothing to be green about.
+
+See `harnesses/ci/porting-ci.template.yml` for the wiring, and smoke-test every
+harness with the kit's `make check-kit` — run from the kit root, or as
+`make -C porting-kit check-kit` in a repo that vendors the kit at `porting-kit/`.
 
 ---
 

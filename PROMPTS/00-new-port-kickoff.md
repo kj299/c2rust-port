@@ -41,4 +41,5 @@ begin porting modules until the order is agreed.
 
 When you do build, copy `porting-kit/skeleton/` for the workspace shape, wire
 `porting-kit/harnesses/ci/porting-ci.template.yml` into CI, and run
-`make -C porting-kit check-kit` to confirm the harnesses work in this repo.
+the kit's `make check-kit` (`make -C porting-kit check-kit` in the standard
+vendored layout) to confirm the harnesses work in this repo.
