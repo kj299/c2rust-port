@@ -25,9 +25,15 @@ Matrix (TOML or JSON): a list of cases, each with a name and argv, e.g.
   args = ["-nP", "-iTCP"]
   # optional: stdin = "...", env = {FOO="bar"}, timeout = 10
 
+Ledger entries come in two strengths. `- [x] <case>: <why>` suppresses by case
+name alone (legacy). `- [x] <case> [sha256:<12-hex>]: <why>` pins the entry to
+ONE accepted divergence — the tool prints the fingerprint to pin, and if the
+case's divergence ever changes shape (a NEW regression arriving in a ledgered
+case), the pin no longer matches and the case fails again. Pin your entries.
+
 Usage:
   diff_run.py --oracle PATH --rust PATH --matrix FILE [--ledger DIVERGENCES.md]
-              [--sort] [--mask-numbers] [--update-ledger] [--json]
+              [--sort] [--mask-numbers] [--ignore-exit] [--json]
   diff_run.py --self-test
 
 Exit: 0 = all match or all divergences are ledgered; 1 = unexplained divergence
@@ -37,8 +43,10 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -60,18 +68,29 @@ def load_matrix(path):
     return data.get("case", data if isinstance(data, list) else [])
 
 
+_FP_RE = re.compile(r"\[sha256:([0-9a-fA-F]{6,64})\]")
+
+
 def load_ledger(path):
-    """Case names marked as known-intentional divergences. The ledger is
-    human-readable Markdown; we harvest lines like `- [x] case-name: reason`."""
-    known = set()
+    """Known-intentional divergences as {case-name: fingerprint-or-None}. The
+    ledger is human-readable Markdown; we harvest `- [x] case-name: reason`
+    lines and, when present, a pinned fingerprint of the accepted diff:
+    `- [x] case-name [sha256:abcdef123456]: reason`. A pinned entry suppresses
+    only that exact divergence; an unpinned one suppresses by name alone
+    (legacy) — pin them, or a new regression can hide behind an old acceptance."""
+    known = {}
     if path and os.path.exists(path):
         for line in open(path, encoding="utf-8"):
             s = line.strip()
             if s.startswith(("- [x]", "* [x]")):
                 body = s[5:].strip()
+                m = _FP_RE.search(body)
+                fp = m.group(1).lower() if m else None
+                if m:  # remove the pin before splitting on ':' (the pin has one)
+                    body = body[: m.start()] + body[m.end():]
                 name = body.split(":", 1)[0].strip().strip("`")
                 if name:
-                    known.add(name)
+                    known[name] = fp
     return known
 
 
@@ -114,19 +133,6 @@ def compare(oracle_bin, rust_bin, matrix, ledger, sort, mask_numbers, ignore_exi
         # (LESSONS #4). `--ignore-exit` opts out for tools without stable codes.
         stdout_match = o_n == r_n
         exit_match = ignore_exit or (o_rc == r_rc)
-        # A rust-side timeout is TIMEOUT outright: never MATCH (both sides
-        # hanging yields identical <<TIMEOUT>> sentinels, which is two hangs,
-        # not fidelity) and never ledgered (nothing ran; there is no behavior
-        # to accept). Oracle-only timeouts fall through to the normal DIVERGE
-        # triage — fixing a C hang is a legitimate ledgered divergence.
-        if r_to:
-            verdict = "TIMEOUT"
-        elif stdout_match and exit_match:
-            verdict = "MATCH"
-        elif name in known:
-            verdict = "DIVERGE(ledgered)"
-        else:
-            verdict = "DIVERGE"
         note = ""
         if o_to or r_to:
             which = "both" if (o_to and r_to) else ("rust" if r_to else "oracle")
@@ -136,10 +142,34 @@ def compare(oracle_bin, rust_bin, matrix, ledger, sort, mask_numbers, ignore_exi
         body = "" if stdout_match else "".join(difflib.unified_diff(
             o_n.splitlines(keepends=True), r_n.splitlines(keepends=True),
             fromfile=f"oracle:{name}", tofile=f"rust:{name}"))
+        # Fingerprint of the observed divergence (over the stable diff text,
+        # before any mismatch message is appended) — what a ledger pin locks.
+        fp = hashlib.sha256((note + body).encode("utf-8")).hexdigest()
+        # A rust-side timeout is TIMEOUT outright: never MATCH (both sides
+        # hanging yields identical <<TIMEOUT>> sentinels, which is two hangs,
+        # not fidelity) and never ledgered (nothing ran; there is no behavior
+        # to accept). Oracle-only timeouts fall through to the normal DIVERGE
+        # triage — fixing a C hang is a legitimate ledgered divergence.
+        pin = known.get(name) if name in known else None
+        if r_to:
+            verdict = "TIMEOUT"
+        elif stdout_match and exit_match:
+            verdict = "MATCH"
+        elif name in known:
+            if pin is not None and not fp.startswith(pin):
+                verdict = "DIVERGE"
+                note += (f"ledgered fingerprint mismatch: accepted [sha256:{pin}], "
+                         f"observed [sha256:{fp[:12]}] — the divergence changed; re-triage\n")
+            else:
+                verdict = "DIVERGE(ledgered)"
+        else:
+            verdict = "DIVERGE"
         results.append({
             "name": name, "verdict": verdict,
             "oracle_rc": o_rc, "rust_rc": r_rc, "exit_match": exit_match,
             "timed_out": {"oracle": o_to, "rust": r_to},
+            "fingerprint": None if verdict == "MATCH" else fp[:12],
+            "pinned": pin is not None,
             "diff": None if verdict == "MATCH" else (note + body),
         })
     return results
@@ -174,6 +204,9 @@ def main(argv=None):
     else:
         for r in results:
             print(f"[{r['verdict']:18}] {r['name']}")
+            if r["verdict"] == "DIVERGE(ledgered)" and not r["pinned"]:
+                print(f"    (unpinned ledger entry — pin it as `- [x] {r['name']} "
+                      f"[sha256:{r['fingerprint']}]: <why>` so a changed divergence fails again)")
             if r["verdict"] in ("DIVERGE", "TIMEOUT") and r["diff"]:
                 sys.stdout.write(r["diff"])
         print(f"\n{len(results)} cases, {len(unexplained)} unexplained divergence(s), "
@@ -215,6 +248,18 @@ def _self_test():
         ledger_path = f.name
     res = compare(echo, printf, diff_case, ledger=ledger_path, sort=False, mask_numbers=False)
     check("ledgered divergence → suppressed", res[0]["verdict"] == "DIVERGE(ledgered)")
+    check("unpinned ledger entry is reported as such (so it gets pinned)",
+          res[0]["pinned"] is False and res[0]["fingerprint"])
+    # a PINNED entry accepts exactly the accepted divergence...
+    fp = compare(echo, printf, diff_case, ledger=None, sort=False, mask_numbers=False)[0]["fingerprint"]
+    open(ledger_path, "w").write(f"- [x] diverging [sha256:{fp}]: printf drops the newline\n")
+    res = compare(echo, printf, diff_case, ledger=ledger_path, sort=False, mask_numbers=False)
+    check("pinned fingerprint matches → suppressed", res[0]["verdict"] == "DIVERGE(ledgered)")
+    # ...and re-fails when the divergence changes shape (stale pin ≠ observed)
+    open(ledger_path, "w").write("- [x] diverging [sha256:000000000000]: stale acceptance\n")
+    res = compare(echo, printf, diff_case, ledger=ledger_path, sort=False, mask_numbers=False)
+    check("changed divergence breaks the pin → DIVERGE again",
+          res[0]["verdict"] == "DIVERGE" and "fingerprint mismatch" in res[0]["diff"])
     os.unlink(ledger_path)
 
     # exit-code fidelity: same stdout, different exit status must DIVERGE.
