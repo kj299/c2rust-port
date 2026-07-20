@@ -13,6 +13,16 @@
 # comment; `permissions: contents: read` (least privilege); `persist-credentials:
 # false` so a later compromised step can't reuse the checkout token to push. Bump
 # the pins with Dependabot/Renovate — they understand the `# vX.Y` comment.
+#
+# LESSONS #10 — CI runs in the TARGET repo's GitHub, not yours, and third-party
+# actions are a dependency that environment can BLOCK. This template uses
+# dtolnay/rust-toolchain etc.; a repo whose Actions policy allows only first-party
+# `actions/*` will fail the WHOLE run at startup (conclusion=startup_failure, zero
+# jobs) before any step — which reads like a red test result but is policy, not
+# code. Verify this template actually runs in the target repo before relying on it;
+# if third-party actions are blocked, fall back to `actions/checkout` + the runner's
+# preinstalled toolchains via `run:` steps (see this repo's .github/workflows/
+# check-kit.yml for that pattern). SHA-pin the actions you do keep (§5 backlog #5).
 name: porting-ci
 
 # LESSONS #5 — path-scope CI to what it actually builds. During a gradual port the

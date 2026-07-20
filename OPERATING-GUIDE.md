@@ -168,6 +168,11 @@ audit → retrospective`.
    `persist-credentials: false`; a nightly `schedule:` deep tier (fuzz/diff-fuzz)
    over a per-PR smoke; and `cargo-vet`, SBOM (`cargo auditable`/CycloneDX), and
    `gitleaks` jobs alongside audit/deny — in `harnesses/ci/porting-ci.template.yml`.
+   **Portability caveat (LESSONS #10):** the template's third-party actions
+   (dtolnay/rust-toolchain, …) fail the whole run at startup under a first-party-only
+   Actions policy — verify it actually runs in the target repo, and keep the
+   `actions/checkout` + preinstalled-toolchain fallback
+   (`.github/workflows/check-kit.yml`) for policy-restricted repos.
 6. ~~**`scan_c_flaws.py` depth.**~~ **Done:** added `strncpy-noterm`,
    `snprintf-truncation`, and windowed-lexical `use-after-free`/`double-free`/
    `uninitialized-read` heuristics, and made the sink checks whole-file so a
