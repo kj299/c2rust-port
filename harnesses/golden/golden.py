@@ -408,9 +408,17 @@ def _self_test():
         check("replay same binary → match", replay(echo, matrix, corpus, False, False) == 0)
         check("replay divergent binary → fail", replay(printf, matrix, corpus, False, False) == 1)
 
-        # nondeterministic oracle must be flagged, not stored
+        # nondeterministic oracle must be flagged, not stored. Emit an
+        # incrementing counter (state in a sidecar file) so every run genuinely
+        # differs regardless of runner speed — a time-seeded `awk srand()` gave
+        # IDENTICAL output when all repeats landed in the same wall-clock second,
+        # which a fast CI runner does, silently flaking this test.
         nd = os.path.join(d, "nd.sh")
-        open(nd, "w").write("#!/bin/sh\nawk 'BEGIN{srand(); print int(rand()*1e9)}'\n")
+        open(nd, "w").write(
+            '#!/bin/sh\n'
+            'f="$0.ctr"\n'
+            'n=$(cat "$f" 2>/dev/null || echo 0)\n'
+            'echo $((n + 1)) | tee "$f"\n')
         os.chmod(nd, 0o755)
         ndm = os.path.join(d, "nd.json")
         open(ndm, "w").write('[{"name": "rng", "args": []}]')
