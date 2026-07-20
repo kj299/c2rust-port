@@ -181,9 +181,11 @@ audit → retrospective`.
    --rules <file>` loads rules (name/regex/replacement) from JSON/TOML and replaces
    the built-in defaults; `normalize.py --dump-default-rules` emits them as a
    starting point. Threaded through `diff_run.py --rules`. Back-compatible.
-9. ~~`progress.py ingest`~~ — partially done: `ingest` exists for unsafe-audit
-   `--json` reports (final gate only, exact-stem module matching); extend to the
-   other harnesses' JSON and the earlier gates.
+9. ~~`progress.py ingest` — extend to the other harnesses' JSON.~~ **Done:**
+   `progress.py ingest --diff-json`/`--lib-json` (diff_run/lib_diff clean) advance
+   `differential`, `--fuzz-json` (diff_fuzz, 0 findings) advances `fuzzed`, and
+   `--unsafe-json` advances `unsafe_audited` — exact-stem, fail-closed on a
+   malformed report, and climbing multiple gates in one call.
 10. Document the Windows/cross-platform caveats (sanitizers/Miri assume a Linux
     nightly toolchain).
 11. ~~A `porting-kit-diff-fuzz` skill once #4 lands.~~ **Done** — `skills/porting-kit-diff-fuzz`.
