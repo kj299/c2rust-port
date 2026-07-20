@@ -18,8 +18,7 @@ with a mechanical integrity check.
 **Provisional** — designed and documented, not yet battle-tested end-to-end:
 the **library** path (the differential is executable-shaped; C-ABI libraries need
 the `cando`-style function-level harness, §5 P0); C→C **preconditioning** is prose,
-not tooling; the **performance** gate is a number in the playbook, not a harness;
-**held-back vectors** and **C-baseline vector validation** are described, not wired.
+not tooling; the **performance** gate is a number in the playbook, not a harness.
 
 **Bottom line:** ready to *drive an executable port today* and to *structure* a
 library port; not yet a turnkey library-migration pipeline. §5 is the path to that,
@@ -140,9 +139,12 @@ audit → retrospective`.
 1. **`cando`-style function-level differential harness** for C-ABI libraries — the
    current differential is executable-shaped (argv/stdin→stdout+exit). Biggest gap.
 2. **Performance gate harness** — measure module runtime vs the C median, fail >1.3×.
-3. **Held-back vectors + C-baseline validation** in `golden.py` (a holdout mode —
-   named flags only once implemented, per LESSONS #7 — and "a vector must pass on
-   C before it may judge Rust").
+3. ~~**Held-back vectors + C-baseline validation** in `golden.py`.~~ **Done:**
+   `golden.py capture --holdout <set>` reserves a vector set that `replay` runs only
+   under `--final` — never during iteration, where a leaked held-out case hard-fails —
+   and `golden.py capture --validate` rejects any vector that does not pass on the C
+   baseline (oracle exit ≠ `expect_rc`, or a declared `expect_contains`/`expect_absent`
+   assertion fails) before it is admitted to the corpus.
 
 **P1 — materially stronger:**
 4. ~~**Differential fuzzing** harness (C vs Rust on shared fuzz inputs).~~ **Done:**

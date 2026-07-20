@@ -103,6 +103,13 @@ winlsof's phase order was sound; its one miss was not spiking the hang first.
   and flags fields that vary (PIDs, timestamps, addresses, ordering). Those feed
   the normalization rules (`harnesses/differential/normalize.py`), so a real
   regression isn't masked by noise and noise isn't mistaken for a regression.
+- **Validate every vector against the C baseline, and hold a set back.** A vector
+  that "passes" only because it is itself wrong teaches nothing, and an LLM in the
+  loop overfits the vectors it can see (TRACTOR: hidden tests failed more than
+  visible ones). `golden.py capture --validate` refuses any vector the C reference
+  fails (wrong exit code, or a declared `expect_contains`/`expect_absent` miss);
+  `--holdout <set>` reserves a hidden acceptance set that `replay --final` runs only
+  at the end — an iteration replay refuses a leaked held-out vector outright.
 - If the reference binary **cannot run on your dev/target environment** (winlsof:
   C lsof doesn't run on Windows), substitute:
   - **structural golden tests** for output *format* (columns, field codes, JSON
@@ -121,8 +128,9 @@ winlsof's phase order was sound; its one miss was not spiking the hang first.
   starting with the Phase-0 flaw scan's findings.
 
 **Entry criteria:** ordered module list.
-**Exit criteria:** golden corpus captured + versioned; nondeterminism map;
-normalization rules; divergence ledger seeded from the flaw scan.
+**Exit criteria:** golden corpus captured + versioned; every vector validated on C
+(`--validate`) with a hidden acceptance set held back (`--holdout`); nondeterminism
+map; normalization rules; divergence ledger seeded from the flaw scan.
 **Artifacts:** `golden/corpus/`, `normalize.py` rules, `DIVERGENCES.md`.
 **lsof failure modes this prevents:** the empty-result "bare header" and the
 bare-`n` `-F` field shipped because there was no format oracle pinning them.

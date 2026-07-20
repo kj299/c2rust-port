@@ -23,8 +23,12 @@ semantic-comparison stage, not build time — "it builds" tells you almost nothi
    PIDs/timestamps/pointers/ephemeral-ports are masked *identically* on both sides —
    whatever you erase from C you must erase from Rust, or you manufacture a divergence.
 5. **Validate every vector against the C first** — a wrong vector that "passes"
-   teaches nothing. **Hold back a hidden acceptance set** (an LLM in the loop will
-   overfit to visible vectors).
+   teaches nothing — and **hold back a hidden acceptance set** (an LLM in the loop
+   will overfit to visible vectors):
+   `python3 porting-kit/harnesses/golden/golden.py capture --oracle <c-bin> --matrix <m> --corpus <dir> --holdout <heldback> --validate`
+   `--validate` refuses any vector that fails on C before it is admitted; `--holdout`
+   reserves the hidden set, which `golden.py replay ... --final --holdout <heldback>`
+   runs only at final acceptance — an iteration `replay` refuses a leaked held-out vector.
 6. **Seed `DIVERGENCES.md`** (copy `porting-kit/skeleton/DIVERGENCES.md`) from the
    Phase-0 flaw scan — the intentional-divergence ledger the differential reads.
 7. **Wire the differential** (used per module in `porting-kit-module`):
