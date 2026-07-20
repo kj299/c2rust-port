@@ -15,6 +15,7 @@ check-kit:
 	@echo "== diff-fuzz ==";        $(PY) $(H)/diff-fuzz/diff_fuzz.py --self-test
 	@echo "== perf-gate ==";        $(PY) $(H)/perf/perf_gate.py --self-test
 	@echo "== cando ==";            $(PY) $(H)/cando/cando_diff.py --self-test
+	@echo "== library-differential =="; $(PY) $(H)/library-differential/lib_diff.py --self-test
 	@echo "== progress ==";         $(PY) $(H)/progress/progress.py --self-test
 	@echo "== fuzz scaffolder ==";  bash  $(H)/fuzz/gen_fuzz_target.sh --check
 	@echo "== supply-chain ==";     bash  $(H)/supply-chain/run_supply_chain.sh --check

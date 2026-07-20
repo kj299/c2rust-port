@@ -12,15 +12,29 @@ real SAST pass (clang analyzer, CodeQL, cppcheck) — it bootstraps the flaw
 inventory when you have minutes, not hours.
 
 Categories flagged (CWE in parens):
-  unbounded-copy    strcpy/strcat/sprintf/gets/scanf-family %s   (CWE-120/787)
-  format-string     printf-family with a non-literal format      (CWE-134)
-  stack-vla-alloca  alloca / variable-length arrays              (CWE-770)
-  int-overflow-mul  malloc(a * b) style size math                (CWE-190)
-  command-exec      system/popen/exec* with composed strings     (CWE-78)
-  toctou            access()/stat() then open()/fopen()          (CWE-367)
+  unbounded-copy      strcpy/strcat/sprintf/gets/scanf-family %s   (CWE-120/787)
+  strncpy-noterm      strncpy (may leave dst non-NUL-terminated)   (CWE-170)
+  format-string       printf-family with a non-literal format      (CWE-134)
+  snprintf-truncation snprintf/vsnprintf whose return is discarded  (CWE-252)
+  stack-vla-alloca    alloca / variable-length arrays              (CWE-770)
+  int-overflow-mul    malloc(a * b) style size math                (CWE-190)
+  command-exec        system/popen/exec* with composed strings     (CWE-78)
+  toctou              access()/stat() then open()/fopen()          (CWE-367)
+  use-after-free      free(p) then p used before reassignment      (CWE-416)
+  double-free         free(p) then free(p) before reassignment     (CWE-415)
+  uninitialized-read  TYPE *p; then p used before `p =` / `&p`      (CWE-457)
 
-(No unchecked-malloc/CWE-690 check: use-after-NULL needs flow analysis this
-grep can't do honestly — a real SAST pass covers it.)
+The last three (use-after-free, double-free, uninitialized-read) are
+**windowed-lexical** heuristics: a bounded forward look (≈400 chars, cut at the
+next block-closing brace) that catches the common *local* pattern, not the sound
+flow analysis a real SAST does — a freed-then-used pointer three functions away, or
+a var initialized in another branch, is out of scope. They are questions, not
+proofs. (No unchecked-malloc/CWE-690: use-after-NULL needs whole-program flow this
+grep can't do honestly.)
+
+Multi-line robustness: the sink checks scan the whole (comment-masked) file, so a
+call split across lines — `malloc(a *\\n  b)`, `sscanf(u,\\n "%s", x)` — is not
+missed by a per-line regex.
 
 Usage:
   scan_c_flaws.py PATH [PATH ...] [--json] [--self-test]
@@ -39,6 +53,8 @@ CHECKS = [
      re.compile(r"\b(strcpy|strcat|sprintf|vsprintf|gets)\s*\(")),
     ("unbounded-copy", "CWE-120",
      re.compile(r"\b(scanf|fscanf|sscanf|vscanf|vfscanf|vsscanf)\s*\([^)]*%s")),
+    ("strncpy-noterm", "CWE-170",
+     re.compile(r"\bstrncpy\s*\(")),
     ("stack-vla-alloca", "CWE-770",
      re.compile(r"\balloca\s*\(")),
     ("int-overflow-mul", "CWE-190",
@@ -63,6 +79,25 @@ FORMAT_FUNCS = {
     "snprintf": 2, "vsnprintf": 2,
 }
 _FMT_CALL = re.compile(r"\b(" + "|".join(FORMAT_FUNCS) + r")\s*\(")
+_SNPRINTF = re.compile(r"\b(v?snprintf)\s*\(")
+_FREE = re.compile(r"\bfree\s*\(\s*(\*?\s*\w+)\s*\)")
+# A local pointer declared with no initializer: `TYPE *p;` on its own line.
+_UNINIT_DECL = re.compile(
+    r"(?m)^[ \t]*"
+    r"(?:const |volatile |unsigned |signed )*"
+    r"(?:void|char|short|int|long|float|double|size_t|ssize_t|wchar_t|"
+    r"u?int(?:8|16|32|64|ptr|max)_t|struct \w+|enum \w+|union \w+|\w+_t)"
+    r"\s+\*\s*(\w+)\s*;[ \t]*$")
+
+_WINDOW = 400  # forward look for the free/uninit heuristics
+
+
+def _lineno(src, pos):
+    return src.count("\n", 0, pos) + 1
+
+
+def _line_text(orig_lines, line):
+    return orig_lines[line - 1].strip()[:120] if 0 <= line - 1 < len(orig_lines) else ""
 
 
 def _call_args(src, open_paren):
@@ -151,7 +186,7 @@ def _mask_c_comments(src):
     return "".join(out)
 
 
-def _scan_format_strings(src):
+def _scan_format_strings(src, orig_lines):
     hits = []
     for m in _FMT_CALL.finditer(src):
         name = m.group(1)
@@ -165,26 +200,107 @@ def _scan_format_strings(src):
             continue
         if not fmt:
             continue
-        lineno = src.count("\n", 0, m.start()) + 1
+        lineno = _lineno(src, m.start())
         hits.append({"line": lineno, "category": "format-string", "cwe": "CWE-134",
                      "text": (name + "(" + args[idx].strip())[:120]})
     return hits
 
 
+def _scan_snprintf_truncation(src, orig_lines):
+    """Flag snprintf/vsnprintf whose return value is DISCARDED — a bare
+    statement — so a truncated write goes undetected (CWE-252). We look at the
+    first non-space char before the call: a statement boundary (`;`, `{`, `}`)
+    or a control-flow `)` (as in `if (x) snprintf(...);`) means the result is
+    thrown away; `=`, `(`, `,`, an operator, or `return` means it is used."""
+    hits = []
+    for m in _SNPRINTF.finditer(src):
+        j = m.start() - 1
+        while j >= 0 and src[j] in " \t\r\n":
+            j -= 1
+        prev = src[j] if j >= 0 else ";"   # start-of-file behaves like a statement start
+        if prev in ";{})":
+            line = _lineno(src, m.start())
+            hits.append({"line": line, "category": "snprintf-truncation", "cwe": "CWE-252",
+                         "text": _line_text(orig_lines, line)})
+    return hits
+
+
+def _var_regexes(var):
+    ev = re.escape(var)
+    return (
+        re.compile(r"\bfree\s*\(\s*\*?\s*" + ev + r"\s*\)"),   # re-free of var
+        # a WRITE of `var` (not `*var =` deref-write, not `p->var =` member-write,
+        # both of which READ var) — a genuine reassignment makes the pointer safe.
+        re.compile(r"(?<![\w.>&*])" + ev + r"\s*=(?!=)"),
+        re.compile(r"&\s*" + ev + r"\b"),                     # address taken → callee may fill
+        re.compile(r"(?<![\w])" + ev + r"(?![\w])"),          # any use of var
+    )
+
+
+def _scan_use_after_free(src, orig_lines):
+    hits = []
+    for m in _FREE.finditer(src):
+        var = m.group(1).replace("*", "").strip()
+        if not var or var == "NULL" or var.isdigit():
+            continue
+        w = src[m.end(): m.end() + _WINDOW]
+        cut = re.search(r"\n[ \t]*\}", w)   # stop at the enclosing block's close
+        if cut:
+            w = w[: cut.start()]
+        refree, write, addr, use = _var_regexes(var)
+        r_, wr, ad, us = refree.search(w), write.search(w), addr.search(w), use.search(w)
+        stop = min([x.start() for x in (wr, ad) if x], default=len(w) + 1)
+        if r_ and r_.start() < stop:
+            line = _lineno(src, m.end() + r_.start())
+            hits.append({"line": line, "category": "double-free", "cwe": "CWE-415",
+                         "text": _line_text(orig_lines, line)})
+        elif us and us.start() < stop:
+            line = _lineno(src, m.end() + us.start())
+            hits.append({"line": line, "category": "use-after-free", "cwe": "CWE-416",
+                         "text": _line_text(orig_lines, line)})
+    return hits
+
+
+def _scan_uninit(src, orig_lines):
+    """Uninitialized POINTER read: `TYPE *p;` (no initializer), then p is used
+    before any `p =` (write) or `&p` (address taken → a callee fills it). Scoped
+    to pointers — a wild-pointer read is the high-value case; scalar uninit is
+    lower-stakes and much noisier."""
+    hits = []
+    for m in _UNINIT_DECL.finditer(src):
+        var = m.group(1)
+        w = src[m.end(): m.end() + _WINDOW]
+        cut = re.search(r"\n[ \t]*\}", w)
+        if cut:
+            w = w[: cut.start()]
+        _rf, write, addr, use = _var_regexes(var)
+        wr, ad, us = write.search(w), addr.search(w), use.search(w)
+        stop = min([x.start() for x in (wr, ad) if x], default=len(w) + 1)
+        if us and us.start() < stop:
+            line = _lineno(src, m.end() + us.start())
+            hits.append({"line": line, "category": "uninitialized-read", "cwe": "CWE-457",
+                         "text": _line_text(orig_lines, line)})
+    return hits
+
+
 def scan_text(src):
-    # Mask comments ONCE and scan the masked text with both passes: commented-
-    # out code can't fire (no noise), and real code lines that merely *look*
-    # comment-like (`*out = ...`) are still scanned (no silent false negatives).
+    # Mask comments ONCE, then scan the masked text WHOLE-FILE (a sink call can
+    # span lines): commented-out code can't fire (no noise), and real code that
+    # merely looks comment-like (`*out = ...`) is still scanned (no false
+    # negatives). Line numbers survive masking (newlines preserved).
     masked = _mask_c_comments(src)
     orig_lines = src.splitlines()
     hits = []
-    for lineno, line in enumerate(masked.splitlines(), 1):
-        for cat, cwe, rx in CHECKS:
-            if rx.search(line):
-                text = orig_lines[lineno - 1].strip() if lineno <= len(orig_lines) else ""
-                hits.append({"line": lineno, "category": cat, "cwe": cwe, "text": text[:120]})
-    hits.extend(_scan_format_strings(masked))
-    hits.sort(key=lambda h: h["line"])
+    for cat, cwe, rx in CHECKS:
+        for m in rx.finditer(masked):
+            line = _lineno(masked, m.start())
+            hits.append({"line": line, "category": cat, "cwe": cwe,
+                         "text": _line_text(orig_lines, line)})
+    hits.extend(_scan_format_strings(masked, orig_lines))
+    hits.extend(_scan_snprintf_truncation(masked, orig_lines))
+    hits.extend(_scan_use_after_free(masked, orig_lines))
+    hits.extend(_scan_uninit(masked, orig_lines))
+    hits.sort(key=lambda h: (h["line"], h["category"]))
     return hits
 
 
@@ -233,14 +349,22 @@ void bad(char *u, char *dynfmt, char **dst) {
     r = "http://x"; q = strcat(p, u);   /* unbounded-copy; the // inside the
                                            string literal is NOT a comment */
     sscanf(u, "%s", buf);               /* unbounded-copy: scanf-family %s */
+    strncpy(buf, u, 8);                 /* strncpy-noterm */
     printf(u);                          /* format-string: arg 0 non-literal */
     fprintf(stderr, "literal %s\n", u); /* SAFE: format arg is a literal */
     fprintf(stderr, dynfmt, u);         /* format-string: arg 1 non-literal */
-    snprintf(buf, sizeof buf, "%d", 1); /* SAFE: format arg (idx 2) literal */
+    int cap = snprintf(buf, 8, "%d", 1);/* SAFE snprintf: return is captured */
+    snprintf(buf, 8, "%s", u);          /* snprintf-truncation: return discarded */
     char *p = malloc(n * width);        /* int-overflow-mul */
     *dst = malloc(n * m);               /* int-overflow-mul: deref-assign */
     system(cmd);                        /* command-exec */
     if (access(path, R_OK)) {}          /* toctou */
+    char *d1 = grab(); free(d1); free(d1);   /* double-free of d1 */
+    char *d2 = grab(); free(d2); sink(d2);   /* use-after-free: d2 read after free */
+    char *d3 = grab(); free(d3); d3 = 0;     /* SAFE: reassigned after free */
+    int *wild;                          /* uninitialized pointer... */
+    *wild = 7;                          /* ...deref before write: uninitialized-read */
+    char *set; set = pick(); *set = 1;  /* SAFE: assigned before deref */
     /* strcpy(x, y);  in a comment - must be ignored */
     /* printf(old_fmt);  commented-out format call - must be ignored */
     // fprintf(stderr, dynfmt, u);      commented-out too - must be ignored
@@ -251,6 +375,7 @@ void bad(char *u, char *dynfmt, char **dst) {
 def _self_test():
     hits = scan_text(SELF_TEST_C)
     cats = {h["category"] for h in hits}
+    n = lambda c: sum(1 for h in hits if h["category"] == c)
     fmt_hits = [h for h in hits if h["category"] == "format-string"]
     ok = True
 
@@ -269,17 +394,35 @@ def _self_test():
     # call after a "//"-containing string literal, and the scanf-family %s
     # MUST. 4 real copy sites.
     check("copy sites: deref-assign + string-'//' + sscanf scanned, comment ignored",
-          sum(1 for h in hits if h["category"] == "unbounded-copy") == 4)
-    check("deref-assign malloc line scanned (2 mul sites)",
-          sum(1 for h in hits if h["category"] == "int-overflow-mul") == 2)
-    # The Pass-1 fix: only NON-LITERAL format args flag; the stream/buffer/size
-    # arg is not mistaken for the format. Exactly 2 real hits (printf(u), the
-    # variable-format fprintf); the two literal-format calls must NOT flag, and
-    # neither must the two commented-out format calls.
+          n("unbounded-copy") == 4)
+    check("deref-assign malloc line scanned (2 mul sites)", n("int-overflow-mul") == 2)
+    # The format-string fix (LESSONS #2): only NON-LITERAL format args flag.
     check("format-string flags exactly the 2 real non-literal calls "
           "(literal + commented-out calls ignored)", len(fmt_hits) == 2)
     check("literal-format fprintf/snprintf NOT flagged",
           not any("literal" in h["text"] or '"%d"' in h["text"] for h in fmt_hits))
+
+    # --- new categories (P1 #6) ---
+    check("flags strncpy-noterm", n("strncpy-noterm") == 1)
+    # snprintf-truncation: the discarded call is flagged; the captured `cap =` is not
+    check("snprintf-truncation flags the discarded call", n("snprintf-truncation") >= 1)
+    check("snprintf with a captured return is NOT flagged as truncation",
+          not any(h["category"] == "snprintf-truncation" and "cap" in h["text"] for h in hits))
+    check("flags double-free (free(d1); free(d1))", n("double-free") == 1)
+    check("flags use-after-free (d2 used after free)",
+          any(h["category"] == "use-after-free" and "d2" in h["text"] for h in hits))
+    check("free-then-reassign (d3 = 0) is NOT flagged",
+          not any("d3" in h["text"] for h in hits if h["category"] in ("use-after-free", "double-free")))
+    check("flags uninitialized-read (wild pointer deref before write)",
+          any(h["category"] == "uninitialized-read" and "wild" in h["text"] for h in hits))
+    check("pointer assigned before deref (set) is NOT flagged uninitialized",
+          not any(h["category"] == "uninitialized-read" and "set" in h["text"] for h in hits))
+
+    # --- multi-line robustness: a call split across lines is still caught ---
+    ml = "void f(){ char *p = malloc(count *\n                 width); }"
+    check("whole-file scan catches a multi-line malloc(a *\\n b)",
+          any(h["category"] == "int-overflow-mul" for h in scan_text(ml)))
+
     print("\nself-test:", "OK" if ok else "FAILED")
     return 0 if ok else 1
 

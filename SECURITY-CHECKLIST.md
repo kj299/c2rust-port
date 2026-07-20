@@ -32,6 +32,9 @@ to safety and security" — this is that list.
       no unexplained drift.
 - [ ] **C flaws closed.** Every `scan_c_flaws.py` hit in this module is either
       not-applicable (documented) or fixed → `DIVERGENCES.md` entry with CWE.
+- [ ] **No performance cliff.** Where the C baseline runs, `perf_gate.py` shows the
+      Rust within `--threshold` (default 1.3×) of the C median over the workload
+      matrix — a large regression is a bug, and an input-dependent one is a DoS vector.
 
 ## Per release (Phase 5)
 
