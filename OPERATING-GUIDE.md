@@ -115,6 +115,7 @@ The skills are the operational surface; use them, don't re-derive their steps.
 |---|---|---|
 | Project start | `porting-kit-kickoff` | once |
 | Phase 0 vuln hunt | `porting-kit-cflaw-scan` | once (re-run per subsystem) |
+| Phase 0–1 precondition (C→C) | `porting-kit-precondition` | once / per subsystem, pre-oracle |
 | Phase 2 oracle | `porting-kit-oracle` | once, before any Rust |
 | Phase 4 per module | `porting-kit-module` | **repeated — the hot path** |
 | Phase 4 after matrix green | `porting-kit-diff-fuzz` | per module + nightly sweep |
@@ -170,8 +171,10 @@ audit → retrospective`.
    `double-free` / `uninitialized-read` (pointer) heuristics, and made the sink
    checks whole-file so a call split across lines isn't missed. Format-string signal
    (LESSONS #2) preserved.
-7. **A `porting-kit-precondition` skill** for Step 0 (C→C: global-state threading,
-   aliasing reduction, `#ifdef` story) — currently prose only.
+7. ~~**A `porting-kit-precondition` skill** for Step 0 (C→C).~~ **Done:**
+   `skills/porting-kit-precondition` — localize globals into a threaded context
+   struct, reduce aliasing, settle the `#ifdef` story, each verified on the C test
+   suite before translating; wired into `skills/README.md` and the §4 phase map.
 
 **P2 — polish / breadth:**
 8. `normalize.py` rules as a per-project data file (currently code constants).
