@@ -161,8 +161,10 @@ audit → retrospective`.
    not copied), minimizes each divergence to its smallest reproducer, and suppresses
    ledger-pinned fingerprints. Runs `--iterations`/`--max-time` budgets;
    `porting-kit-diff-fuzz` skill wraps it.
-5. **CI template hardening**: SHA-pin actions; split smoke/nightly for fuzz+sanitizers;
-   add `cargo vet`, SBOM, `gitleaks` jobs.
+5. ~~**CI template hardening**.~~ **Done:** every `uses:` SHA-pinned +
+   `persist-credentials: false`; a nightly `schedule:` deep tier for fuzz/diff-fuzz
+   (60s smoke per-PR); and new `cargo-vet`, SBOM (`cargo auditable` + CycloneDX), and
+   `gitleaks` secret-scan jobs alongside audit/deny.
 6. ~~**`scan_c_flaws.py` depth**.~~ **Done:** added `strncpy-noterm`,
    `snprintf-truncation` (return discarded), and windowed-lexical `use-after-free` /
    `double-free` / `uninitialized-read` (pointer) heuristics, and made the sink
