@@ -16,9 +16,11 @@ ledger; the unsafe-audit hard gate; the compounding LESSONS loop; the skills sui
 with a mechanical integrity check.
 
 **Provisional** — built and self-tested, not yet battle-tested end-to-end:
-the **library** path now has its `cando`-style function-level harness
-(`lib_diff.py`, §5 P0), but no real library port has exercised it end-to-end yet;
-C→C **preconditioning** is prose, not tooling.
+the **library** path has its `cando`-style function-level harness (`lib_diff.py`,
+§5 P0) and C→C **preconditioning** is now an invokable skill — but no real library
+port has exercised the full pipeline end-to-end yet. That final dry run (a tiny C
+library driven through every gate) is the **v1.0 exit test**; the §5 backlog items
+below are themselves all landed.
 
 **Bottom line:** ready to *drive an executable port today* and to *structure* a
 library port; not yet a turnkey library-migration pipeline. §5 is the path to that,
@@ -186,8 +188,10 @@ audit → retrospective`.
    `differential`, `--fuzz-json` (diff_fuzz, 0 findings) advances `fuzzed`, and
    `--unsafe-json` advances `unsafe_audited` — exact-stem, fail-closed on a
    malformed report, and climbing multiple gates in one call.
-10. Document the Windows/cross-platform caveats (sanitizers/Miri assume a Linux
-    nightly toolchain).
+10. ~~Document the Windows/cross-platform caveats.~~ **Done:**
+    `CROSS-PLATFORM-CAVEATS.md` — sanitizer/Miri availability by toolchain, the
+    exit-hard liveness pattern, ASCII-default output, `target/` sync/AV locks, and
+    fork-based harnesses on Windows; referenced from README + PLAYBOOK Phase 3.
 11. ~~A `porting-kit-diff-fuzz` skill once #4 lands.~~ **Done** — `skills/porting-kit-diff-fuzz`.
 
 **How the kit closes these:** each is a candidate for a normal port's

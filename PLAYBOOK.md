@@ -157,7 +157,9 @@ The invariant it encodes:
 target actually links here (winlsof lost time to an MSVC-vs-GNU linker mismatch)
 and that the build directory is not a synced/locked folder (OneDrive locked
 `target\` → `os error 5`). Cheap checks that prevent days of "is it my code or my
-machine?".
+machine?". Porting off Linux? See [`CROSS-PLATFORM-CAVEATS.md`](CROSS-PLATFORM-CAVEATS.md)
+for the full delta list — sanitizer/Miri availability by toolchain, ASCII-default
+output for legacy shells, the exit-hard liveness pattern, and fork-based harnesses.
 
 **Entry criteria:** oracle in place.
 **Exit criteria:** workspace builds; `core` is `forbid(unsafe_code)`; unsafe-audit

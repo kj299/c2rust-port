@@ -75,6 +75,10 @@ make check-kit      # smoke-test every harness (python3 + bash only, no toolchai
   TRACTOR-hardened (DARPA/MIT-LL, Feb 2026) four-step translation playbook.
   Written as portable feedback; useful when the port is a *translation*
   (transpile / LLM / FFI-coexistence) rather than a reimplementation.
+- [`CROSS-PLATFORM-CAVEATS.md`](CROSS-PLATFORM-CAVEATS.md) — porting off Linux
+  (Windows/macOS): Miri/ASan/UBSan/TSan availability by toolchain, the exit-hard
+  liveness pattern, ASCII-default output for legacy shells, and `target/` sync/AV
+  lock hazards. Distilled from the winlsof Windows port.
 
 ## The compounding loop
 
