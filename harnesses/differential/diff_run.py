@@ -37,7 +37,8 @@ nondeterministic noise there — opt in per port).
 
 Usage:
   diff_run.py --oracle PATH --rust PATH --matrix FILE [--ledger DIVERGENCES.md]
-              [--sort] [--mask-numbers] [--ignore-exit] [--with-stderr] [--json]
+              [--sort] [--mask-numbers] [--ignore-exit] [--with-stderr]
+              [--rules FILE] [--json]
   diff_run.py --self-test
 
 Exit: 0 = all match or all divergences are ledgered; 1 = unexplained divergence
@@ -139,7 +140,7 @@ def run_one(binary, case, default_timeout=15):
 
 
 def compare_one(name, oracle_bin, rust_bin, case, known, sort, mask_numbers,
-                ignore_exit=False, with_stderr=False):
+                ignore_exit=False, with_stderr=False, rules=None):
     """Run one case on both binaries and return its verdict dict. This is the
     single source of differential fidelity — the matrix runner (`compare`) and
     the differential FUZZER (`diff-fuzz/diff_fuzz.py`) both call it, so the
@@ -148,7 +149,8 @@ def compare_one(name, oracle_bin, rust_bin, case, known, sort, mask_numbers,
     place. `known` is a {name: pin} map from `load_ledger`."""
     o_out, o_rc, o_to, o_err = run_one(oracle_bin, case)
     r_out, r_rc, r_to, r_err = run_one(rust_bin, case)
-    norm = lambda t: N.normalize_text(t, sort=sort, strip_blank=True, mask_numbers=mask_numbers)
+    norm = lambda t: N.normalize_text(t, rules=rules if rules is not None else N.DEFAULT_RULES,
+                                      sort=sort, strip_blank=True, mask_numbers=mask_numbers)
     o_n, r_n = norm(o_out), norm(r_out)
     # Fidelity is stdout AND exit code: a rewrite that prints the right thing
     # but returns the wrong status (lsof exits 1 on no-match; scripts branch
@@ -206,10 +208,10 @@ def compare_one(name, oracle_bin, rust_bin, case, known, sort, mask_numbers,
 
 
 def compare(oracle_bin, rust_bin, matrix, ledger, sort, mask_numbers, ignore_exit=False,
-            with_stderr=False):
+            with_stderr=False, rules=None):
     known = load_ledger(ledger)
     return [compare_one(case["name"], oracle_bin, rust_bin, case, known,
-                        sort, mask_numbers, ignore_exit, with_stderr)
+                        sort, mask_numbers, ignore_exit, with_stderr, rules)
             for case in matrix]
 
 
@@ -223,6 +225,7 @@ def main(argv=None):
     ap.add_argument("--mask-numbers", action="store_true", help="mask bare numbers (PIDs) too")
     ap.add_argument("--ignore-exit", action="store_true", help="don't treat an exit-code difference as a divergence")
     ap.add_argument("--with-stderr", action="store_true", help="also compare (normalized) stderr")
+    ap.add_argument("--rules", help="per-project normalization rules file (.json/.toml); replaces the defaults")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args(argv)
@@ -234,9 +237,10 @@ def main(argv=None):
         print("error: --oracle, --rust and --matrix are required", file=sys.stderr)
         return 2
 
+    rules = N.load_rules(args.rules) if args.rules else None
     results = compare(args.oracle, args.rust, load_matrix(args.matrix),
                       args.ledger, args.sort, args.mask_numbers, args.ignore_exit,
-                      args.with_stderr)
+                      args.with_stderr, rules)
     unexplained = [r for r in results if r["verdict"] == "DIVERGE"]
     timeouts = [r for r in results if r["verdict"] == "TIMEOUT"]
     if args.json:
@@ -355,6 +359,18 @@ def _self_test():
             check("path-traversal case name rejected", False)
         except SystemExit:
             check("path-traversal case name rejected", True)
+
+    # per-project rules (--rules): a custom rule masks a project token so an
+    # otherwise-diverging pair matches — proving rules thread through compare.
+    with tempfile.TemporaryDirectory() as d:
+        o = os.path.join(d, "o.sh"); open(o, "w").write('#!/bin/sh\necho "req abc123"\n'); os.chmod(o, 0o755)
+        r = os.path.join(d, "r.sh"); open(r, "w").write('#!/bin/sh\necho "req def456"\n'); os.chmod(r, 0o755)
+        rc = [{"name": "reqid", "args": []}]
+        res = compare(o, r, rc, ledger=None, sort=False, mask_numbers=False)
+        check("differing request ids → DIVERGE under default rules", res[0]["verdict"] == "DIVERGE")
+        custom = [("reqid", re.compile(r"req [a-z0-9]+"), "req <ID>")]
+        res = compare(o, r, rc, ledger=None, sort=False, mask_numbers=False, rules=custom)
+        check("a custom --rules entry masks the id → MATCH", res[0]["verdict"] == "MATCH")
 
     print("\nself-test:", "OK" if ok else "FAILED")
     return 0 if ok else 1

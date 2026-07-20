@@ -177,7 +177,10 @@ audit → retrospective`.
    suite before translating; wired into `skills/README.md` and the §4 phase map.
 
 **P2 — polish / breadth:**
-8. `normalize.py` rules as a per-project data file (currently code constants).
+8. ~~`normalize.py` rules as a per-project data file.~~ **Done:** `normalize.py
+   --rules <file>` loads rules (name/regex/replacement) from JSON/TOML and replaces
+   the built-in defaults; `normalize.py --dump-default-rules` emits them as a
+   starting point. Threaded through `diff_run.py --rules`. Back-compatible.
 9. ~~`progress.py ingest`~~ — partially done: `ingest` exists for unsafe-audit
    `--json` reports (final gate only, exact-stem module matching); extend to the
    other harnesses' JSON and the earlier gates.

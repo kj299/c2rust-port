@@ -22,6 +22,9 @@ semantic-comparison stage, not build time — "it builds" tells you almost nothi
 4. **Tune normalization** (`porting-kit/harnesses/differential/normalize.py`) so
    PIDs/timestamps/pointers/ephemeral-ports are masked *identically* on both sides —
    whatever you erase from C you must erase from Rust, or you manufacture a divergence.
+   Put project-specific masks (session/request ids, temp paths) in a rules file —
+   `normalize.py --rules <file>` (start from `normalize.py --dump-default-rules`),
+   also accepted by `diff_run.py --rules`.
 5. **Validate every vector against the C first** — a wrong vector that "passes"
    teaches nothing — and **hold back a hidden acceptance set** (an LLM in the loop
    will overfit to visible vectors):
