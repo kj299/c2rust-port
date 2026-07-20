@@ -282,3 +282,83 @@ the emphasized half.
   stale-pin-refail are self-tested.
 - **Section amended:** harnesses/differential/diff_run.py (`load_ledger`,
   `compare`, output hint, self-test); skeleton/DIVERGENCES.md · format.
+
+---
+
+## 009. A template must pass the gates it ships — or every copy starts red
+
+- **Date:** 2026-07-20
+- **Codebase:** the Porting Kit itself (installing real CI for the kit repo; PR #3)
+- **What happened:** Wiring meaningful CI meant running the kit's own gates, and
+  the shipped **skeleton did not pass them**. It was not `cargo fmt`-clean, and its
+  example parser/CLI used `i + 1` on loop indices — which trips the workspace's own
+  `clippy::arithmetic_side_effects` lint under `-D warnings`. Both `cargo fmt
+  --check` and `cargo clippy --all-targets -- -D warnings` are in the kit's CI
+  template, so a fresh copy of the skeleton started **red** under the kit's own CI:
+  a starting-point that fails the gates it configures. Nothing caught it because
+  `make check-kit` is toolchain-free and never built or linted the skeleton — the
+  one artifact every port begins by copying was the one artifact no gate checked.
+  Same family as #6/#7: the kit's own artifacts must satisfy the kit's own rules.
+- **Kit change:** (a) fixed the skeleton to a clean exemplar — fmt-clean, and
+  `i.saturating_add(1)` (the checked/saturating idiom the playbook prescribes, so
+  the skeleton now *models* its own lint instead of violating it); (b) added
+  `harnesses/skeleton-check/check_skeleton.sh` to `make check-kit` — it runs the
+  real fmt/clippy/build/test when a Rust toolchain is present and SKIPs cleanly
+  otherwise, so a skeleton regression is caught locally even where CI can't run,
+  without breaking check-kit's python3+bash-only minimum; (c) Phase 3 exit criteria
+  now require the workspace/skeleton to pass the gates it configures.
+- **Section amended:** skeleton/crates/{core,cli}; harnesses/skeleton-check/
+  check_skeleton.sh (new) + Makefile · check-kit; README · harness table;
+  PLAYBOOK · Phase 3 exit criteria.
+
+---
+
+## 010. CI runs in the target's GitHub, not yours — and "it didn't start" isn't "it failed"
+
+- **Date:** 2026-07-20
+- **Codebase:** the Porting Kit itself (same CI-install pass)
+- **What happened:** The first kit-repo CI workflow concluded `startup_failure`
+  with **zero jobs** — twice, then again after simplification. Diagnosis: it used
+  third-party actions (`dtolnay/rust-toolchain`, `actions/setup-python`), and a
+  repo whose Actions policy allows only first-party `actions/*` **fails the whole
+  run at compile time**, before any step. Two traps, both new: (1) a workflow that
+  leans on third-party actions is **not portable** to a policy-restricted repo — the
+  action is a dependency the target environment can block; (2) `startup_failure`
+  *reads* like a red test result but is infra/policy — merging on it would be wrong
+  in both directions (don't merge red code; don't treat unrunnable-CI as failing
+  code). Even a `checkout`-only workflow startup-failed here, so this repo's Actions
+  are blocked outright. The kit's own `porting-ci.template.yml` uses third-party
+  actions and would hit this in such a repo. Meta-mirror of #2–#4: a CI config only
+  proves itself when run in the **actual target repo's** GitHub — a green run in a
+  different environment teaches nothing about a restricted one.
+- **Kit change:** the kit-repo CI (`.github/workflows/check-kit.yml`) uses only
+  `actions/checkout` + the runner's preinstalled make/python3/rustup via `run:`
+  steps, so no third-party `uses:` can fail startup; documented the failure mode and
+  this `checkout`-only fallback in the CI template header and OPERATING-GUIDE §5 #5.
+  (When CI genuinely can't run in a repo, the toolchain-optional `make check-kit` +
+  skeleton gate from #9 is the standing local gate.)
+- **Section amended:** .github/workflows/check-kit.yml (new); harnesses/ci/
+  porting-ci.template.yml (portability caveat); OPERATING-GUIDE · §5 #5.
+
+---
+
+## 011. A process-driving harness must be hermetic — control stdin, don't inherit it
+
+- **Date:** 2026-07-20
+- **Codebase:** the Porting Kit itself (found while validating the perf gate, #P0)
+- **What happened:** `run_one` — the shared runner behind the differential, golden,
+  diff-fuzz, perf, and cando harnesses — passed no stdin for a case without a
+  `stdin` key, so the child **inherited the parent's stdin**. A stdin-reading binary
+  (the skeleton `port` reads stdin unconditionally) then blocked forever on an
+  interactive/TTY parent: a differential/perf run that hangs or passes depending on
+  *who launched it*. Latent since the differential shipped; it only surfaced when
+  the new perf gate ran a real stdin-reading binary from an interactive shell. This
+  is the hostile-host rule (#1) extended from encoding/quoting to the process-launch
+  surface — inherited fds/stdin/env are ambient state a test harness must not depend
+  on.
+- **Kit change:** `run_one` now feeds `subprocess.DEVNULL` when a case provides no
+  stdin (deterministic EOF, hermetic), pinned in the diff_run self-test; all five
+  consumers stay green. Generalized in the playbook: a harness that spawns processes
+  controls stdin/env/cwd explicitly and inherits nothing.
+- **Section amended:** harnesses/differential/diff_run.py (`run_one` + self-test);
+  PLAYBOOK · Phase 2 "harden the harness for its host".

@@ -115,7 +115,11 @@ winlsof's phase order was sound; its one miss was not spiking the hang first.
   harness itself. Two defenses: write kit-level harnesses in a portable language
   (these are Python + POSIX sh on purpose, not the target's shell), and pin the
   tool's default output to the lowest-common-denominator encoding of the target's
-  default shell (winlsof: ASCII default, UTF-8 opt-in).
+  default shell (winlsof: ASCII default, UTF-8 opt-in). **A process-driving harness
+  must also be hermetic** (LESSONS #11): it controls the child's stdin/env/cwd and
+  inherits *nothing* ambient — a runner that lets a stdin-reading binary inherit the
+  parent's stdin hangs or passes depending on who launched it (`run_one` feeds
+  `DEVNULL` when a case has no stdin, for exactly this reason).
 - Stand up an **intentional-divergence ledger** (`DIVERGENCES.md`, template in
   the skeleton): every place the Rust will *deliberately* differ from C —
   starting with the Phase-0 flaw scan's findings.
@@ -162,7 +166,9 @@ machine?".
 **Entry criteria:** oracle in place.
 **Exit criteria:** workspace builds; `core` is `forbid(unsafe_code)`; unsafe-audit
 gate wired into CI (`harnesses/unsafe-audit`); trace logger present; environment
-preflight clean.
+preflight clean; **the skeleton/workspace passes the gates it configures** — a
+starting point that fails its own `cargo fmt --check` / `clippy -D warnings` makes
+every module that copies it start red (LESSONS #9; `harnesses/skeleton-check`).
 **Artifacts:** the workspace; CI config from `harnesses/ci/porting-ci.template.yml`.
 **lsof failure modes this prevents:** scattered `unsafe` (winlsof kept 0 in core /
 144 in the sys layer — but only 91 documented; the gate makes the gap a build
