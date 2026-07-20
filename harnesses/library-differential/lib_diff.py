@@ -40,8 +40,11 @@ Vector suite (JSON or TOML) — a list of vectors, each:
                                    #  |ptr  (compare position within a tracked buffer
                                    #         by offset; else only NULL vs non-NULL)
                                    #  |void ; add "returns_ignore": true to skip it.
-                                   #  Declare the width that matches the C signature —
-                                   #  a too-narrow type truncates on BOTH sides.
+                                   #  Declare the width that matches the C signature,
+                                   #  for the return AND every scalar arg: too narrow a
+                                   #  return truncates on both sides, and too narrow an
+                                   #  arg (e.g. int for a `size_t` param) passes only 32
+                                   #  bits, so the callee reads a garbage-high value.
     "args": [
       {"type": "cstr",   "value": "hello", "id": "s"},  # NUL-terminated input string
       {"type": "int",    "value": 5},                    # scalar in

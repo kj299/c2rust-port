@@ -282,3 +282,35 @@ the emphasized half.
   stale-pin-refail are self-tested.
 - **Section amended:** harnesses/differential/diff_run.py (`load_ledger`,
   `compare`, output hint, self-test); skeleton/DIVERGENCES.md · format.
+
+---
+
+## 009. The exit test earns its keep — and shows the gates divide labor
+
+- **Date:** 2026-07-20
+- **Codebase:** `examples/adler32/` — the kit's own v1.0 exit test: a tiny C
+  library with a textbook `uint32_t`-overflow latent bug, driven end-to-end through
+  every gate against its safe+correct Rust port.
+- **What happened:** The pipeline ran clean, and *how* it stayed clean is the
+  lesson — each gate caught a different class and none substituted for another:
+  - `scan_c_flaws` found **0** sites. The defect is arithmetic (naive adler32
+    accumulates `s2` in `uint32_t` and overflows on long inputs), not a grep-able
+    sink — so a Phase-0 scan of a clean-looking file legitimately finds nothing.
+    Reading "0 findings" as "safe" would be the mistake; that is what the later
+    gates are for.
+  - The **library differential** caught it: a 10 000-byte vector DIVERGEd
+    (C `0x9edacde3` overflowed, Rust `0x9fbbcde3` correct), triaged and ledgered as
+    an intentional fix-of-C-defect.
+  - **Differential fuzzing** found nothing — its small mutations never reached the
+    ~5800-byte overflow threshold. Fixed vectors own the large-input edge; fuzzing
+    owns the shape-space near the seeds. Complementary, not redundant.
+  Also surfaced: a `lib_diff` vector must declare each scalar's **C width** — `len`
+  is a `size_t`, and passing it as `int` sends only 32 bits, so the callee reads a
+  garbage-high length.
+- **Kit change:** added `examples/adler32/` — a committed, `run.sh`-reproducible
+  end-to-end demo, and proof the kit drives a real C-ABI library through all gates;
+  `lib_diff.py`'s vector-schema doc now warns that scalar ARG widths (not just the
+  return) must match the C signature. No behavioral gate change — the exit test
+  confirmed the gates work and are complementary, which is the result you want from
+  an exit test.
+- **Section amended:** examples/adler32/ (new); harnesses/library-differential/lib_diff.py · docstring.

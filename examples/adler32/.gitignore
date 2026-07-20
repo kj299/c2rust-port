@@ -1,0 +1,8 @@
+# Build outputs and per-run scratch — the exit test regenerates all of these.
+libadler_c.so
+adler_cli_c
+rust/target/
+perf.json
+corpus/
+rep/
+progress.json
