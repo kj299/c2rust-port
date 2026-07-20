@@ -18,7 +18,7 @@ with a mechanical integrity check.
 **Provisional** — designed and documented, not yet battle-tested end-to-end:
 the **library** path (the differential is executable-shaped; C-ABI libraries need
 the `cando`-style function-level harness, §5 P0); C→C **preconditioning** is prose,
-not tooling; the **performance** gate is a number in the playbook, not a harness.
+not tooling.
 
 **Bottom line:** ready to *drive an executable port today* and to *structure* a
 library port; not yet a turnkey library-migration pipeline. §5 is the path to that,
@@ -138,7 +138,10 @@ audit → retrospective`.
 **P0 — needed before a *library* port or a security-critical claim:**
 1. **`cando`-style function-level differential harness** for C-ABI libraries — the
    current differential is executable-shaped (argv/stdin→stdout+exit). Biggest gap.
-2. **Performance gate harness** — measure module runtime vs the C median, fail >1.3×.
+2. ~~**Performance gate harness**.~~ **Done:** `perf_gate.py --oracle C --rust R
+   --matrix M` times both over the workload matrix, compares the medians of N runs,
+   and exits nonzero when rust/oracle > `--threshold` (default 1.3×); a workload that
+   errors or times out on either side fails closed.
 3. ~~**Held-back vectors + C-baseline validation** in `golden.py`.~~ **Done:**
    `golden.py capture --holdout <set>` reserves a vector set that `replay` runs only
    under `--final` — never during iteration, where a leaked held-out case hard-fails —

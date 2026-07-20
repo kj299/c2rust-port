@@ -223,8 +223,17 @@ Then the loop — each step is a CI-enforced gate:
 6. **Review & merge.** Update the `progress` table (the module advances
    ported → differential-passing → fuzzed → sanitized → unsafe-audited).
 
+**Performance gate (a separate quality bar, not one of the six).** Where the C
+baseline runs on the same platform, confirm the module didn't regress speed:
+`harnesses/perf-gate/perf_gate.py --oracle <c> --rust <rust> --matrix <m>` times both
+over the workload matrix and fails when the Rust median exceeds `--threshold`
+(default 1.3×) the C median. Past ~1.3× is a specific bug — an accidental copy, a
+debug build slipping into the measurement, or hot-loop bounds checks — not the cost
+of Rust (TRACTOR's envelope is ~3–5% median overhead).
+
 **Entry criteria:** skeleton + oracle.
-**Exit criteria (per module):** all six gates green; `progress` row fully ticked.
+**Exit criteria (per module):** all six gates green; the performance gate passes
+where a C baseline runs; `progress` row fully ticked.
 **Artifacts:** the module, its fuzz target, its golden cases, divergence entries.
 **lsof failure modes this prevents:** the 7-commit hang (spike-first + sanitizer
 reasoning), fidelity misses shipping before a test pinned them (gate 2 + golden),
