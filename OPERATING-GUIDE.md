@@ -137,12 +137,20 @@ audit → retrospective`.
 ## 5. Improvements backlog (the path to v1.0, prioritized)
 
 **P0 — needed before a *library* port or a security-critical claim:**
-1. **`cando`-style function-level differential harness** for C-ABI libraries — the
-   current differential is executable-shaped (argv/stdin→stdout+exit). Biggest gap.
-2. **Performance gate harness** — measure module runtime vs the C median, fail >1.3×.
-3. **Held-back vectors + C-baseline validation** in `golden.py` (a holdout mode —
-   named flags only once implemented, per LESSONS #7 — and "a vector must pass on
-   C before it may judge Rust").
+1. ~~**`cando`-style function-level differential harness** for C-ABI libraries.~~
+   **Done:** `harnesses/cando/cando_diff.py` (+ `driver.template.c/.rs`,
+   `vectors.example.toml`) — drives a C-linked and a Rust-linked function driver
+   over a vector suite and diffs via `diff_run.compare_one` (shared fidelity). The
+   library analog of `diff_run` for executables.
+2. ~~**Performance gate harness** — module runtime vs the C median, fail >1.3×.~~
+   **Done:** `harnesses/perf/perf_gate.py` — median-of-repeats wall-clock ratio,
+   `--threshold` (default 1.3), timeouts fail, spawn-dominated cases reported
+   UNMEASURABLE rather than falsely passed.
+3. **Held-back vectors + C-baseline validation** — *baseline validation is done*
+   (`cando_diff.py` reports a vector the C driver rejects as a BADVECTOR: "a vector
+   must pass on C before it may judge Rust"). Still open: a **holdout** mode (an
+   acceptance set the agent can't see, to catch overfit to visible vectors) — add
+   it to `golden.py`/`cando_diff.py`; name flags only once implemented (LESSONS #7).
 
 **P1 — materially stronger:**
 4. ~~**Differential fuzzing** harness (C vs Rust on shared fuzz inputs).~~ **Done:**

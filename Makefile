@@ -13,11 +13,14 @@ check-kit:
 	@echo "== golden ==";           $(PY) $(H)/golden/golden.py --self-test
 	@echo "== c-flaw-scan ==";      $(PY) $(H)/c-flaw-scan/scan_c_flaws.py --self-test
 	@echo "== diff-fuzz ==";        $(PY) $(H)/diff-fuzz/diff_fuzz.py --self-test
+	@echo "== perf-gate ==";        $(PY) $(H)/perf/perf_gate.py --self-test
+	@echo "== cando ==";            $(PY) $(H)/cando/cando_diff.py --self-test
 	@echo "== progress ==";         $(PY) $(H)/progress/progress.py --self-test
 	@echo "== fuzz scaffolder ==";  bash  $(H)/fuzz/gen_fuzz_target.sh --check
 	@echo "== supply-chain ==";     bash  $(H)/supply-chain/run_supply_chain.sh --check
 	@echo "== sanitizers ==";       bash  $(H)/sanitizers/run_sanitizers.sh --check
 	@echo "== matrix parses ==";    $(PY) -c "import tomllib; tomllib.load(open('$(H)/differential/input-matrix.example.toml','rb')); print('PASS  matrix parses')"
+	@echo "== vectors parse ==";    $(PY) -c "import tomllib; tomllib.load(open('$(H)/cando/vectors.example.toml','rb')); print('PASS  vectors parse')"
 	@echo "== doc-flags self-test ==="; $(PY) $(H)/doc-check/check_doc_flags.py --self-test
 	@echo "== doc-flags integrity =="; $(PY) $(H)/doc-check/check_doc_flags.py
 	@echo "== skills self-test =="; $(PY) skills/check_skills.py --self-test

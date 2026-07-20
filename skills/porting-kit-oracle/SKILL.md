@@ -30,8 +30,18 @@ semantic-comparison stage, not build time — "it builds" tells you almost nothi
 7. **Wire the differential** (used per module in `porting-kit-module`):
    `python3 porting-kit/harnesses/differential/diff_run.py --oracle <c> --rust <rust> --matrix <m> --ledger DIVERGENCES.md`
    The verdict is stdout **and** exit code; a per-case timeout is the liveness
-   backstop (a hang isn't UB, so sanitizers miss it). For a C-ABI **library** rather
-   than an executable, use a `cando`-style function-level harness (synthesis Step 0.5).
+   backstop (a hang isn't UB, so sanitizers miss it).
+8. **For a C-ABI library** (no CLI), use the function-level differential instead of
+   (or alongside) the executable one: fill `porting-kit/harnesses/cando/driver.template.c`
+   and `driver.template.rs` (thin dispatch: argv → one library call → canonical
+   stdout), build one against C and one against Rust, write a
+   `porting-kit/harnesses/cando/vectors.example.toml` suite, then
+   `python3 porting-kit/harnesses/cando/cando_diff.py --oracle-driver <c> --rust-driver <rust> --vectors <suite> --ledger DIVERGENCES.md`.
+   It diffs per function and **baseline-validates**: a vector the C driver rejects is
+   a BADVECTOR, not a Rust verdict ("a vector must pass on C before it may judge Rust").
+9. **Add the performance gate** once both build:
+   `python3 porting-kit/harnesses/perf/perf_gate.py --oracle <c> --rust <rust> --matrix <m>`
+   (fails a case >1.3x the C median; run it per module in `porting-kit-audit`).
 
 ## Integrity
 Harness paths/subcommands/flags must match the kit. If they drift, fix the reference
