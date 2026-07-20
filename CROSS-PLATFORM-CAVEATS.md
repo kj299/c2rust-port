@@ -83,6 +83,13 @@ Linux/macOS mechanism. Windows has no `fork()`; a `.dll` differential there need
 back over a pipe) or running the harness under WSL. This is a documented to-do in
 `lib_diff.py`'s own docstring.
 
+For a Windows library port, prefer the **driver-based** library differential
+`harnesses/cando/cando_diff.py` instead: its two drivers are ordinary executables
+built with MSVC, and each call is already its own process, so crash-isolation and
+portability come for free — no `fork()` needed. lib_diff (ctypes, no driver
+boilerplate) is the convenient choice on Linux/macOS for simple signatures; cando
+is the portable, any-signature one.
+
 ---
 
 *Referenced from `README.md` and `PLAYBOOK.md` Phase 3. When a port on a new
