@@ -1,0 +1,27 @@
+name: check-kit
+
+# The kit's own gate: run every harness's self-test (make check-kit) on push to
+# main and on every PR. python3 + bash only — no Rust toolchain — so it finishes
+# in ~1 minute. This is the mechanical guard the kit preaches applied to itself:
+# a harness whose self-test rots, a skill that references a missing path, or a
+# doc that names a flag its script lacks (LESSONS #7) fails the build here.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Least privilege: the job only needs to read the checked-out code.
+permissions:
+  contents: read
+
+jobs:
+  check-kit:
+    runs-on: ubuntu-latest
+    steps:
+      # SHA-pinned, not tag-pinned — a tag is mutable supply chain (OPERATING-GUIDE §3).
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      # ubuntu-latest ships python3 3.12 (tomllib for the TOML matrix step) and make.
+      - name: make check-kit
+        run: make check-kit
