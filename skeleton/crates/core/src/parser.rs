@@ -22,12 +22,17 @@ pub fn parse(input: &str) -> Result<Vec<Record>, ParseError> {
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
+        // Line numbers are 1-based. `saturating_add` not `+ 1`: the workspace
+        // enables `clippy::arithmetic_side_effects`, so even this trivially-safe
+        // increment uses a checked form — the skeleton models the idiom the
+        // playbook prescribes (integer math → checked_*/saturating_*).
+        let lineno = i.saturating_add(1);
         let (key, value) = line
             .split_once('=')
-            .ok_or(ParseError::MissingSeparator { line: i + 1 })?;
+            .ok_or(ParseError::MissingSeparator { line: lineno })?;
         let key = key.trim();
         if key.is_empty() {
-            return Err(ParseError::EmptyKey { line: i + 1 });
+            return Err(ParseError::EmptyKey { line: lineno });
         }
         out.push(Record::new(key, value.trim()));
     }
