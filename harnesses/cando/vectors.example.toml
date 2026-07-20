@@ -1,0 +1,37 @@
+# Function-level vector suite (example) — the documented set of function calls
+# the C driver and the Rust driver are diffed over (cando_diff.py). Keep it in
+# version control; it IS the library's behavioral contract. Grow it every time a
+# bug escapes (add the call that would have caught it), and cover the axes a
+# rewrite most earns its safety on: empty/edge args, boundary integers
+# (INT_MAX / off-by-one / zero-length), and hostile bytes.
+#
+# Each [[call]] invokes `driver <func> <args...>`; both drivers must print the
+# result canonically (byte-identical format). Optional: name, stdin, env, timeout.
+
+[[call]]
+name = "checksum-empty"
+func = "__EXAMPLE__checksum"
+args = [""]
+
+[[call]]
+name = "checksum-basic"
+func = "__EXAMPLE__checksum"
+args = ["hello"]
+
+[[call]]
+name = "parse-valid"
+func = "__EXAMPLE__parse"
+args = ["key=value"]
+
+# Edge / adversarial — where a rewrite proves it handles better than C. A vector
+# the C driver itself rejects (nonzero exit) is reported as a BADVECTOR: fix the
+# vector, or pass --allow-oracle-error if a nonzero status is a valid result.
+[[call]]
+name = "parse-empty"
+func = "__EXAMPLE__parse"
+args = [""]
+
+[[call]]
+name = "parse-no-separator"
+func = "__EXAMPLE__parse"
+args = ["noseparator"]
