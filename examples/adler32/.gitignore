@@ -1,0 +1,9 @@
+# build artifacts + files run.sh regenerates — the sources + run.sh ARE the demo
+*.so
+adler_cli_c
+adler_drv_c
+/rust/target/
+corpus/
+reports/
+DIVERGENCES.md
+*.gen.json
