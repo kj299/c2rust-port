@@ -1,6 +1,8 @@
 # Porting Kit — smoke-test every harness so the kit itself never rots.
-# `make check-kit` runs each harness's self-test; it needs only python3 + bash
-# (no Rust toolchain), so it runs anywhere and gates changes to the kit.
+# `make check-kit` runs each harness's self-test; the core needs only python3 +
+# bash (no Rust toolchain), so it runs anywhere and gates changes to the kit.
+# The skeleton gate additionally builds/lints the shipped skeleton WHEN a Rust
+# toolchain is present (it SKIPs cleanly otherwise) — LESSONS #9.
 
 PY := python3
 H  := harnesses
@@ -26,6 +28,7 @@ check-kit:
 	@echo "== doc-flags integrity =="; $(PY) $(H)/doc-check/check_doc_flags.py
 	@echo "== skills self-test =="; $(PY) skills/check_skills.py --self-test
 	@echo "== skills integrity =="; $(PY) skills/check_skills.py
+	@echo "== skeleton gate ==";    bash  $(H)/skeleton-check/check_skeleton.sh
 	@echo ""
 	@echo "check-kit: ALL HARNESSES OK"
 
