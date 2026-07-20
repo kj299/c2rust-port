@@ -24,9 +24,12 @@ oracle is at gate 2 of 6, not done.
    (`diff_run.py ... --ledger DIVERGENCES.md`).
 6. **Least privilege / no secrets / signed build / current threat model** — walk the
    per-release section of `SECURITY-CHECKLIST.md`.
-7. **Performance sanity** (synthesis): fail if a module is >1.3x the C median runtime —
-   that's a specific bug (a copy, a missed release build, bounds checks in a hot loop),
-   not "the cost of Rust".
+7. **Performance sanity:**
+   `python3 porting-kit/harnesses/perf/perf_gate.py --oracle <c> --rust <rust> --matrix <m>`
+   fails a module >1.3x the C median runtime (`--threshold` to tune) — a specific bug
+   (a copy, a missed release build, bounds checks in a hot loop), not "the cost of Rust".
+   A spawn-dominated case is reported UNMEASURABLE (give it a real workload), never a
+   false pass.
 8. **CI hygiene** (LESSONS #5): confirm each language/subtree's CI is path-scoped so
    unrelated changes don't trigger heavyweight jobs or leave PRs misleadingly
    "unstable"; see `porting-kit/harnesses/ci/porting-ci.template.yml`.

@@ -122,10 +122,17 @@ def run_one(binary, case, default_timeout=15):
     argv = [binary] + [str(a) for a in case.get("args", [])]
     env = dict(os.environ)
     env.update({k: str(v) for k, v in case.get("env", {}).items()})
+    has_stdin = bool(case.get("stdin"))
+    # When a case gives no stdin, feed the child DEVNULL — NOT the parent's
+    # inherited stdin. A binary that reads stdin (the skeleton `port` does)
+    # would otherwise block forever on an interactive/tty parent, turning a
+    # differential/perf run into a hang that depends on who launched it. A test
+    # harness must be hermetic (the hostile-host rule); EOF is deterministic.
     try:
         p = subprocess.run(
             argv,
-            input=case.get("stdin", "").encode() if case.get("stdin") else None,
+            input=case["stdin"].encode() if has_stdin else None,
+            stdin=None if has_stdin else subprocess.DEVNULL,
             capture_output=True,
             timeout=case.get("timeout", default_timeout),
             env=env,
@@ -275,6 +282,13 @@ def _self_test():
     same = [{"name": "identical", "args": ["hello"]}]
     res = compare(echo, echo, same, ledger=None, sort=False, mask_numbers=False)
     check("identical output → MATCH", res[0]["verdict"] == "MATCH")
+
+    # A case with no stdin must not inherit (and block on) the parent's stdin:
+    # a stdin-reading binary gets DEVNULL → EOF → returns, it does not hang.
+    cat = "/bin/cat" if os.path.exists("/bin/cat") else "cat"
+    res = run_one(cat, {"name": "no-stdin", "args": [], "timeout": 5})
+    check("no-stdin case feeds DEVNULL, doesn't hang on inherited stdin",
+          res[2] is False and res[0] == "")
 
     # echo vs printf genuinely diverge on a format-string arg:
     # echo "%s" "hi" → "%s hi"   ;   printf "%s" "hi" → "hi"

@@ -1,0 +1,50 @@
+# CI for the Porting Kit repo ITSELF (not a port that uses it). This repo is the
+# kit — there is no root Rust workspace — so the kit's own `porting-ci.template.yml`
+# (build/miri/sanitizers/differential against crates/**) does NOT apply here. The
+# kit's gate is `make check-kit` (its harness self-tests + doc/skills integrity),
+# plus building the skeleton it ships.
+#
+# Only official actions/checkout is used; everything else runs via tools already
+# on the ubuntu runner (make, python3, rustup+stable). This sidesteps Actions
+# policies that allow only first-party actions — a third-party `uses:` there
+# fails the whole run at startup.
+name: check-kit
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check-kit:
+    name: make check-kit (harness self-tests + integrity)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # make + python3 (3.12) are preinstalled on the ubuntu runner; check-kit
+      # needs no Rust toolchain. Runs every harness self-test, the doc-flag
+      # drift check, and the skills-integrity check.
+      - run: python3 --version && make --version | head -1
+      - run: make check-kit
+
+  skeleton:
+    name: skeleton workspace (fmt + clippy + build + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: skeleton
+    steps:
+      - uses: actions/checkout@v4
+      # rustup + a stable toolchain are preinstalled; ensure the components.
+      # The skeleton must pass the very lints it configures (workspace [lints]:
+      # arithmetic_side_effects, cast_possible_truncation, the unsafe docs) or
+      # every port that copies it starts red.
+      - run: rustup toolchain install stable --profile minimal --component clippy,rustfmt --no-self-update
+      - run: rustup default stable
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo build --release
+      - run: cargo test --all

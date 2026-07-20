@@ -134,3 +134,13 @@ jobs:
             --matrix porting-kit/harnesses/differential/input-matrix.example.toml \
             --ledger DIVERGENCES.md --findings-dir fuzz-findings \
             --seed 0 --iterations 2000
+          # Performance gate: fail a case >1.3x the C median (a perf bug, not the
+          # cost of Rust). Give matrix cases a real workload or they read UNMEASURABLE.
+          python3 porting-kit/harnesses/perf/perf_gate.py \
+            --oracle ./c-oracle --rust ./target/release/<binary> \
+            --matrix porting-kit/harnesses/differential/input-matrix.example.toml
+          # For a C-ABI LIBRARY port, add a function-level differential job instead:
+          #   build a C-linked and a Rust-linked driver (harnesses/cando/driver.template.*)
+          #   python3 porting-kit/harnesses/cando/cando_diff.py \
+          #     --oracle-driver ./cando_c --rust-driver ./cando_rust \
+          #     --vectors vectors.toml --ledger DIVERGENCES.md

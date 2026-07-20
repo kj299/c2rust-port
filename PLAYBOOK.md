@@ -119,6 +119,14 @@ winlsof's phase order was sound; its one miss was not spiking the hang first.
 - Stand up an **intentional-divergence ledger** (`DIVERGENCES.md`, template in
   the skeleton): every place the Rust will *deliberately* differ from C —
   starting with the Phase-0 flaw scan's findings.
+- **If the port is a C-ABI library, not an executable**, the whole-program
+  differential (`diff_run.py`, argv→stdout) doesn't fit — its behavior is in
+  individual functions. Stand up the **function-level** oracle instead: fill the
+  `harnesses/cando/` driver templates (a thin C-linked and Rust-linked dispatch,
+  argv → one library call → canonical stdout), write a `vectors.example.toml`
+  suite, and diff with `cando/cando_diff.py`. It baseline-validates each vector
+  against C first (a vector C rejects can't judge Rust). Cover every integer
+  boundary and hostile-byte case per function.
 
 **Entry criteria:** ordered module list.
 **Exit criteria:** golden corpus captured + versioned; nondeterminism map;
@@ -256,6 +264,9 @@ kept both trees side by side — preserve that discipline.
 | No panics on untrusted input | `fuzz/` (`cargo-fuzz`) | CI smoke + nightly deep |
 | No vulnerable/untrusted deps | `supply-chain/run_supply_chain.sh` (`cargo audit`,`cargo deny`) | CI |
 | No silent behavior drift | `differential/diff_run.py` + `DIVERGENCES.md` | CI |
+| No drift in a library's fns | `cando/cando_diff.py` (function-level differential) | CI (library ports) |
+| No semantic drift off-matrix | `diff-fuzz/diff_fuzz.py` (differential fuzzing) | CI + nightly |
+| No perf regression | `perf/perf_gate.py` (fail >1.3x C median) | CI |
 | Lints as errors | `clippy -D warnings` (+ overflow/cast lints) | CI |
 | Don't re-port a C vuln | `c-flaw-scan/scan_c_flaws.py` at Phase 0 | review |
 
