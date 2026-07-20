@@ -163,10 +163,11 @@ audit → retrospective`.
    `porting-kit-diff-fuzz` skill wraps it.
 5. **CI template hardening**: SHA-pin actions; split smoke/nightly for fuzz+sanitizers;
    add `cargo vet`, SBOM, `gitleaks` jobs.
-6. **`scan_c_flaws.py` depth**: add double-free / use-after-free / uninitialized-read
-   heuristics and `strncpy` non-termination / `snprintf` truncation; note its
-   line-based checks can miss multi-line calls (the format-string check is already
-   whole-file — extend the rest).
+6. ~~**`scan_c_flaws.py` depth**.~~ **Done:** added `strncpy-noterm`,
+   `snprintf-truncation` (return discarded), and windowed-lexical `use-after-free` /
+   `double-free` / `uninitialized-read` (pointer) heuristics, and made the sink
+   checks whole-file so a call split across lines isn't missed. Format-string signal
+   (LESSONS #2) preserved.
 7. **A `porting-kit-precondition` skill** for Step 0 (C→C: global-state threading,
    aliasing reduction, `#ifdef` story) — currently prose only.
 
