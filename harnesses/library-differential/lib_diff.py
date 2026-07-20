@@ -14,13 +14,15 @@ exit code" rule (LESSONS #4).
 
 Fail-closed, like the executable differential:
   * Each call runs in a **forked child process**, so a segfault/abort in a C-ABI
-    function is a CRASH *finding*, never a harness death — and a per-vector
-    timeout is the liveness backstop (LESSONS #1). A rust-side CRASH or TIMEOUT is
-    a hard verdict: never MATCH, never excusable by the ledger (a crash/hang is
-    not fidelity — the same rule diff_run applies to a hung rewrite, LESSONS #6).
-  * A C-side-only crash/hang while the Rust returns cleanly is an ordinary
-    DIVERGE to triage — "the C faults on this input, the Rust handles it safely"
-    is a legitimate ledgered fix-of-C-defect (the prime directive).
+    function is a CRASH *finding*, never a harness death. The parent reads the
+    result CONCURRENTLY with the child (draining the pipe as it is written, so an
+    arbitrarily large output buffer streams through instead of dead-locking) and
+    reaps a hung child by escalating SIGTERM→SIGKILL under a bounded grace, so a
+    signal-ignoring or looping C call cannot wedge the harness (LESSONS #1/#6).
+  * A rust-side CRASH or TIMEOUT is a hard verdict: never MATCH, never excusable
+    by the ledger (a crash/hang is not fidelity). A C-side-only crash/hang while
+    the Rust returns cleanly is an ordinary DIVERGE to triage — "the C faults on
+    this input, the Rust handles it safely" is a legitimate fix-of-C-defect.
 
 Divergences are triaged, not blindly failed, through the SAME ledger as diff_run
 (`DIVERGENCES.md`): `- [x] <name>: <why>` suppresses by name; `- [x] <name>
@@ -33,18 +35,27 @@ Vector suite (JSON or TOML) — a list of vectors, each:
   {
     "name": "adler32-empty",       # unique; becomes a report/ledger key (no '/')
     "function": "adler32",         # logical function name (see --c-symbols)
-    "returns": "size_t",           # int|i32|uint|long|size_t|double|float
+    "returns": "size_t",           # REQUIRED. int|i32|uint|long|size_t|double|float
                                    #  |cstr (compare the pointed-to string)
-                                   #  |ptr  (compare only NULL vs non-NULL)
-                                   #  |void ; add "returns_ignore": true to skip it
+                                   #  |ptr  (compare position within a tracked buffer
+                                   #         by offset; else only NULL vs non-NULL)
+                                   #  |void ; add "returns_ignore": true to skip it.
+                                   #  Declare the width that matches the C signature —
+                                   #  a too-narrow type truncates on BOTH sides.
     "args": [
-      {"type": "cstr",   "value": "hello"},           # NUL-terminated input string
-      {"type": "int",    "value": 5},                  # scalar in
-      {"type": "outbuf", "size": 16, "id": "dst"},     # buffer the fn writes → compared
+      {"type": "cstr",   "value": "hello", "id": "s"},  # NUL-terminated input string
+      {"type": "int",    "value": 5},                    # scalar in
+      {"type": "outbuf", "size": 16, "id": "dst"},       # buffer the fn writes → compared
       {"type": "inoutbuf", "size": 16, "value": "..", "id": "io"}  # seeded + compared
     ],
     "timeout": 10                  # optional per-vector liveness cap (seconds)
   }
+
+Return-value fidelity: floats are compared by IEEE-754 bit pattern (so -0.0 ≠ 0.0
+and NaN == NaN); a pointer return that lands inside a tracked input/output buffer
+is compared by (buffer-id, offset) — portable across the two libraries, unlike the
+raw address — which is what makes strchr/memchr/strstr-style "position" returns
+comparable; only a pointer outside every tracked buffer degrades to NULL-vs-nonNULL.
 
 The C and Rust libraries need not export the same symbol name for a logical
 function (a Rust cdylib often exports `rs_adler32` or a `#[no_mangle]` alias):
@@ -54,7 +65,9 @@ Scope (v1, honest): scalar/string/byte inputs, caller-write output buffers, and
 the return value — the bulk of a C-ABI surface. Structs-by-value, function-pointer
 callbacks, and external side effects (files/env) are not yet modeled; add them as a
 port demands and record it in LESSONS. Uses fork, so Linux/macOS `.so`/`.dylib`
-today; a Windows `.dll` path (no fork) is a documented cross-platform to-do.
+today (on macOS this sets OBJC_DISABLE_INITIALIZE_FORK_SAFETY for the children so
+a framework-linked dylib doesn't abort every fork); a Windows `.dll` path (no fork)
+is a documented cross-platform to-do.
 
 Usage:
   lib_diff.py --c-lib PATH --rust-lib PATH --vectors FILE [--ledger DIVERGENCES.md]
@@ -72,7 +85,14 @@ import json
 import multiprocessing as mp
 import os
 import queue as _queue
+import struct
 import sys
+import time
+
+# On macOS, forking after the Objective-C runtime initializes aborts the child;
+# opt the children out so a framework-linked dylib doesn't turn every call into a
+# spurious CRASH. Set before any fork; harmless on Linux. (Must precede fork.)
+os.environ.setdefault("OBJC_DISABLE_INITIALIZE_FORK_SAFETY", "YES")
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "differential"))
 import diff_run as D  # noqa: E402  (reuse load_ledger + case-name validation)
@@ -86,6 +106,8 @@ _SCALAR = {
 _FLOATS = {"double", "float"}
 _RESTYPE = {**_SCALAR, "ptr": ctypes.c_void_p, "cstr": ctypes.c_char_p, "void": None}
 DEFAULT_TIMEOUT = 10
+_REAP_GRACE = 2.0        # bounded wait after signalling a hung child, before escalating
+_POLL = 0.05             # how often the parent checks for a result / child death
 
 
 def load_vectors(path):
@@ -107,6 +129,9 @@ def load_vectors(path):
     for v in vectors:
         if not v.get("function"):
             sys.exit(f"error: vector {v.get('name')!r} needs a `function` name")
+        if "returns" not in v:
+            sys.exit(f"error: vector {v['name']!r} needs a `returns` type (declare the "
+                     "width matching the C signature; a too-narrow type truncates both sides)")
     return vectors
 
 
@@ -120,6 +145,28 @@ def _as_bytes(v):
     raise ValueError(f"cannot convert {v!r} to bytes")
 
 
+def _normalize_ret(ret_type, raw, tracked, ignore):
+    """Turn a raw ctypes return into a portable, comparable value. `tracked` is a
+    list of (id, base_addr, size) for every buffer we own, so a pointer return
+    that lands inside one is compared by position, not by its (non-portable)
+    absolute address."""
+    if ignore or ret_type == "void":
+        return None
+    if ret_type == "ptr":
+        if not raw:
+            return "NULL"
+        for label, base, size in tracked:
+            if base <= raw < base + size:
+                return ["offset", label, raw - base]
+        return "PTR"  # a real address outside every buffer we can localize
+    if ret_type == "cstr":
+        return raw  # bytes: the pointed-to string content (portable)
+    if ret_type in _FLOATS:
+        # Bit pattern, not float ==, so -0.0 ≠ 0.0 and identical NaNs compare equal.
+        return struct.pack("<f" if ret_type == "float" else "<d", raw).hex()
+    return raw  # int / size_t / …
+
+
 def _do_call(lib_path, symbol_map, vector):
     """Marshal args, call the function once, return (ret_norm, outputs). Runs
     inside the forked child — a fault here dies as a signal the parent reads."""
@@ -128,26 +175,26 @@ def _do_call(lib_path, symbol_map, vector):
     sym = symbol_map.get(logical, logical)
     fn = getattr(lib, sym)  # AttributeError if the symbol is absent → ERROR
 
-    argtypes, cargs, outbufs = [], [], []
+    argtypes, cargs, outbufs, tracked = [], [], [], []
     for i, a in enumerate(vector.get("args", [])):
         t = a["type"]
+        label = a.get("id", f"arg{i}")
         if t in _SCALAR:
             argtypes.append(_SCALAR[t])
             cargs.append(float(a["value"]) if t in _FLOATS else int(a["value"]))
-        elif t == "cstr":
-            argtypes.append(ctypes.c_char_p)
-            cargs.append(_as_bytes(a["value"]))
+            continue
+        if t == "cstr":
+            buf = ctypes.create_string_buffer(_as_bytes(a["value"]))  # NUL-terminated
         elif t in ("outbuf", "inoutbuf"):
             size = int(a["size"])
-            if t == "inoutbuf":
-                buf = ctypes.create_string_buffer(_as_bytes(a.get("value", "")), size)
-            else:
-                buf = ctypes.create_string_buffer(size)
-            argtypes.append(ctypes.c_char_p)
-            cargs.append(buf)
-            outbufs.append((a.get("id", f"buf{i}"), buf))
+            buf = (ctypes.create_string_buffer(_as_bytes(a.get("value", "")), size)
+                   if t == "inoutbuf" else ctypes.create_string_buffer(size))
+            outbufs.append((label, buf))
         else:
             raise ValueError(f"unknown arg type {t!r} in vector {vector['name']!r}")
+        argtypes.append(ctypes.c_char_p)
+        cargs.append(buf)
+        tracked.append((label, ctypes.addressof(buf), ctypes.sizeof(buf)))
 
     fn.argtypes = argtypes
     ret_type = vector.get("returns", "int")
@@ -156,14 +203,7 @@ def _do_call(lib_path, symbol_map, vector):
     fn.restype = _RESTYPE[ret_type]
     raw = fn(*cargs)
 
-    if vector.get("returns_ignore") or ret_type == "void":
-        ret_norm = None
-    elif ret_type == "ptr":
-        ret_norm = "NULL" if not raw else "PTR"  # addresses aren't portable — null-ness only
-    elif ret_type == "cstr":
-        ret_norm = raw  # bytes: the pointed-to string content (portable)
-    else:
-        ret_norm = raw  # int / size_t / double
+    ret_norm = _normalize_ret(ret_type, raw, tracked, bool(vector.get("returns_ignore")))
     outputs = {oid: buf.raw for oid, buf in outbufs}
     return ret_norm, outputs
 
@@ -176,30 +216,61 @@ def _child(q, lib_path, symbol_map, vector):
         q.put(("error", None, {}, f"{type(e).__name__}: {e}"))
 
 
+def _res(status, ret=None, outputs=None, detail=""):
+    return {"status": status, "ret": ret, "outputs": outputs or {}, "detail": detail}
+
+
 def invoke(lib_path, symbol_map, vector, default_timeout=DEFAULT_TIMEOUT):
     """Call one vector in a forked child and classify the outcome as
-    ok / crash / timeout / error. A crash (signal) or timeout is detected by the
-    parent, so a faulting C-ABI call becomes a finding rather than killing us."""
+    ok / crash / timeout / error. The result is read concurrently with the child
+    (so large output buffers stream through instead of dead-locking the feeder),
+    a fast crash/exit is detected promptly, and a hung child is reaped with a
+    SIGTERM→SIGKILL escalation so it can never wedge the harness."""
     timeout = vector.get("timeout", default_timeout)
     ctx = mp.get_context("fork")
     q = ctx.Queue()
     p = ctx.Process(target=_child, args=(q, lib_path, symbol_map or {}, vector))
     p.start()
-    p.join(timeout)
+
+    deadline = time.monotonic() + timeout
+    outcome, result = None, None
+    while outcome is None:
+        try:
+            result = q.get(timeout=_POLL)   # drains the pipe as the feeder writes
+            outcome = "result"
+        except _queue.Empty:
+            if not p.is_alive():            # child exited without (more) output
+                try:
+                    result = q.get_nowait()
+                    outcome = "result"
+                except (_queue.Empty, EOFError, OSError, ValueError):
+                    outcome = "exited"
+            elif time.monotonic() >= deadline:
+                outcome = "hung"
+        except (EOFError, OSError, ValueError):
+            outcome = "broken"             # result pipe broke → a child-side fault
+
     if p.is_alive():
         p.terminate()
-        p.join()
-        return {"status": "timeout", "ret": None, "outputs": {}, "detail": f"exceeded {timeout}s"}
+        p.join(_REAP_GRACE)
+        if p.is_alive():
+            p.kill()                       # SIGKILL: cannot be caught or ignored
+            p.join(_REAP_GRACE)
+    else:
+        p.join(_REAP_GRACE)
     code = p.exitcode
+
+    if outcome == "result":
+        status, ret, outputs, detail = result
+        return _res(status, ret, outputs, detail)
+    if outcome == "hung":
+        return _res("timeout", detail=f"exceeded {timeout}s")
+    if outcome == "broken":
+        return _res("error", detail="result pipe broke (child-side fault)")
+    # "exited": the child is gone with no usable result
     if code is not None and code < 0:
-        # Killed by a signal (SIGSEGV/SIGABRT/…): the child never enqueued a
-        # result. This is the crash finding the harness exists to catch.
-        return {"status": "crash", "ret": None, "outputs": {}, "detail": f"killed by signal {-code}"}
-    try:
-        status, ret, outputs, detail = q.get(timeout=2)
-    except _queue.Empty:
-        return {"status": "error", "ret": None, "outputs": {}, "detail": f"no result (exit {code})"}
-    return {"status": status, "ret": ret, "outputs": outputs, "detail": detail}
+        return _res("crash", detail=f"killed by signal {-code}")
+    return _res("error", detail=f"no result (exit {code})")
 
 
 def _diff_text(vector, c, r):
@@ -252,7 +323,7 @@ def compare_call(vector, c_res, r_res, known):
         "c_ret": c_res["ret"], "rust_ret": r_res["ret"],
         "fingerprint": None if verdict == "MATCH" else fp[:12],
         "pinned": pin is not None,
-        "diff": None if verdict == "MATCH" else (text + (c_res["detail"] and "") ),
+        "diff": None if verdict == "MATCH" else text,
     }
 
 
@@ -334,9 +405,10 @@ def _self_test():
     """Prove the harness against the system C library (ctypes CDLL(None)) — no
     compiler needed — plus the verdict rule directly. Covers: real marshalling of
     scalars/strings/output buffers, a genuine return divergence (toupper vs
-    tolower via the symbol map), ledger suppression + fingerprint pinning, a
-    rust-side crash and hang (fail-closed), a C-only crash (ledgerable), and the
-    exact 'return AND output state' rule."""
+    tolower via the symbol map), position-returning pointers compared by offset
+    (strchr vs strrchr), ledger suppression + fingerprint pinning, a rust-side
+    crash and hang (fail-closed), a C-only crash (ledgerable), and the exact
+    'return AND output state' rule (incl. a load-bearing returns_ignore)."""
     import tempfile
     ok = True
 
@@ -369,6 +441,10 @@ def _self_test():
     check("strcpy wrote 'abc\\0' into the out buffer",
           invoke(None, {}, v_cpy, 3)["outputs"]["dst"][:4] == b"abc\x00")
 
+    v_atof = {"name": "atof", "function": "atof", "returns": "double",
+              "args": [{"type": "cstr", "value": "3.14"}]}
+    check("double return (bit-compared) matches → MATCH", verdict(v_atof)["verdict"] == "MATCH")
+
     # --- a genuine return-value divergence via the symbol map ---
     v_case = {"name": "caseconv", "function": "caseconv", "returns": "int",
               "args": [{"type": "int", "value": 97}]}  # 'a'
@@ -376,6 +452,17 @@ def _self_test():
     res = verdict(v_case, cs, rs)
     check("divergent implementations (toupper vs tolower) → DIVERGE",
           res["verdict"] == "DIVERGE" and "return" in (res["diff"] or ""))
+
+    # --- a pointer return that conveys POSITION must be compared by offset, not
+    # collapsed to opaque "PTR" (strchr vs strrchr find 'l' at different offsets) ---
+    v_find = {"name": "find", "function": "find", "returns": "ptr",
+              "args": [{"type": "cstr", "value": "hello", "id": "s"}, {"type": "int", "value": 108}]}
+    check("a ptr into a tracked buffer normalizes to its offset, not opaque PTR",
+          invoke(None, {"find": "strchr"}, v_find, 3)["ret"] == ["offset", "s", 2])
+    check("position-returning ptr: strchr vs strrchr differ by offset → DIVERGE",
+          verdict(v_find, {"find": "strchr"}, {"find": "strrchr"})["verdict"] == "DIVERGE")
+    check("position-returning ptr: same function agrees on the offset → MATCH",
+          verdict(v_find, {"find": "strchr"}, {"find": "strchr"})["verdict"] == "MATCH")
 
     # --- ledger suppression + fingerprint pin (reused from diff_run) ---
     with tempfile.TemporaryDirectory() as d:
@@ -398,7 +485,6 @@ def _self_test():
               "args": [{"type": "int", "value": 3}]}
     check("rust-side crash → CRASH (never MATCH)",
           verdict(v_boom, {"boom": "abs"}, {"boom": "abort"})["verdict"] == "CRASH")
-    # the ledger must NOT be able to excuse a rust-side crash
     with tempfile.TemporaryDirectory() as d:
         led = os.path.join(d, "DIVERGENCES.md")
         open(led, "w").write("- [x] boom: pretend this is fine\n")
@@ -407,7 +493,8 @@ def _self_test():
     check("C-only crash, rust returns cleanly → DIVERGE (ledgerable fix-of-C-defect)",
           verdict(v_boom, {"boom": "abort"}, {"boom": "abs"})["verdict"] == "DIVERGE")
 
-    # --- timeout (liveness backstop): a rust-side hang is TIMEOUT, not MATCH ---
+    # --- timeout (liveness backstop): a rust-side hang is TIMEOUT, not MATCH,
+    # and the reaper escalates to SIGKILL so a signal-ignoring child can't wedge us ---
     v_slow = {"name": "slow", "function": "slow", "returns": "int",
               "args": [{"type": "int", "value": 800000}]}  # usleep µs
     check("rust-side hang → TIMEOUT",
@@ -427,10 +514,14 @@ def _self_test():
     check("same return and output → MATCH",
           compare_call(vs, synth(ret=1, outputs={"b": b"x"}),
                        synth(ret=1, outputs={"b": b"x"}), {})["verdict"] == "MATCH")
+    # returns_ignore is load-bearing: a DIFFERING return is skipped (output decides)
     v_ig = {"name": "syn2", "function": "f", "returns": "ptr", "returns_ignore": True, "args": []}
-    check("returns_ignore skips the return, compares output only → MATCH",
-          compare_call(v_ig, synth(ret="PTR", outputs={"b": b"x"}),
-                       synth(ret="PTR", outputs={"b": b"x"}), {})["verdict"] == "MATCH")
+    check("returns_ignore skips a DIFFERING return (output matches) → MATCH",
+          compare_call(v_ig, synth(ret=1, outputs={"b": b"x"}),
+                       synth(ret=2, outputs={"b": b"x"}), {})["verdict"] == "MATCH")
+    check("without returns_ignore the same differing return → DIVERGE (flag is load-bearing)",
+          compare_call(vs, synth(ret=1, outputs={"b": b"x"}),
+                       synth(ret=2, outputs={"b": b"x"}), {})["verdict"] == "DIVERGE")
 
     print("\nself-test:", "OK" if ok else "FAILED")
     return 0 if ok else 1
