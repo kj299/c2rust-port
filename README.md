@@ -55,6 +55,7 @@ repo-root `porting-kit/`; adjust the paths inside if you vendor it elsewhere).
 | `harnesses/diff-fuzz/diff_fuzz.py` | differential fuzzing: same generated input to C & Rust, minimize divergences | CI + nightly |
 | `harnesses/golden/golden.py` | capture/replay the oracle; flag nondeterminism; hold back vectors (`--holdout`) + validate them against C (`--validate`) | CI |
 | `harnesses/perf-gate/perf_gate.py` | time Rust vs the C baseline; fail if the median ratio exceeds `--threshold` (default 1.3×) | CI |
+| `harnesses/library-differential/lib_diff.py` | C-ABI library differential: call a C `.so` and Rust `cdylib` per-function, compare return + output buffers, crash/timeout-isolated | CI |
 | `harnesses/fuzz/gen_fuzz_target.sh` | scaffold a cargo-fuzz target per module | CI smoke + nightly |
 | `harnesses/sanitizers/run_sanitizers.sh` | Miri / ASan / UBSan / TSan over the unsafe layer | CI |
 | `harnesses/supply-chain/run_supply_chain.sh` | `cargo audit` + `cargo deny` | CI |

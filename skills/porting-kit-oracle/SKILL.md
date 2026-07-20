@@ -35,7 +35,10 @@ semantic-comparison stage, not build time — "it builds" tells you almost nothi
    `python3 porting-kit/harnesses/differential/diff_run.py --oracle <c> --rust <rust> --matrix <m> --ledger DIVERGENCES.md`
    The verdict is stdout **and** exit code; a per-case timeout is the liveness
    backstop (a hang isn't UB, so sanitizers miss it). For a C-ABI **library** rather
-   than an executable, use a `cando`-style function-level harness (synthesis Step 0.5).
+   than an executable, drive `porting-kit/harnesses/library-differential/lib_diff.py`
+   instead — it calls each function on the C `.so` and the Rust `cdylib`, compares the
+   return value AND mutated output buffers, and isolates every call in a forked child
+   so a segfault/hang is a CRASH/TIMEOUT finding, not a harness death (synthesis Step 0.5).
 
 ## Integrity
 Harness paths/subcommands/flags must match the kit. If they drift, fix the reference

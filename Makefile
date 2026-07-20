@@ -12,6 +12,7 @@ check-kit:
 	@echo "== diff_run ==";         $(PY) $(H)/differential/diff_run.py --self-test
 	@echo "== golden ==";           $(PY) $(H)/golden/golden.py --self-test
 	@echo "== perf-gate ==";        $(PY) $(H)/perf-gate/perf_gate.py --self-test
+	@echo "== library-differential =="; $(PY) $(H)/library-differential/lib_diff.py --self-test
 	@echo "== c-flaw-scan ==";      $(PY) $(H)/c-flaw-scan/scan_c_flaws.py --self-test
 	@echo "== diff-fuzz ==";        $(PY) $(H)/diff-fuzz/diff_fuzz.py --self-test
 	@echo "== progress ==";         $(PY) $(H)/progress/progress.py --self-test

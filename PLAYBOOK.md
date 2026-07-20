@@ -196,7 +196,9 @@ Then the loop — each step is a CI-enforced gate:
    the "call-twice-for-size" buffer dance → a growing `Vec` with length checks;
    pointer arithmetic over structs → slices + `repr(C)` with bounds; unions/FAMs →
    audited casts with a `// SAFETY:` proof; integer math → checked/`saturating`.
-2. **Differential-test** against the oracle (`harnesses/differential/diff_run.py`).
+2. **Differential-test** against the oracle (`harnesses/differential/diff_run.py`;
+   for a C-ABI **library** use `harnesses/library-differential/lib_diff.py`, which
+   diffs per-function return + output buffers and isolates crashes/hangs in a child).
    A divergence is a *triage*, not an auto-fail: {Rust bug → fix} vs {C bug →
    log in `DIVERGENCES.md`, keep the safe behavior}. The verdict is **stdout AND
    exit code** (LESSONS #4): a rewrite that prints the right thing but returns

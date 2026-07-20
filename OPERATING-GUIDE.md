@@ -15,10 +15,10 @@ the phased playbook; the executable harnesses (`make check-kit` green); the
 ledger; the unsafe-audit hard gate; the compounding LESSONS loop; the skills suite
 with a mechanical integrity check.
 
-**Provisional** — designed and documented, not yet battle-tested end-to-end:
-the **library** path (the differential is executable-shaped; C-ABI libraries need
-the `cando`-style function-level harness, §5 P0); C→C **preconditioning** is prose,
-not tooling.
+**Provisional** — built and self-tested, not yet battle-tested end-to-end:
+the **library** path now has its `cando`-style function-level harness
+(`lib_diff.py`, §5 P0), but no real library port has exercised it end-to-end yet;
+C→C **preconditioning** is prose, not tooling.
 
 **Bottom line:** ready to *drive an executable port today* and to *structure* a
 library port; not yet a turnkey library-migration pipeline. §5 is the path to that,
@@ -136,8 +136,13 @@ audit → retrospective`.
 ## 5. Improvements backlog (the path to v1.0, prioritized)
 
 **P0 — needed before a *library* port or a security-critical claim:**
-1. **`cando`-style function-level differential harness** for C-ABI libraries — the
-   current differential is executable-shaped (argv/stdin→stdout+exit). Biggest gap.
+1. ~~**`cando`-style function-level differential harness** for C-ABI libraries.~~
+   **Done:** `lib_diff.py --c-lib <so> --rust-lib <cdylib> --vectors <f>` calls each
+   function on both libraries (ctypes), compares the return value AND mutated output
+   buffers, isolates every call in a forked child so a segfault/hang is a
+   CRASH/TIMEOUT finding not a harness death, and triages divergences through the same
+   ledger as diff_run. Scope v1: scalar/string/buffer args + return; structs,
+   callbacks, and file/env side effects are future work.
 2. ~~**Performance gate harness**.~~ **Done:** `perf_gate.py --oracle C --rust R
    --matrix M` times both over the workload matrix, compares the medians of N runs,
    and exits nonzero when rust/oracle > `--threshold` (default 1.3×); a workload that
