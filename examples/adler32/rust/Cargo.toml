@@ -1,0 +1,13 @@
+[package]
+name = "radler"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+# cdylib for the C-ABI differential (lib_diff), rlib so the CLI bin can call the
+# pure function directly.
+crate-type = ["cdylib", "rlib"]
+
+[profile.release]
+overflow-checks = true   # a debug-build habit worth keeping on: catch UB early

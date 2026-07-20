@@ -15,17 +15,19 @@ the phased playbook; the executable harnesses (`make check-kit` green); the
 ledger; the unsafe-audit hard gate; the compounding LESSONS loop; the skills suite
 with a mechanical integrity check.
 
-**Provisional** — designed and documented, not yet battle-tested end-to-end:
-the **library** path (the differential is executable-shaped; C-ABI libraries need
-the `cando`-style function-level harness, §5 P0); C→C **preconditioning** is prose,
-not tooling; the **performance** gate is a number in the playbook, not a harness;
-**held-back vectors** and **C-baseline vector validation** are described, not wired.
+**Now wired and self-tested** — what this section once called provisional has
+landed: the **library** path has two function-level differentials (`cando`
+driver-based + `lib_diff` ctypes, complementary); the **performance** gate is a
+harness (`perf/perf_gate.py`); C→C **preconditioning** is an invokable skill; and
+**held-back vectors + C-baseline validation** are in `golden.py`. The whole §5
+backlog is done, and the v1.0 exit test — a real adler32 C→Rust library port driven
+through every gate (`examples/adler32/`) — passes.
 
-**Bottom line:** ready to *drive an executable port today* and to *structure* a
-library port; not yet a turnkey library-migration pipeline. §5 is the path to that,
-prioritized. Lifting to its own repo is reasonable **now** if you ship it with this
-honest maturity note and the P0 backlog visible — not as "done," but as "v0.x,
-proven spine, known edges."
+**Bottom line:** the kit now drives an executable **or** a C-ABI library port
+end-to-end through the six gates + a performance gate, substantiates its
+safety/security claims (SBOM, signing, differential fuzzing), and has been shaken
+out on a real port. The remaining maturity is *breadth* — more real ports feeding
+the compounding LESSONS loop — not a missing spine.
 
 ---
 
@@ -146,11 +148,14 @@ audit → retrospective`.
    **Done:** `harnesses/perf/perf_gate.py` — median-of-repeats wall-clock ratio,
    `--threshold` (default 1.3), timeouts fail, spawn-dominated cases reported
    UNMEASURABLE rather than falsely passed.
-3. **Held-back vectors + C-baseline validation** — *baseline validation is done*
-   (`cando_diff.py` reports a vector the C driver rejects as a BADVECTOR: "a vector
-   must pass on C before it may judge Rust"). Still open: a **holdout** mode (an
-   acceptance set the agent can't see, to catch overfit to visible vectors) — add
-   it to `golden.py`/`cando_diff.py`; name flags only once implemented (LESSONS #7).
+3. ~~**Held-back vectors + C-baseline validation.**~~ **Done:** baseline validation
+   in `cando_diff.py` (a vector the C driver rejects is a BADVECTOR) and in
+   `golden.py capture --validate`; and the **holdout** mode landed —
+   `golden.py capture --holdout <set>` reserves an acceptance set that `replay` runs
+   only under `--final` (a leaked held-out case hard-fails iteration), so the rewrite
+   can't be tuned to the visible vectors. (A complementary ctypes, no-driver library
+   differential also landed: `harnesses/library-differential/lib_diff.py`, alongside
+   cando.)
 
 **P1 — materially stronger:**
 4. ~~**Differential fuzzing** harness (C vs Rust on shared fuzz inputs).~~ **Done:**
@@ -159,23 +164,41 @@ audit → retrospective`.
    not copied), minimizes each divergence to its smallest reproducer, and suppresses
    ledger-pinned fingerprints. Runs `--iterations`/`--max-time` budgets;
    `porting-kit-diff-fuzz` skill wraps it.
-5. **CI template hardening**: SHA-pin actions; split smoke/nightly for fuzz+sanitizers;
-   add `cargo vet`, SBOM, `gitleaks` jobs.
-6. **`scan_c_flaws.py` depth**: add double-free / use-after-free / uninitialized-read
-   heuristics and `strncpy` non-termination / `snprintf` truncation; note its
-   line-based checks can miss multi-line calls (the format-string check is already
-   whole-file — extend the rest).
-7. **A `porting-kit-precondition` skill** for Step 0 (C→C: global-state threading,
-   aliasing reduction, `#ifdef` story) — currently prose only.
+5. ~~**CI template hardening.**~~ **Done:** every `uses:` SHA-pinned +
+   `persist-credentials: false`; a nightly `schedule:` deep tier (fuzz/diff-fuzz)
+   over a per-PR smoke; and `cargo-vet`, SBOM (`cargo auditable`/CycloneDX), and
+   `gitleaks` jobs alongside audit/deny — in `harnesses/ci/porting-ci.template.yml`.
+6. ~~**`scan_c_flaws.py` depth.**~~ **Done:** added `strncpy-noterm`,
+   `snprintf-truncation`, and windowed-lexical `use-after-free`/`double-free`/
+   `uninitialized-read` heuristics, and made the sink checks whole-file so a
+   split-across-lines call isn't missed. Format-string signal (LESSONS #2) preserved.
+7. ~~**A `porting-kit-precondition` skill** for Step 0 (C→C).~~ **Done:**
+   `skills/porting-kit-precondition` — localize globals into a threaded context
+   struct, reduce aliasing, settle the `#ifdef` story, each verified on the C test
+   suite before translating.
 
 **P2 — polish / breadth:**
-8. `normalize.py` rules as a per-project data file (currently code constants).
-9. ~~`progress.py ingest`~~ — partially done: `ingest` exists for unsafe-audit
-   `--json` reports (final gate only, exact-stem module matching); extend to the
-   other harnesses' JSON and the earlier gates.
-10. Document the Windows/cross-platform caveats (sanitizers/Miri assume a Linux
-    nightly toolchain).
+8. ~~`normalize.py` rules as a per-project data file.~~ **Done:** `normalize.py
+   --rules <file>` loads rules from JSON/TOML and replaces the built-in defaults;
+   `normalize.py --dump-default-rules` emits them to start from; threaded through
+   `diff_run.py --rules`.
+9. ~~`progress.py ingest`~~ **Done:** `progress.py ingest --diff-json`/`--lib-json`
+   (diff_run/lib_diff clean) advance `differential`, `--fuzz-json` (diff_fuzz)
+   advances `fuzzed`, `--unsafe-json` advances `unsafe_audited` — exact-stem,
+   fail-closed, climbing multiple gates in one call.
+10. ~~Document the Windows/cross-platform caveats.~~ **Done:**
+    `CROSS-PLATFORM-CAVEATS.md` — sanitizer/Miri availability by toolchain, the
+    exit-hard liveness pattern, ASCII-default output, `target/` sync/AV locks, and
+    fork-based-harness caveats; referenced from README + PLAYBOOK Phase 3.
 11. ~~A `porting-kit-diff-fuzz` skill once #4 lands.~~ **Done** — `skills/porting-kit-diff-fuzz`.
+
+**The v1.0 exit test (the epic's definition of done):** drive a real tiny C-ABI
+library end-to-end through every gate. **Done** — `examples/adler32/` (`run.sh`): a
+naive-overflow C adler32 vs a correct+safe Rust cdylib, driven through scan →
+unsafe-audit → cando → lib_diff → golden (holdout+validate) → diff_run → perf →
+diff-fuzz → progress; the overflow is caught by both library differentials and
+ledgered as an intentional fix-of-C-defect. The §5 backlog and the exit test are
+both complete.
 
 **How the kit closes these:** each is a candidate for a normal port's
 `porting-kit-retrospective` pass (the compounding loop is the delivery mechanism —

@@ -22,9 +22,14 @@ semantic-comparison stage, not build time — "it builds" tells you almost nothi
 4. **Tune normalization** (`porting-kit/harnesses/differential/normalize.py`) so
    PIDs/timestamps/pointers/ephemeral-ports are masked *identically* on both sides —
    whatever you erase from C you must erase from Rust, or you manufacture a divergence.
+   Put project-specific masks in a rules file — `normalize.py --rules <file>` (start
+   from `normalize.py --dump-default-rules`), also accepted by `diff_run.py --rules`.
 5. **Validate every vector against the C first** — a wrong vector that "passes"
-   teaches nothing. **Hold back a hidden acceptance set** (an LLM in the loop will
-   overfit to visible vectors).
+   teaches nothing — and **hold back a hidden acceptance set** (an LLM overfits the
+   vectors it can see): `golden.py capture --oracle <c> --matrix <m> --corpus <dir>
+   --holdout <heldback> --validate`. `--validate` refuses any vector that fails on C;
+   `--holdout` reserves the hidden set that `golden.py replay ... --final` runs only
+   at acceptance (an iteration `replay` refuses a leaked held-out vector).
 6. **Seed `DIVERGENCES.md`** (copy `porting-kit/skeleton/DIVERGENCES.md`) from the
    Phase-0 flaw scan — the intentional-divergence ledger the differential reads.
 7. **Wire the differential** (used per module in `porting-kit-module`):
@@ -39,6 +44,9 @@ semantic-comparison stage, not build time — "it builds" tells you almost nothi
    `python3 porting-kit/harnesses/cando/cando_diff.py --oracle-driver <c> --rust-driver <rust> --vectors <suite> --ledger DIVERGENCES.md`.
    It diffs per function and **baseline-validates**: a vector the C driver rejects is
    a BADVECTOR, not a Rust verdict ("a vector must pass on C before it may judge Rust").
+   A no-driver alternative for simple C-ABI signatures is
+   `porting-kit/harnesses/library-differential/lib_diff.py` (ctypes; compares the
+   return value + mutated output buffers directly, crash/timeout-isolated per call).
 9. **Add the performance gate** once both build:
    `python3 porting-kit/harnesses/perf/perf_gate.py --oracle <c> --rust <rust> --matrix <m>`
    (fails a case >1.3x the C median; run it per module in `porting-kit-audit`).

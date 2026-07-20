@@ -41,7 +41,10 @@ write the decision gate before coding, and do a pivot check before declaring it 
 
 Advance the tracker as gates clear:
 `python3 porting-kit/harnesses/progress/progress.py set <module> <gate>`
-(gates: ported → differential → fuzzed → sanitized → unsafe_audited).
+(gates: ported → differential → fuzzed → sanitized → unsafe_audited). Or let the
+harness reports drive it — write each `--json` report as `<module>.json` and run
+`progress.py ingest --diff-json <m>.json --fuzz-json <m>.json --unsafe-json <m>.json`
+to auto-advance a module from its clean reports (exact-stem, fail-closed).
 
 For the hardest modules, consider **two candidate translations by different methods**
 and let the vector suite pick the winner (diversity beats any single method).

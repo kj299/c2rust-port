@@ -36,6 +36,7 @@ any skill references a kit path that no longer exists, so they can't drift.
 |---|---|
 | `porting-kit-kickoff` | start a new port: Phase 0 inventory + flaw scan + threat model, propose the order |
 | `porting-kit-cflaw-scan` | hunt C vulnerabilities before porting and triage them into the ledger |
+| `porting-kit-precondition` | reshape the C in C (globals→context struct, aliasing, `#ifdef`) before translating |
 | `porting-kit-oracle` | establish the differential oracle + test-vector harness before translating |
 | `porting-kit-module` | port one module through the six safety gates |
 | `porting-kit-diff-fuzz` | differential-fuzz the port: same input to C & Rust, minimize divergences |
@@ -54,6 +55,7 @@ repo-root `porting-kit/`; adjust the paths inside if you vendor it elsewhere).
 | `harnesses/differential/diff_run.py` (+`normalize.py`) | diff Rust vs C oracle; triage divergences via a ledger; timeout = liveness backstop | CI |
 | `harnesses/diff-fuzz/diff_fuzz.py` | differential fuzzing: same generated input to C & Rust, minimize divergences | CI + nightly |
 | `harnesses/cando/cando_diff.py` (+ driver templates) | function-level differential for C-ABI **libraries**; C-baseline-validated vectors | CI |
+| `harnesses/library-differential/lib_diff.py` | complementary ctypes library differential — no driver, auto return + output-buffer/ptr compare | CI |
 | `harnesses/perf/perf_gate.py` | fail a module >1.3× the C median runtime (a perf bug, not "the cost of Rust") | CI |
 | `harnesses/golden/golden.py` | capture/version/replay the oracle; flag oracle nondeterminism | CI |
 | `harnesses/fuzz/gen_fuzz_target.sh` | scaffold a cargo-fuzz target per module | CI smoke + nightly |
@@ -75,6 +77,9 @@ make check-kit      # smoke-test every harness (python3 + bash only, no toolchai
   TRACTOR-hardened (DARPA/MIT-LL, Feb 2026) four-step translation playbook.
   Written as portable feedback; useful when the port is a *translation*
   (transpile / LLM / FFI-coexistence) rather than a reimplementation.
+- [`CROSS-PLATFORM-CAVEATS.md`](CROSS-PLATFORM-CAVEATS.md) — porting off Linux
+  (Windows/macOS): sanitizer/Miri availability by toolchain, the exit-hard
+  liveness pattern, ASCII-default output, and `target/` sync/AV lock hazards.
 
 ## The compounding loop
 

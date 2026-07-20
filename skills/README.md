@@ -18,6 +18,7 @@ repo-root `porting-kit/`; if you vendor it elsewhere, adjust the paths inside ea
 |---|---|---|---|---|
 | `porting-kit-kickoff` | 0–1 | once | low (plan only) | — |
 | `porting-kit-cflaw-scan` | 0 | once / per subsystem | low (tool + triage) | ∥ with oracle |
+| `porting-kit-precondition` | 0–1 | once / per subsystem, pre-oracle | low–medium (C refactor) | ∥ with cflaw-scan |
 | `porting-kit-oracle` | 2 | once, pre-Rust | medium (build corpus) | ∥ with cflaw-scan |
 | `porting-kit-module` | 4 | **per module (hot path)** | high (translate + iterate) | per-module ∥ (leaf order) |
 | `porting-kit-diff-fuzz` | 4–5 | per module (after matrix green) + nightly | medium (fuzz + triage) | ∥ per module |
@@ -31,6 +32,10 @@ repo-root `porting-kit/`; if you vendor it elsewhere, adjust the paths inside ea
   proposes a dependency-ordered plan. Analysis only; stops for approval.
 - **`porting-kit-cflaw-scan`** — hunt C vulnerabilities before porting; triage each
   into `DIVERGENCES.md`. Tune for signal-to-noise first (LESSONS #2).
+- **`porting-kit-precondition`** — reshape the C in C (behavior-preserving) before
+  translating: localize globals into a threaded context struct, reduce aliasing,
+  settle the `#ifdef` story; verify each move on the C test suite. Step 0 of the
+  synthesis — do it when the C is global-heavy or macro-configured.
 - **`porting-kit-oracle`** — establish the differential oracle + test-vector harness
   *before* writing Rust. Golden corpus, normalization, hidden vectors,
   C-baseline-validated vectors, ledger seed.
@@ -50,7 +55,8 @@ repo-root `porting-kit/`; if you vendor it elsewhere, adjust the paths inside ea
 
 ```
 kickoff
-  → (cflaw-scan  ∥  oracle)
+  → (cflaw-scan  ∥  precondition C→C, if the C is global-heavy)
+  → oracle
   → for each leaf in topological order:  module  →  (diff-fuzz)  →  audit
   → retrospective   (patch the kit + LESSONS; keep skills in integrity)
 ```
