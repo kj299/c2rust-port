@@ -23,6 +23,8 @@ vulnerability. Maximize safety controls.
 | Close a port & improve the kit | paste [`PROMPTS/90-retrospective.md`](PROMPTS/90-retrospective.md) |
 | Lay out the workspace | copy [`skeleton/`](skeleton/); see [`ARCHITECTURE-TEMPLATE.md`](ARCHITECTURE-TEMPLATE.md) |
 | The control ledger | [`SECURITY-CHECKLIST.md`](SECURITY-CHECKLIST.md) |
+| See a real port through every gate | run [`examples/adler32/run.sh`](examples/adler32/run.sh) (needs cc + cargo) |
+| How the kit got to v1.0, and what's next | [`RETROSPECTIVE-kit-v1.md`](RETROSPECTIVE-kit-v1.md) (retrospective + the v1.x plan) |
 | Standing rules for any kit repo | [`CLAUDE.md`](CLAUDE.md) |
 
 ## Skills (invokable wrappers over the kit)

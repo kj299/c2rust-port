@@ -362,3 +362,60 @@ the emphasized half.
   controls stdin/env/cwd explicitly and inherits nothing.
 - **Section amended:** harnesses/differential/diff_run.py (`run_one` + self-test);
   PLAYBOOK · Phase 2 "harden the harness for its host".
+
+---
+
+## 012. Two streams on one trunk build the same thing twice — reconciliation is a real cost line
+
+- **Date:** 2026-07-22
+- **Codebase:** the Porting Kit itself (project retrospective, snapshot → v1.0)
+- **What happened:** Two agent sessions worked the same backlog concurrently from
+  different base commits. Both independently implemented the P0 library
+  differential and the P0 performance gate; PR #3 merged first, so the parallel
+  stack (#5–#8) collided and had to be **replayed** onto the moved `main` by a
+  dedicated reconcile PR (#9) that adjudicated winners (kept `cando` + `perf`,
+  dropped the duplicate `perf-gate/`, landed `lib_diff` as a complement) and
+  closed four PRs unmerged. Aftercost: the replay re-committed everything, so
+  `git cherry`/patch-id later reported the superseded branches as "unmerged" —
+  merged-or-not became manual forensics before the branches could be safely
+  deleted. Honest upside: the two library differentials differed by *approach*
+  (driver-subprocess vs ctypes) and were kept as deliberate complements — the
+  kit's own "two candidate translations, let the suite pick" advice, arrived at
+  by accident.
+- **Kit change:** none mechanical (this is process, not tooling): parallel
+  streams on one trunk need either serialization or an explicit file-ownership
+  partition agreed up front; a reconcile that replays commits must record its
+  keep/drop decisions in the PR/commit message (PR #9 did — that record is what
+  later made branch cleanup safe); and duplication, when it happens, should be
+  triaged for *diversity value* before one copy is discarded. Recorded in the
+  project retrospective's plan as standing discipline.
+- **Section amended:** RETROSPECTIVE-kit-v1.md · §3/§5 (the durable statement);
+  no harness/playbook change.
+
+---
+
+## 013. A recorded lesson is not a control — new code recurred two logged lessons
+
+- **Date:** 2026-07-22
+- **Codebase:** the Porting Kit itself (project retrospective, step 0 against
+  `examples/adler32`)
+- **What happened:** The v1.0 exit test — written *after* LESSONS #6 and #8 were
+  logged — shipped with both lessons violated: it **failed open** (`set -uo`
+  without `-e`, and a `cargo test … | grep … || true` that swallowed test
+  failures, so any gate failure still printed the success banner and exited 0),
+  and its generated ledger used **name-only, unpinned** entries (`lib_diff`
+  printed the pin-me warning on every run, unheeded). Neither recurrence was
+  caught by reading; both surfaced only when this retrospective *executed* the
+  example and probed its degenerate case (ledger emptied → must abort). Writing
+  a lesson down does not apply it to the next artifact; only gates and
+  checklists do.
+- **Kit change:** the exit test now fails closed (`set -euo pipefail`,
+  capture-then-check on `cargo test`; probed: unledgered divergence → exit 1, no
+  banner), its ledger entries are fingerprint-pinned, and it runs as a third job
+  in `.github/workflows/check-kit.yml` so it cannot rot unexecuted.
+  `PROMPTS/90-retrospective.md` (and the retrospective skill) now instruct:
+  review every NEW or changed kit artifact against the LESSONS list before
+  merge — each entry is a checklist item, not history.
+- **Section amended:** examples/adler32/run.sh (fail-closed + pinned ledger);
+  .github/workflows/check-kit.yml (exit-test job); PROMPTS/90 · step 3;
+  skills/porting-kit-retrospective.

@@ -40,7 +40,11 @@ retrospective and **patch the Porting Kit** with what you learned.
    - amend `PLAYBOOK.md` phases/criteria,
    - fix/extend a harness (add the normalization rule, the flaw pattern, the
      gate) and re-run the kit's `make check-kit`,
-   - update `ARCHITECTURE-TEMPLATE.md` / prompts if the shape or loop changed.
+   - update `ARCHITECTURE-TEMPLATE.md` / prompts if the shape or loop changed,
+   - **review every NEW or changed kit artifact against the LESSONS list**
+     (LESSONS #13): each entry is a checklist item, not history — the v1.0 exit
+     test shipped violating two already-logged lessons (fail-open + unpinned
+     ledger) because nothing forced the list against new code.
 
 4. **Append to `LESSONS.md`** — one entry per lesson, in the required format
    (date, codebase, lesson, playbook section amended). If the kit already had
