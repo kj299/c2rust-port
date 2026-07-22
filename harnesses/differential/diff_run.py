@@ -128,7 +128,8 @@ def run_one(binary, case, default_timeout=15):
     # inherited stdin. A binary that reads stdin (the skeleton `port` does)
     # would otherwise block forever on an interactive/tty parent, turning a
     # differential/perf run into a hang that depends on who launched it. A test
-    # harness must be hermetic (the hostile-host rule); EOF is deterministic.
+    # harness must be hermetic (the hostile-host rule, LESSONS #11); EOF is
+    # deterministic.
     try:
         p = subprocess.run(
             argv,

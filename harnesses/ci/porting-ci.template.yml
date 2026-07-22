@@ -123,7 +123,7 @@ jobs:
       - run: cargo install cargo-fuzz
       # Fast smoke per-PR; the nightly `schedule` run gets a long budget. An empty
       # target list FAILS: "no panic on input" is a hard gate, and a repo with no
-      # fuzz/ directory must not get a vacuous green (gen_fuzz_target.sh scaffolds
+      # fuzz/ directory must not get a vacuous green (LESSONS #6; gen_fuzz_target.sh scaffolds
       # a target per module).
       - run: |
           if [ "${{ github.event_name }}" = "schedule" ]; then T=1800; else T=60; fi

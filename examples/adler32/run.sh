@@ -11,7 +11,8 @@
 # is NOT part of check-kit — it is the runnable demo the toolchain-free suite
 # can't be. Run:  examples/adler32/run.sh
 # -e: this script IS a gate — any harness that exits nonzero must abort the run
-# before the success banner (LESSONS #6: a gate that finds nothing to check, or
+# before the success banner (LESSONS #6, whose recurrence here is LESSONS #13:
+# a gate that finds nothing to check, or
 # swallows a failure, must not pass).
 set -euo pipefail
 cd "$(dirname "$0")"

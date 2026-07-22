@@ -26,6 +26,8 @@ check-kit:
 	@echo "== vectors parse ==";    $(PY) -c "import tomllib; tomllib.load(open('$(H)/cando/vectors.example.toml','rb')); print('PASS  vectors parse')"
 	@echo "== doc-flags self-test ==="; $(PY) $(H)/doc-check/check_doc_flags.py --self-test
 	@echo "== doc-flags integrity =="; $(PY) $(H)/doc-check/check_doc_flags.py
+	@echo "== lessons-pinned self-test =="; $(PY) $(H)/doc-check/check_lessons_pinned.py --self-test
+	@echo "== lessons-pinned integrity =="; $(PY) $(H)/doc-check/check_lessons_pinned.py
 	@echo "== skills self-test =="; $(PY) skills/check_skills.py --self-test
 	@echo "== skills integrity =="; $(PY) skills/check_skills.py
 	@echo "== skeleton gate ==";    bash  $(H)/skeleton-check/check_skeleton.sh

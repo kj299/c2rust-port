@@ -44,7 +44,12 @@ retrospective and **patch the Porting Kit** with what you learned.
    - **review every NEW or changed kit artifact against the LESSONS list**
      (LESSONS #13): each entry is a checklist item, not history — the v1.0 exit
      test shipped violating two already-logged lessons (fail-open + unpinned
-     ledger) because nothing forced the list against new code.
+     ledger) because nothing forced the list against new code,
+   - **pin each new lesson in the smoke tests**: a lesson whose `Section
+     amended` names a harness must land with the regression check in that
+     harness's self-test and a `LESSONS #N` citation beside it — `make
+     check-kit` (`check_lessons_pinned.py`) hard-fails an unpinned lesson, in
+     this repo and in every port's vendored kit.
 
 4. **Append to `LESSONS.md`** — one entry per lesson, in the required format
    (date, codebase, lesson, playbook section amended). If the kit already had

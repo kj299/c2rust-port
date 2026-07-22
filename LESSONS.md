@@ -13,6 +13,14 @@ Format per entry:
     - **Kit change:** <the concrete PLAYBOOK/harness/template edit made>
     - **Section amended:** <file · section>
 
+**A lesson that amends kit code must be pinned in that code's smoke test** —
+the citation `LESSONS #N` goes next to the pinned self-test check / changed
+logic, and `make check-kit` enforces the linkage mechanically
+(`harnesses/doc-check/check_lessons_pinned.py`): a new entry naming a harness
+fails the build until the harness cites it, and a later rewrite that drops the
+pin fails until the lesson is re-pinned. That is what keeps this file a set of
+controls instead of a set of memories (LESSONS #13).
+
 ---
 
 ## 001. The kit's own dry-run against lsof's failure inventory
@@ -415,7 +423,13 @@ the emphasized half.
   in `.github/workflows/check-kit.yml` so it cannot rot unexecuted.
   `PROMPTS/90-retrospective.md` (and the retrospective skill) now instruct:
   review every NEW or changed kit artifact against the LESSONS list before
-  merge — each entry is a checklist item, not history.
+  merge — each entry is a checklist item, not history. And the lesson↔smoke-test
+  linkage itself is now mechanical: `check_lessons_pinned.py` (in `make
+  check-kit`) hard-fails any lesson whose `Section amended` names a harness
+  that no longer cites `LESSONS #N` — its first real run found six aged links
+  (lessons numbered at retro time, after their code landed), all re-pinned.
 - **Section amended:** examples/adler32/run.sh (fail-closed + pinned ledger);
-  .github/workflows/check-kit.yml (exit-test job); PROMPTS/90 · step 3;
+  .github/workflows/check-kit.yml (exit-test job);
+  harnesses/doc-check/check_lessons_pinned.py (new) + Makefile · check-kit;
+  LESSONS.md · format header; PROMPTS/90 · step 3;
   skills/porting-kit-retrospective.

@@ -4,7 +4,7 @@
 # kit's gate is `make check-kit` (its harness self-tests + doc/skills integrity),
 # plus building the skeleton it ships.
 #
-# Only official actions/checkout is used; everything else runs via tools already
+# Only official actions/checkout is used (LESSONS #10); everything else runs via tools already
 # on the ubuntu runner (make, python3, rustup+stable). This sidesteps Actions
 # policies that allow only first-party actions — a third-party `uses:` there
 # fails the whole run at startup.
@@ -56,7 +56,7 @@ jobs:
       - uses: actions/checkout@v4
       # The one gate that exercises inter-harness COMPOSITION on a real port —
       # cc + cargo needed, so it can't live in the toolchain-free `make
-      # check-kit` and would otherwise rot silently. cc/gcc and rustup+stable
+      # check-kit` and would otherwise rot silently (LESSONS #13). cc/gcc and rustup+stable
       # are preinstalled on the ubuntu runner.
       - run: rustup toolchain install stable --profile minimal --no-self-update
       - run: rustup default stable
