@@ -30,6 +30,12 @@ A port that ships without this wastes its most valuable output.
    `ARCHITECTURE-TEMPLATE.md`, the `PROMPTS/`, or these skills if the shape/loop changed.
    **Keep the skills in integrity with the kit** — if you renamed a harness or changed a
    flag, update every skill that references it (the skills-integrity check enforces this).
+   **Review every new/changed kit artifact against the LESSONS list** (LESSONS #13) —
+   each entry is a merge checklist item, not history; logged lessons have recurred in
+   code written after them. **Pin each new lesson in the smoke tests**: a lesson that
+   amends a harness lands with a self-test regression check and a `LESSONS #N`
+   citation beside it — the kit's `make check-kit` (`check_lessons_pinned.py`)
+   hard-fails an unpinned lesson.
 4. **Append to `porting-kit/LESSONS.md`** — one entry per lesson in the required format
    (date, codebase, lesson, section amended). If the kit had the lesson but it didn't
    fire, say why (friction? unclear? not wired to CI?).

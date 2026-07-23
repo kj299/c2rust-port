@@ -10,7 +10,11 @@
 # Needs cc + cargo (unlike `make check-kit`, which is python3+bash only), so it
 # is NOT part of check-kit — it is the runnable demo the toolchain-free suite
 # can't be. Run:  examples/adler32/run.sh
-set -uo pipefail
+# -e: this script IS a gate — any harness that exits nonzero must abort the run
+# before the success banner (LESSONS #6, whose recurrence here is LESSONS #13:
+# a gate that finds nothing to check, or
+# swallows a failure, must not pass).
+set -euo pipefail
 cd "$(dirname "$0")"
 K=../../harnesses
 PY=python3
@@ -26,7 +30,11 @@ CLI=rust/target/release/radler_cli
 DRV=rust/target/release/adler_drv
 
 echo "===== cargo test (port correctness on known vectors) ====="
-cargo test --manifest-path rust/Cargo.toml --quiet 2>&1 | grep -E "test result|error\[" || true
+# Capture-then-filter so a test FAILURE aborts (the old `| grep ... || true`
+# swallowed it — the exit test's own unit-test gate failed open).
+test_out=$(cargo test --manifest-path rust/Cargo.toml --quiet 2>&1) \
+  || { echo "$test_out"; echo "FAIL: cargo test"; exit 1; }
+echo "$test_out" | grep -E "test result" || true
 
 echo "===== Phase 0 — scan_c_flaws (arithmetic bug is NOT a grep-able sink) ====="
 $PY $K/c-flaw-scan/scan_c_flaws.py c/adler32.c
@@ -55,12 +63,19 @@ json.dump([{"name":"perf-5MB","args":[],"stdin":"a"*5_000_000}], open("perf.gen.
 print("generated vector/matrix suites")
 PYGEN
 
-# The two library differentials find the SAME overflow; ledger it once, by name.
+# The two library differentials find the SAME overflow. PIN each acceptance to
+# its fingerprint (LESSONS #8): a name-only entry would mute the vector forever,
+# hiding any NEW regression in it; a pinned entry re-fails if the divergence ever
+# changes shape. (Fingerprints are deterministic: adler32 is pure arithmetic. If
+# a harness's diff format changes, these pins re-fail loudly — that is the pin
+# doing its job; re-derive with `--ledger /dev/null --json` and update.)
 cat > DIVERGENCES.md <<'EOF'
 # Intentional divergences — adler32 port (fix-of-C-defect, prime directive)
-- [x] overflow: the C reference overflows its uint32 s2 accumulator on long
-  inputs; the Rust port blocks per NMAX=5552 and is correct. (cando driver.)
-- [x] overflow-10k-a: the same defect, seen through lib_diff (ctypes).
+- [x] overflow [sha256:77af9ad455c0]: the C reference overflows its uint32 s2
+  accumulator on long inputs; the Rust port blocks per NMAX=5552 and is
+  correct. (cando driver.)
+- [x] overflow-10k-a [sha256:f1dff6ae73c9]: the same defect, seen through
+  lib_diff (ctypes).
 EOF
 
 echo "===== cando — main's driver-based library differential (+ baseline validation) ====="

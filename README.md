@@ -23,6 +23,8 @@ vulnerability. Maximize safety controls.
 | Close a port & improve the kit | paste [`PROMPTS/90-retrospective.md`](PROMPTS/90-retrospective.md) |
 | Lay out the workspace | copy [`skeleton/`](skeleton/); see [`ARCHITECTURE-TEMPLATE.md`](ARCHITECTURE-TEMPLATE.md) |
 | The control ledger | [`SECURITY-CHECKLIST.md`](SECURITY-CHECKLIST.md) |
+| See a real port through every gate | run [`examples/adler32/run.sh`](examples/adler32/run.sh) (needs cc + cargo) |
+| How the kit got to v1.0, and what's next | [`RETROSPECTIVE-kit-v1.md`](RETROSPECTIVE-kit-v1.md) (retrospective + the v1.x plan) |
 | Standing rules for any kit repo | [`CLAUDE.md`](CLAUDE.md) |
 
 ## Skills (invokable wrappers over the kit)
@@ -64,6 +66,7 @@ repo-root `porting-kit/`; adjust the paths inside if you vendor it elsewhere).
 | `harnesses/c-flaw-scan/scan_c_flaws.py` | find C vuln classes *before* porting | Phase 0 |
 | `harnesses/progress/progress.py` | per-module status table incl. safety gates | tracking |
 | `harnesses/doc-check/check_doc_flags.py` | doc'd harness flags must exist (anti-drift) | `check-kit` |
+| `harnesses/doc-check/check_lessons_pinned.py` | every lesson that amends a harness stays cited/pinned there | `check-kit` |
 | `harnesses/skeleton-check/check_skeleton.sh` | the skeleton passes the gates it ships (fmt/clippy/build/test) | `check-kit` (toolchain-optional) |
 | `harnesses/ci/porting-ci.template.yml` | wires all gates into GitHub Actions | — |
 

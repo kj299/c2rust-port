@@ -146,7 +146,8 @@ def _mask_c_comments(src):
     This replaces the old skip-lines-starting-with-*-or-// heuristic, which
     also swallowed real code: `*out = malloc(a * b);` (pointer-deref
     assignment) begins with `*` and was silently never scanned — a false
-    negative, the one direction a Phase-0 security scanner must not err in."""
+    negative, the one direction a Phase-0 security scanner must not err in
+    (LESSONS #6)."""
     out = []
     i, n = 0, len(src)
     while i < n:

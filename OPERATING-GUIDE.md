@@ -210,6 +210,11 @@ both complete.
 a real port will surface which of these actually bite first, and LESSONS will
 record it). Nothing here is a redesign; all are additive to the proven spine.
 
+**What's next after v1.0:** the prioritized v1.x plan lives in
+`RETROSPECTIVE-kit-v1.md` §5 — headline items: prove the kit on a real mid-size
+C port (the LESSONS delivery mechanism), gate-mutation verification of the gate
+suite itself, and running the CI for real in an Actions-enabled repo.
+
 ---
 
 *This guide is itself subject to the compounding rule: when a port teaches a better
