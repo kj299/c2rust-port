@@ -12,12 +12,12 @@ real SAST pass (clang analyzer, CodeQL, cppcheck) — it bootstraps the flaw
 inventory when you have minutes, not hours.
 
 Categories flagged (CWE in parens):
-  unbounded-copy      strcpy/strcat/sprintf/gets/scanf-family %s   (CWE-120/787)
+  unbounded-copy      strcpy/strcat/sprintf/gets/scanf %s/memcpy/memmove (CWE-120/787)
   strncpy-noterm      strncpy (may leave dst non-NUL-terminated)   (CWE-170)
   format-string       printf-family with a non-literal format      (CWE-134)
   snprintf-truncation snprintf/vsnprintf whose return is discarded  (CWE-252)
   stack-vla-alloca    alloca / variable-length arrays              (CWE-770)
-  int-overflow-mul    malloc(a * b) style size math                (CWE-190)
+  int-overflow-mul    malloc(a * b), or `t = n*w; malloc(t)`       (CWE-190)
   command-exec        system/popen/exec* with composed strings     (CWE-78)
   toctou              access()/stat() then open()/fopen()          (CWE-367)
   use-after-free      free(p) then p used before reassignment      (CWE-416)
@@ -53,17 +53,33 @@ CHECKS = [
      re.compile(r"\b(strcpy|strcat|sprintf|vsprintf|gets)\s*\(")),
     ("unbounded-copy", "CWE-120",
      re.compile(r"\b(scanf|fscanf|sscanf|vscanf|vfscanf|vsscanf)\s*\([^)]*%s")),
+    # memcpy/memmove with an attacker-controlled length is THE marquee CWE-120/787
+    # buffer-overflow sink in real C — flag every call as a question (is the size
+    # bounded by the destination?). Its total absence let the scanner report a
+    # clean bill on genuinely overflowing code. LESSONS #6, #14.
+    ("unbounded-copy", "CWE-120",
+     re.compile(r"\b(memcpy|memmove)\s*\(")),
     ("strncpy-noterm", "CWE-170",
      re.compile(r"\bstrncpy\s*\(")),
     ("stack-vla-alloca", "CWE-770",
      re.compile(r"\balloca\s*\(")),
+    # size math INSIDE the allocation call: malloc(a * b).
     ("int-overflow-mul", "CWE-190",
      re.compile(r"\b(malloc|calloc|realloc)\s*\([^;)]*[*][^;)]*\)")),
     ("command-exec", "CWE-78",
-     re.compile(r"\b(system|popen|execl|execlp|execv|execvp)\s*\(")),
+     re.compile(r"\b(system|popen|execl|execle|execlp|execv|execvp|execvpe|execve|"
+                r"posix_spawn|posix_spawnp)\s*\(")),
     ("toctou", "CWE-367",
      re.compile(r"\b(access|stat|lstat)\s*\(")),
 ]
+
+# Pre-computed overflow: `size_t total = n * w; ... malloc(total);`. The product
+# is computed into a variable and the multiply is no longer inside the alloc call,
+# so the malloc(a*b) regex above misses the most common real CWE-190 shape. This
+# windowed check flags malloc/calloc/realloc of a single identifier that was
+# assigned a product just above it. (Same windowed-lexical honesty caveat as the
+# UAF/double-free checks — local pattern, not flow analysis.)
+_ALLOC_VAR = re.compile(r"\b(?:malloc|realloc)\s*\(\s*(\w+)\s*\)")
 
 # printf-family: name -> index of the *format-string* argument. The format is
 # NOT always arg 0 — it follows the stream (fprintf), buffer (sprintf), size
@@ -238,16 +254,29 @@ def _var_regexes(var):
     )
 
 
+def _cut_at_block_end(w):
+    """Truncate the forward window at the close of the ENCLOSING block, found by
+    brace depth — not at the first `}` (which may close a nested block between
+    the free/decl and the use). `free(p); if (x) { log(); } use(p);` must keep
+    `use(p)` in scope. Braces in comments/strings are already masked out."""
+    depth = 0
+    for i, c in enumerate(w):
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth < 0:
+                return w[:i]
+    return w
+
+
 def _scan_use_after_free(src, orig_lines):
     hits = []
     for m in _FREE.finditer(src):
         var = m.group(1).replace("*", "").strip()
         if not var or var == "NULL" or var.isdigit():
             continue
-        w = src[m.end(): m.end() + _WINDOW]
-        cut = re.search(r"\n[ \t]*\}", w)   # stop at the enclosing block's close
-        if cut:
-            w = w[: cut.start()]
+        w = _cut_at_block_end(src[m.end(): m.end() + _WINDOW])
         refree, write, addr, use = _var_regexes(var)
         r_, wr, ad, us = refree.search(w), write.search(w), addr.search(w), use.search(w)
         stop = min([x.start() for x in (wr, ad) if x], default=len(w) + 1)
@@ -270,16 +299,31 @@ def _scan_uninit(src, orig_lines):
     hits = []
     for m in _UNINIT_DECL.finditer(src):
         var = m.group(1)
-        w = src[m.end(): m.end() + _WINDOW]
-        cut = re.search(r"\n[ \t]*\}", w)
-        if cut:
-            w = w[: cut.start()]
+        w = _cut_at_block_end(src[m.end(): m.end() + _WINDOW])
         _rf, write, addr, use = _var_regexes(var)
         wr, ad, us = write.search(w), addr.search(w), use.search(w)
         stop = min([x.start() for x in (wr, ad) if x], default=len(w) + 1)
         if us and us.start() < stop:
             line = _lineno(src, m.end() + us.start())
             hits.append({"line": line, "category": "uninitialized-read", "cwe": "CWE-457",
+                         "text": _line_text(orig_lines, line)})
+    return hits
+
+
+def _scan_precomputed_overflow(src, orig_lines):
+    """`size_t total = n * w; ... malloc(total);` — the product is computed into a
+    variable, so the `malloc(a*b)` regex misses it (the most common real CWE-190
+    shape). Flag a malloc/realloc of a single identifier that was assigned a
+    product (`ident = ... word * word`) within a short window above. Windowed-
+    lexical, not flow analysis — a question, not a proof."""
+    hits = []
+    for m in _ALLOC_VAR.finditer(src):
+        var = m.group(1)
+        back = src[max(0, m.start() - 250): m.start()]
+        # `var = <...> word * word` (a real multiply), not `var = *ptr` (deref).
+        if re.search(rf"\b{re.escape(var)}\s*=\s*[^;]*\w\s*\*\s*\w", back):
+            line = _lineno(src, m.start())
+            hits.append({"line": line, "category": "int-overflow-mul", "cwe": "CWE-190",
                          "text": _line_text(orig_lines, line)})
     return hits
 
@@ -301,6 +345,7 @@ def scan_text(src):
     hits.extend(_scan_snprintf_truncation(masked, orig_lines))
     hits.extend(_scan_use_after_free(masked, orig_lines))
     hits.extend(_scan_uninit(masked, orig_lines))
+    hits.extend(_scan_precomputed_overflow(masked, orig_lines))
     hits.sort(key=lambda h: (h["line"], h["category"]))
     return hits
 
@@ -350,6 +395,7 @@ void bad(char *u, char *dynfmt, char **dst) {
     r = "http://x"; q = strcat(p, u);   /* unbounded-copy; the // inside the
                                            string literal is NOT a comment */
     sscanf(u, "%s", buf);               /* unbounded-copy: scanf-family %s */
+    memcpy(buf, u, n);                  /* unbounded-copy: memcpy (attacker len) */
     strncpy(buf, u, 8);                 /* strncpy-noterm */
     printf(u);                          /* format-string: arg 0 non-literal */
     fprintf(stderr, "literal %s\n", u); /* SAFE: format arg is a literal */
@@ -358,10 +404,14 @@ void bad(char *u, char *dynfmt, char **dst) {
     snprintf(buf, 8, "%s", u);          /* snprintf-truncation: return discarded */
     char *p = malloc(n * width);        /* int-overflow-mul */
     *dst = malloc(n * m);               /* int-overflow-mul: deref-assign */
+    size_t total = n * w;               /* size computed into a variable... */
+    char *pp = malloc(total);           /* int-overflow-mul: malloc(precomputed product) */
     system(cmd);                        /* command-exec */
+    execve(path, argv, envp);           /* command-exec: execve */
     if (access(path, R_OK)) {}          /* toctou */
     char *d1 = grab(); free(d1); free(d1);   /* double-free of d1 */
     char *d2 = grab(); free(d2); sink(d2);   /* use-after-free: d2 read after free */
+    char *e = grab(); free(e); if (z) { note(); } sink(e); /* UAF across a nested block */
     char *d3 = grab(); free(d3); d3 = 0;     /* SAFE: reassigned after free */
     int *wild;                          /* uninitialized pointer... */
     *wild = 7;                          /* ...deref before write: uninitialized-read */
@@ -394,9 +444,18 @@ def _self_test():
     # while the deref-assign line (`*dst = strcpy(...)`, starts with '*'), the
     # call after a "//"-containing string literal, and the scanf-family %s
     # MUST. 4 real copy sites.
-    check("copy sites: deref-assign + string-'//' + sscanf scanned, comment ignored",
-          n("unbounded-copy") == 4)
-    check("deref-assign malloc line scanned (2 mul sites)", n("int-overflow-mul") == 2)
+    check("copy sites: deref-assign + string-'//' + sscanf + memcpy scanned, comment ignored",
+          n("unbounded-copy") == 5)
+    check("memcpy is flagged (the marquee CWE-120 sink)",
+          any(h["category"] == "unbounded-copy" and "memcpy" in h["text"] for h in hits))
+    check("mul sites: two inline malloc(a*b) + one precomputed malloc(total)",
+          n("int-overflow-mul") == 3)
+    check("precomputed overflow (t = n*w; malloc(t)) is flagged",
+          any(h["category"] == "int-overflow-mul" and "malloc(total)" in h["text"] for h in hits))
+    check("execve is flagged as command-exec",
+          any(h["category"] == "command-exec" and "execve" in h["text"] for h in hits))
+    check("use-after-free caught ACROSS a nested block (brace-depth window)",
+          any(h["category"] == "use-after-free" and "sink(e)" in h["text"] for h in hits))
     # The format-string fix (LESSONS #2): only NON-LITERAL format args flag.
     check("format-string flags exactly the 2 real non-literal calls "
           "(literal + commented-out calls ignored)", len(fmt_hits) == 2)

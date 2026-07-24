@@ -162,15 +162,38 @@ def find_unsafe_blocks(src: str):
         # `unsafe fn/trait/extern` → out of scope (clippy missing_safety_doc)
 
 
+def _first_comment_index(line: str) -> int:
+    """Index of the first REAL `//` or `/*` on the line (outside string/char
+    literals), or -1. Lets the own-line check require SAFETY: inside an actual
+    comment span, not inside a string — `unsafe { f("// SAFETY: x") }` is NOT
+    documented."""
+    i, n = 0, len(line)
+    while i < n:
+        c = line[i]
+        if c in "\"'":
+            q = c; i += 1
+            while i < n and line[i] != q:
+                i += 2 if line[i] == "\\" else 1
+            i += 1
+            continue
+        if line[i:i + 2] in ("//", "/*"):
+            return i
+        i += 1
+    return -1
+
+
 def has_safety_comment(lines, line_no: int, window: int) -> bool:
     """True if a `// SAFETY:` (or `/* SAFETY: */`) documents the block on
     `line_no`. Accepts a trailing marker on the block's own line, or a marker on
     the contiguous run of comment / attribute / blank lines *immediately* above
     it. The scan stops at the first real code line, so one block's SAFETY comment
     cannot bleed onto a following block, and gives up after `window` lines."""
-    # trailing `// SAFETY:` on the block's own line
+    # trailing `// SAFETY:` on the block's own line — the marker must sit inside a
+    # REAL comment span, not a string literal (a merge-blocking gate must not pass
+    # on `unsafe { f("... SAFETY: ...") }`). LESSONS #6, #14.
     own = lines[line_no - 1] if 0 < line_no <= len(lines) else ""
-    if SAFETY_MARK in own and ("//" in own or "/*" in own):
+    ci = _first_comment_index(own)
+    if ci >= 0 and SAFETY_MARK in own[ci:]:
         return True
     scanned = 0
     for idx in range(line_no - 2, -1, -1):  # walk upward from the line above
@@ -274,6 +297,17 @@ def self_test():
     check("exactly 1 undocumented block", len(undoc) == 1)
     check("undocumented is the block on line 5", undoc == [(5, "block")])
     check("string/comment `unsafe` ignored (no extra findings)", len(doc) + len(undoc) == 3)
+
+    # A `SAFETY:` substring inside a STRING LITERAL on the block's own line must
+    # NOT satisfy the gate — the marker must be in a real comment span.
+    fake = r'''unsafe { log("no doc // just SAFETY: in a string"); }'''
+    fdoc, fundoc = audit_text(fake, window=3)
+    check("SAFETY: inside a string literal does NOT document the block",
+          fundoc == [(1, "block")] and fdoc == [])
+    real = r'''unsafe { do_it(); } // SAFETY: real trailing comment'''
+    rdoc, rundoc = audit_text(real, window=3)
+    check("SAFETY: in a real trailing comment DOES document the block",
+          rdoc == [(1, "block")] and rundoc == [])
     print("\nself-test:", "OK" if ok else "FAILED")
     return 0 if ok else 1
 

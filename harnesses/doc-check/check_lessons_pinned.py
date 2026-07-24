@@ -52,10 +52,18 @@ def parse_lessons(text):
 
 
 def amended_code_paths(entry_body):
-    """Code paths named in the entry's `Section amended:` field (deduped)."""
+    """Code paths named in the entry's `Section amended:` field (deduped).
+
+    A long `Section amended` list is markdown-wrapped, and a wrap can fall
+    mid-path right after a `/` (`harnesses/cando/\\n  cando_diff.py`). Left as-is
+    the extractor matches neither half and SILENTLY skips that file — a fail-open
+    in the very gate that enforces fail-closed pinning (LESSONS #14, a #6
+    recurrence). Rejoin any whitespace that immediately follows a `/` before
+    extracting, so a wrapped path is checked, not dropped."""
     paths = []
     for m in AMENDED_RE.finditer(entry_body):
-        paths.extend(CODE_PATH_RE.findall(m.group(1)))
+        field = re.sub(r"/\s+", "/", m.group(1))
+        paths.extend(CODE_PATH_RE.findall(field))
     return list(dict.fromkeys(paths))
 
 
@@ -134,6 +142,17 @@ def _self_test():
             f.write("\n## 010. prose\n- **What happened:** touched harnesses/x/bad.sh\n"
                     "- **Section amended:** PLAYBOOK · Phase 2 only.\n")
         check("prose mentions outside Section-amended are ignored", run(root) == 0)
+
+        # LESSONS #14: a path a markdown line-wrap split after a `/` must still be
+        # extracted and enforced — else the gate silently skips it (fail-open).
+        wrapped = os.path.join(root, "harnesses", "x", "wrapped.py")
+        open(wrapped, "w").write("#!/usr/bin/env python3\nprint('no citation')\n")
+        with open(os.path.join(root, "LESSONS.md"), "a") as f:
+            f.write("\n## 011. wrapped path\n- **Section amended:** harnesses/x/\n"
+                    "  wrapped.py (the changed logic).\n")
+        check("a line-wrapped amended path is still checked (not skipped)", run(root) == 1)
+        open(wrapped, "w").write("#!/usr/bin/env python3\n# pinned (LESSONS #11)\n")
+        check("citing it clears the wrapped-path link", run(root) == 0)
     print("\nself-test:", "OK" if ok else "FAILED")
     return 0 if ok else 1
 
