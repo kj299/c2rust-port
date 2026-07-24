@@ -59,7 +59,7 @@ Smoke-test the harnesses anytime with `make check-kit` from the kit root —
 ## Skills
 
 `skills/` operationalizes this kit as invokable Claude Code skills —
-`porting-kit-{kickoff,cflaw-scan,oracle,module,audit,retrospective}`. They are
+`porting-kit-{kickoff,precondition,cflaw-scan,oracle,module,diff-fuzz,audit,retrospective}`. They are
 **thin wrappers**: they point at the authoritative docs here and run the real
 harness commands, never a divergent copy. **Keep them in integrity with the kit** —
 if you rename a harness or change a flag, update every skill that references it;

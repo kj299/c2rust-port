@@ -189,10 +189,10 @@ def _validate_vector(case, runs, rcs, ignore_exit):
 def capture(oracle, matrix_path, corpus, repeats, sort, mask_numbers, ignore_exit=False,
             holdout_path=None, validate=False):
     os.makedirs(corpus, exist_ok=True)
-    matrix = D.load_matrix(matrix_path)
+    matrix = D.load_matrix(matrix_path, allow_empty=True)
     holdout_names = []
     if holdout_path:
-        hold = D.load_matrix(holdout_path)
+        hold = D.load_matrix(holdout_path, allow_empty=True)
         holdout_names = [c["name"] for c in hold]
         overlap = sorted(set(holdout_names) & {c["name"] for c in matrix})
         if overlap:
@@ -310,7 +310,7 @@ def replay(rust, matrix_path, corpus, sort, mask_numbers, ignore_exit=False,
            holdout_path=None, final=False):
     _check_meta(corpus, sort, mask_numbers, ignore_exit)
     norm = lambda t: N.normalize_text(t, sort=sort, strip_blank=True, mask_numbers=mask_numbers)
-    matrix = D.load_matrix(matrix_path)
+    matrix = D.load_matrix(matrix_path, allow_empty=True)
     # Fail closed on a present-but-unreadable reservation record — a tampered or
     # partially written corpus.meta must not silently disable the holdout guard.
     try:
@@ -331,7 +331,7 @@ def replay(rust, matrix_path, corpus, sort, mask_numbers, ignore_exit=False,
             print("error: --final needs --holdout <file> (the reserved acceptance "
                   "set to run at final acceptance)", file=sys.stderr)
             return 2
-        hold = D.load_matrix(holdout_path)
+        hold = D.load_matrix(holdout_path, allow_empty=True)
         hold_names = {c["name"] for c in hold}
         overlap = sorted({c["name"] for c in matrix} & hold_names)
         if overlap:

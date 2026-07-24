@@ -1,2 +1,35 @@
+# Root .gitignore — the global safety net every port in this kit inherits.
+# Per-directory .gitignore files (skeleton/, examples/*/) still exist and are
+# authoritative for their tree; these unanchored patterns are the belt-and-
+# suspenders so a NEW port dir can't commit build junk before it grows its own.
+
+# Python (the harnesses are python3)
 __pycache__/
 *.pyc
+
+# Rust / Cargo build output (matches target/ at any depth)
+target/
+
+# Compiled objects and shared libraries (C oracle builds, ctypes .so, etc.)
+*.o
+*.so
+*.dylib
+*.dll
+*.rlib
+*.a
+
+# cargo-fuzz / differential-fuzz working state and crash artifacts
+corpus/
+artifacts/
+fuzz-findings/
+crash-*
+oom-*
+timeout-*
+
+# Harness-generated, non-source outputs
+reports/
+*.gen.json
+
+# Editor / OS noise
+*.swp
+.DS_Store

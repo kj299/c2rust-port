@@ -41,8 +41,9 @@ Usage:
               [--rules FILE] [--json]
   diff_run.py --self-test
 
-Exit: 0 = all match or all divergences are ledgered; 1 = unexplained divergence
-or any TIMEOUT.
+Exit: 0 = all match or all divergences are ledgered; 1 = unexplained divergence,
+any TIMEOUT, or a LEDGER-STALE case (a ledgered divergence that stopped occurring
+— a ledger ASSERTS a divergence, it does not license a silent MATCH).
 """
 from __future__ import annotations
 
@@ -73,18 +74,29 @@ def _validate_matrix(cases):
     return cases
 
 
-def load_matrix(path):
+def load_matrix(path, allow_empty=False):
     if path.endswith(".json"):
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
-        return _validate_matrix(data["case"] if isinstance(data, dict) and "case" in data else data)
-    try:
-        import tomllib
-    except ModuleNotFoundError:
-        sys.exit("error: TOML matrix needs Python 3.11+ (tomllib); use a .json matrix instead")
-    with open(path, "rb") as f:
-        data = tomllib.load(f)
-    return _validate_matrix(data.get("case", data if isinstance(data, list) else []))
+        cases = data["case"] if isinstance(data, dict) and "case" in data else data
+    else:
+        try:
+            import tomllib
+        except ModuleNotFoundError:
+            sys.exit("error: TOML matrix needs Python 3.11+ (tomllib); use a .json matrix instead")
+        with open(path, "rb") as f:
+            data = tomllib.load(f)
+        cases = data.get("case", data if isinstance(data, list) else [])
+    # A differential over ZERO cases is a misconfiguration (a mis-keyed matrix —
+    # `[[cases]]` for `[[case]]` — an empty file, or a glob that matched nothing),
+    # not a pass: it would report "0 cases, 0 divergences" and exit 0 over a
+    # totally wrong binary. Refuse it (LESSONS #6, gates fail closed). The fuzzer
+    # legitimately seeds from an empty matrix, so it opts in with allow_empty.
+    if not cases and not allow_empty:
+        sys.exit(f"error: matrix {path!r} loaded 0 cases — empty, mis-keyed "
+                 "(expected `[[case]]` / a top-level list or {\"case\": [...]}), or a "
+                 "glob that matched nothing. A differential over 0 cases cannot pass.")
+    return _validate_matrix(cases)
 
 
 _FP_RE = re.compile(r"\[sha256:([0-9a-fA-F]{6,64})\]")
@@ -123,7 +135,14 @@ def run_one(binary, case, default_timeout=15):
     argv = [binary] + [str(a) for a in case.get("args", [])]
     env = dict(os.environ)
     env.update({k: str(v) for k, v in case.get("env", {}).items()})
-    has_stdin = bool(case.get("stdin"))
+    # `stdin_bytes` (raw bytes) feeds the child EXACTLY those bytes — the fuzzer
+    # uses it so 0x80-0xFF reach the program verbatim; a plain `stdin` str is
+    # utf-8 encoded. (Before this, the fuzzer latin-1-decoded its bytes and
+    # run_one re-encoded utf-8, silently mangling every high byte — LESSONS #6:
+    # a fuzzer that can't feed the bytes it claims is a coverage hole.)
+    sb = case.get("stdin_bytes")
+    has_stdin = sb is not None or bool(case.get("stdin"))
+    inp = sb if sb is not None else (case["stdin"].encode("utf-8") if case.get("stdin") else None)
     # When a case gives no stdin, feed the child DEVNULL — NOT the parent's
     # inherited stdin. A binary that reads stdin (the skeleton `port` does)
     # would otherwise block forever on an interactive/tty parent, turning a
@@ -133,14 +152,19 @@ def run_one(binary, case, default_timeout=15):
     try:
         p = subprocess.run(
             argv,
-            input=case["stdin"].encode() if has_stdin else None,
+            input=inp,
             stdin=None if has_stdin else subprocess.DEVNULL,
             capture_output=True,
             timeout=case.get("timeout", default_timeout),
             env=env,
         )
-        return (p.stdout.decode("utf-8", "replace"), p.returncode, False,
-                p.stderr.decode("utf-8", "replace"))
+        # `backslashreplace`, NOT `replace`: `replace` maps EVERY invalid byte to
+        # the same U+FFFD, so a C tool emitting 0xFF and a Rust tool emitting 0xFE
+        # decode identically and compare as MATCH — a binary-output divergence
+        # invisible to the whole differential (LESSONS #6). backslashreplace keeps
+        # distinct bytes distinct (\xff vs \xfe) and stays printable/hashable/JSON-safe.
+        return (p.stdout.decode("utf-8", "backslashreplace"), p.returncode, False,
+                p.stderr.decode("utf-8", "backslashreplace"))
     except subprocess.TimeoutExpired:
         return "<<TIMEOUT>>\n", 124, True, ""
     except FileNotFoundError:
@@ -191,9 +215,24 @@ def compare_one(name, oracle_bin, rust_bin, case, known, sort, mask_numbers,
     # to accept). Oracle-only timeouts fall through to the normal DIVERGE
     # triage — fixing a C hang is a legitimate ledgered divergence.
     pin = known.get(name) if name in known else None
+    is_match = stdout_match and exit_match and stderr_match
     if r_to:
         verdict = "TIMEOUT"
-    elif stdout_match and exit_match and stderr_match:
+    elif name in known and is_match:
+        # A ledger entry ASSERTS a case diverges (an intentional fix-of-C-defect).
+        # If a ledgered case now MATCHes the oracle, that assertion is FALSE: the
+        # intentional divergence is gone — the fix was likely reverted (the whole
+        # point of the port stopped happening) or the C changed too. Silently
+        # passing it as MATCH is the exact hole that let the adler32 exit test go
+        # green after the overflow fix was reverted. An allow-list must ASSERT the
+        # accepted state, not merely SUPPRESS (LESSONS #14). Fails, never passes.
+        verdict = "LEDGER-STALE"
+        note += (f"ledgered case {name!r} no longer diverges from the oracle — the "
+                 f"intentional divergence is GONE (fix reverted, or the C changed "
+                 f"too). Re-triage: restore the fix, or remove the ledger entry if "
+                 f"the match is now correct. A ledger asserts a divergence; it does "
+                 f"not license a silent MATCH.\n")
+    elif is_match:
         verdict = "MATCH"
     elif name in known:
         if pin is not None and not fp.startswith(pin):
@@ -204,12 +243,13 @@ def compare_one(name, oracle_bin, rust_bin, case, known, sort, mask_numbers,
             verdict = "DIVERGE(ledgered)"
     else:
         verdict = "DIVERGE"
+    clean = verdict in ("MATCH", "LEDGER-STALE")  # no observed-divergence fingerprint
     return {
         "name": name, "verdict": verdict,
         "oracle_rc": o_rc, "rust_rc": r_rc, "exit_match": exit_match,
         "timed_out": {"oracle": o_to, "rust": r_to},
-        "fingerprint": None if verdict == "MATCH" else fp[:12],
-        "fingerprint_full": None if verdict == "MATCH" else fp,
+        "fingerprint": None if clean else fp[:12],
+        "fingerprint_full": None if clean else fp,
         "pinned": pin is not None,
         "diff": None if verdict == "MATCH" else (note + body),
     }
@@ -251,6 +291,7 @@ def main(argv=None):
                       args.with_stderr, rules)
     unexplained = [r for r in results if r["verdict"] == "DIVERGE"]
     timeouts = [r for r in results if r["verdict"] == "TIMEOUT"]
+    stale = [r for r in results if r["verdict"] == "LEDGER-STALE"]
     if args.json:
         print(json.dumps(results, indent=2))
     else:
@@ -259,17 +300,20 @@ def main(argv=None):
             if r["verdict"] == "DIVERGE(ledgered)" and not r["pinned"]:
                 print(f"    (unpinned ledger entry — pin it as `- [x] {r['name']} "
                       f"[sha256:{r['fingerprint']}]: <why>` so a changed divergence fails again)")
-            if r["verdict"] in ("DIVERGE", "TIMEOUT") and r["diff"]:
+            if r["verdict"] in ("DIVERGE", "TIMEOUT", "LEDGER-STALE") and r["diff"]:
                 sys.stdout.write(r["diff"])
         print(f"\n{len(results)} cases, {len(unexplained)} unexplained divergence(s), "
-              f"{len(timeouts)} timeout(s)")
+              f"{len(timeouts)} timeout(s), {len(stale)} stale ledger entrie(s)")
         if unexplained:
             print("Triage each: fix the Rust, OR record an intentional fix-of-C-defect in",
                   args.ledger, "as `- [x] <case>: <why>`.")
         if timeouts:
             print("A TIMEOUT is a hard failure (a hang is a design smell — design the "
                   "blocking call out); it cannot be ledgered.")
-    return 1 if (unexplained or timeouts) else 0
+        if stale:
+            print("A LEDGER-STALE case no longer diverges — the fix may be reverted. A "
+                  "ledger asserts a divergence; restore the fix or remove the entry.")
+    return 1 if (unexplained or timeouts or stale) else 0
 
 
 def _self_test():
@@ -374,6 +418,43 @@ def _self_test():
             check("path-traversal case name rejected", False)
         except SystemExit:
             check("path-traversal case name rejected", True)
+        # An empty / mis-keyed matrix must be REFUSED, not pass over 0 cases
+        # (a `[[cases]]`-for-`[[case]]` typo used to exit 0 over a wrong binary).
+        empty = os.path.join(d, "empty.json"); open(empty, "w").write("[]")
+        try:
+            load_matrix(empty)
+            check("empty matrix refused (fail closed)", False)
+        except SystemExit:
+            check("empty matrix refused (fail closed)", True)
+        check("empty matrix allowed only when the caller opts in (fuzzer seeds)",
+              load_matrix(empty, allow_empty=True) == [])
+
+    # LEDGER-STALE (LESSONS #14): a ledgered case that STOPS diverging must FAIL,
+    # not silently MATCH — else a reverted fix hides. echo-vs-echo matches; a
+    # ledger entry for it asserts a divergence that isn't there.
+    with tempfile.TemporaryDirectory() as d:
+        led = os.path.join(d, "led.md")
+        open(led, "w").write("- [x] identical: pretend this diverges intentionally\n")
+        res = compare(echo, echo, [{"name": "identical", "args": ["hi"]}],
+                      ledger=led, sort=False, mask_numbers=False)
+        check("a ledgered case that now MATCHes → LEDGER-STALE, not MATCH",
+              res[0]["verdict"] == "LEDGER-STALE")
+        check("LEDGER-STALE explains the vanished divergence",
+              "no longer diverges" in (res[0]["diff"] or ""))
+
+    # binary-stdout fidelity: distinct invalid bytes must NOT collapse to MATCH.
+    with tempfile.TemporaryDirectory() as d:
+        o = os.path.join(d, "o.sh"); open(o, "w").write("#!/bin/sh\nprintf '\\377'\n"); os.chmod(o, 0o755)
+        r = os.path.join(d, "r.sh"); open(r, "w").write("#!/bin/sh\nprintf '\\376'\n"); os.chmod(r, 0o755)
+        bc = [{"name": "binbyte", "args": []}]
+        res = compare(o, r, bc, ledger=None, sort=False, mask_numbers=False)
+        check("0xFF vs 0xFE binary stdout → DIVERGE (not collapsed to U+FFFD MATCH)",
+              res[0]["verdict"] == "DIVERGE")
+
+    # stdin_bytes feeds EXACT bytes (the fuzzer's high-byte path, LESSONS #6):
+    # a program that echoes stdin gets 0xFE back verbatim, not utf-8-mangled.
+    catout, _rc, _to, _e = run_one(cat, {"name": "raw", "args": [], "stdin_bytes": b"\xfe\x00A"})
+    check("stdin_bytes reaches the child verbatim (0xFE preserved)", "\\xfe" in catout)
 
     # per-project rules (--rules): a custom rule masks a project token so an
     # otherwise-diverging pair matches — proving rules thread through compare.
