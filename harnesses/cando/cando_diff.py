@@ -62,6 +62,10 @@ def load_vectors(path):
         with open(path, "rb") as f:
             data = tomllib.load(f)
         calls = data.get("call", data if isinstance(data, list) else [])
+    if not calls:
+        sys.exit(f"error: vector suite {path!r} loaded 0 vectors — empty or mis-keyed "
+                 "(expected `[[call]]` / a top-level list). A differential over 0 "
+                 "vectors cannot pass (LESSONS #6, fail closed).")
     for i, c in enumerate(calls):
         if not c.get("func") or not isinstance(c["func"], str):
             sys.exit(f"error: vector #{i} needs a string `func`")
@@ -108,20 +112,26 @@ def compare(oracle_driver, rust_driver, vectors, ledger, allow_oracle_error):
 def run(oracle_driver, rust_driver, vectors_path, ledger, allow_oracle_error, as_json):
     results = compare(oracle_driver, rust_driver, load_vectors(vectors_path),
                       ledger, allow_oracle_error)
-    bad = [r for r in results if r["verdict"] in ("DIVERGE", "TIMEOUT", "BADVECTOR")]
+    _FAIL = ("DIVERGE", "TIMEOUT", "BADVECTOR", "LEDGER-STALE")
+    bad = [r for r in results if r["verdict"] in _FAIL]
     if as_json:
         print(json.dumps(results, indent=2))
     else:
         for r in results:
             print(f"[{r['verdict']:18}] {r['name']}")
-            if r["verdict"] in ("DIVERGE", "TIMEOUT", "BADVECTOR") and r.get("diff"):
+            if r["verdict"] in _FAIL and r.get("diff"):
                 sys.stdout.write(r["diff"])
         n_bad = sum(1 for r in results if r["verdict"] == "BADVECTOR")
+        n_stale = sum(1 for r in results if r["verdict"] == "LEDGER-STALE")
         n_div = sum(1 for r in results if r["verdict"] in ("DIVERGE", "TIMEOUT"))
-        print(f"\n{len(results)} vector(s): {n_div} divergence(s), {n_bad} bad vector(s)")
+        print(f"\n{len(results)} vector(s): {n_div} divergence(s), {n_bad} bad vector(s), "
+              f"{n_stale} stale ledger entrie(s)")
         if n_bad:
             print("BADVECTOR: the C driver rejected these — fix the vector (or "
                   "--allow-oracle-error if a nonzero status is a valid result).")
+        if n_stale:
+            print("LEDGER-STALE: a ledgered divergence no longer occurs — the fix may "
+                  "be reverted. A ledger asserts a divergence; restore it or remove the entry.")
         if n_div:
             print("Triage each divergence: fix the Rust, OR ledger the intentional "
                   "fix-of-C-defect (`- [x] <name> [sha256:..]: why`).")
@@ -191,8 +201,28 @@ def _self_test():
         check("ledgered function divergence → suppressed",
               res[0]["verdict"] == "DIVERGE(ledgered)")
 
+        # LEDGER-STALE (LESSONS #14): a ledgered vector that STOPS diverging must
+        # fail, not silently MATCH — `add 2 3` matches on both drivers, so a
+        # ledger entry for it asserts a divergence that isn't there.
+        open(led, "w").write("- [x] add#0: pretend add diverges intentionally\n")
+        res = compare(oracle, rust, [{"func": "add", "args": [2, 3]}],
+                      ledger=led, allow_oracle_error=False)
+        check("a ledgered vector that now MATCHes → LEDGER-STALE",
+              res[0]["verdict"] == "LEDGER-STALE")
+        check("empty vector suite is refused (fail closed)",
+              _refuses_empty(d))
+
     print("\nself-test:", "OK" if ok else "FAILED")
     return 0 if ok else 1
+
+
+def _refuses_empty(d):
+    import os
+    p = os.path.join(d, "empty.json"); open(p, "w").write("[]")
+    try:
+        load_vectors(p); return False
+    except SystemExit:
+        return True
 
 
 def main(argv=None):

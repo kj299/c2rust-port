@@ -101,7 +101,9 @@ def _seeds(seed_files, matrix_path):
         with open(f, "rb") as fh:
             seeds.append(fh.read())
     if matrix_path:
-        for case in D.load_matrix(matrix_path):
+        # allow_empty: a matrix with no cases is a legitimate (empty) seed set for
+        # the fuzzer, unlike a differential where 0 cases is a misconfiguration.
+        for case in D.load_matrix(matrix_path, allow_empty=True):
             s = case.get("stdin")
             if isinstance(s, str) and s:
                 seeds.append(s.encode())
@@ -115,10 +117,12 @@ def _seeds(seed_files, matrix_path):
 
 
 def _case_for(data: bytes, args, timeout):
-    # Inputs are bytes; run_one wants a str stdin (it .encode()s). Round-trip
-    # through latin-1 so every byte survives 1:1 (utf-8 would mangle 0x80-0xff).
+    # Feed the EXACT fuzz bytes via stdin_bytes — run_one writes them verbatim.
+    # (The old latin-1-decode-then-run_one-utf-8-encode round-trip silently
+    # mangled every 0x80-0xFF byte, so the fuzzer never actually exercised the
+    # high/invalid-byte inputs its threat model targets. LESSONS #6, #14.)
     return {"name": "fuzz", "args": list(args),
-            "stdin": data.decode("latin-1"), "timeout": timeout}
+            "stdin_bytes": data, "timeout": timeout}
 
 
 def _is_finding(verdict):

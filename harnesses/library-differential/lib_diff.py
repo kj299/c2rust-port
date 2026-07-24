@@ -125,6 +125,10 @@ def load_vectors(path):
         with open(path, "rb") as f:
             data = tomllib.load(f)
         vectors = data.get("vector", data if isinstance(data, list) else [])
+    if not vectors:
+        sys.exit(f"error: vector suite {path!r} loaded 0 vectors — empty or mis-keyed "
+                 "(expected `[[vector]]` / a top-level list). A differential over 0 "
+                 "vectors cannot pass (LESSONS #6, fail closed).")
     D._validate_matrix(vectors)  # names are non-empty, no separators/traversal
     for v in vectors:
         if not v.get("function"):
@@ -299,13 +303,25 @@ def compare_call(vector, c_res, r_res, known):
     c_bad = c_res["status"] in ("crash", "timeout")
     pin = known.get(name)
 
+    is_match = (not c_bad) and ret_match and out_match
     if r_res["status"] == "timeout":
         verdict = "TIMEOUT"
     elif r_res["status"] == "crash":
         verdict = "CRASH"
     elif r_res["status"] == "error" or c_res["status"] == "error":
         verdict = "ERROR"
-    elif (not c_bad) and ret_match and out_match:
+    elif name in known and is_match:
+        # A ledger entry ASSERTS this function call diverges (a fix-of-C-defect).
+        # If it now MATCHes, the intentional divergence is gone — the fix was
+        # likely reverted. Silently passing it as MATCH is what let the adler32
+        # exit test go green after the overflow fix was reverted at the library
+        # level. An allow-list must assert, not merely suppress (LESSONS #14).
+        verdict = "LEDGER-STALE"
+        text += (f"ledgered vector {name!r} no longer diverges from the C — the "
+                 f"intentional divergence is GONE (fix reverted, or the C changed "
+                 f"too). Re-triage: restore the fix, or remove the ledger entry. A "
+                 f"ledger asserts a divergence; it does not license a silent MATCH.\n")
+    elif is_match:
         verdict = "MATCH"
     elif name in known:
         if pin is not None and not fp.startswith(pin):
@@ -317,11 +333,12 @@ def compare_call(vector, c_res, r_res, known):
     else:
         verdict = "DIVERGE"
 
+    clean = verdict in ("MATCH", "LEDGER-STALE")
     return {
         "name": name, "verdict": verdict,
         "c_status": c_res["status"], "rust_status": r_res["status"],
         "c_ret": c_res["ret"], "rust_ret": r_res["ret"],
-        "fingerprint": None if verdict == "MATCH" else fp[:12],
+        "fingerprint": None if clean else fp[:12],
         "pinned": pin is not None,
         "diff": None if verdict == "MATCH" else text,
     }
@@ -338,7 +355,7 @@ def compare(c_lib, rust_lib, vectors, c_symbols, rust_symbols, ledger,
     return results
 
 
-_FAIL_VERDICTS = ("DIVERGE", "CRASH", "TIMEOUT", "ERROR")
+_FAIL_VERDICTS = ("DIVERGE", "CRASH", "TIMEOUT", "ERROR", "LEDGER-STALE")
 
 
 def _report(results, as_json):
@@ -479,6 +496,12 @@ def _self_test():
         open(led, "w").write("- [x] caseconv [sha256:000000000000]: stale\n")
         check("stale pin → DIVERGE again (a changed divergence re-fails)",
               verdict(v_case, cs, rs, ledger=led)["verdict"] == "DIVERGE")
+        # LEDGER-STALE (LESSONS #14): a ledgered vector that now MATCHes must fail,
+        # not silently pass — strlen matches on both sides, so a ledger entry for
+        # it asserts a divergence that isn't there (fix reverted at library level).
+        open(led, "w").write("- [x] strlen: pretend strlen diverges intentionally\n")
+        check("a ledgered vector that now MATCHes → LEDGER-STALE",
+              verdict(v_len, ledger=led)["verdict"] == "LEDGER-STALE")
 
     # --- crash isolation (fail-closed): a faulting C-ABI call is a finding ---
     v_boom = {"name": "boom", "function": "boom", "returns": "int",
