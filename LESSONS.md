@@ -433,3 +433,58 @@ the emphasized half.
   harnesses/doc-check/check_lessons_pinned.py (new) + Makefile · check-kit;
   LESSONS.md · format header; PROMPTS/90 · step 3;
   skills/porting-kit-retrospective.
+
+---
+
+## 014. An allow-list must ASSERT the accepted state, not merely SUPPRESS it
+
+- **Date:** 2026-07-24
+- **Codebase:** the Porting Kit itself (comprehensive multi-lens audit → v1.x)
+- **What happened:** A six-lens adversarial audit found the deepest hole in the
+  whole kit, in the v1.0 exit test itself: **a ledgered divergence is pure
+  suppression — it never asserts the divergence still occurs.** A ledger entry
+  says "this case intentionally differs from C because we fixed a C bug," yet
+  `compare_one` evaluated `MATCH` *before* `name in known`, so if a ledgered case
+  *stopped* diverging it was silently downgraded to `MATCH` and passed. Reverting
+  the adler32 overflow fix with `wrapping_add` (C-identical output — what a dev
+  "matching C" writes) made the flagship exit test go **green, full success
+  banner, exit 0**, in BOTH library differentials. The port's entire reason to
+  exist could be deleted and every gate stayed green. This is distinct from #8
+  (which pins a *changed* divergence): #8 caught a divergence that *mutated*; this
+  is a divergence that *vanished*. The fingerprint pin never fires on a vanish,
+  because there is no divergence left to fingerprint. Generalizes: any allow-list
+  entry (a ledgered divergence, a suppressed lint, an ignored advisory, an
+  expected-failure test) that only *suppresses* rots into a blind spot — it must
+  also *assert* that the condition it accepts is still present, or accepting a
+  thing becomes not-looking-at it.
+- **Kit change:** a ledgered case that now MATCHes is a new **`LEDGER-STALE`**
+  verdict — a hard failure (never passes, never ledgerable), in the shared
+  `compare_one` (diff_run + cando + diff-fuzz) and independently in `lib_diff`'s
+  `compare_call` (it has its own comparison path — the fix had to be applied
+  twice, which is itself why the audit checked *both* differentials). Pinned in
+  three self-tests and proven end-to-end: reverting the adler32 fix now fails the
+  exit test. **Same audit, recurrences of #6 (fail-closed) fixed and cited in
+  place, not minted as new lessons:** an empty/mis-keyed matrix made every
+  differential exit 0 over a wrong binary (now refused); invalid-UTF-8 stdout
+  collapsed to `MATCH` via `decode(replace)` → U+FFFD (now `backslashreplace`,
+  bytes stay distinct); the fuzzer latin-1-decoded then utf-8-re-encoded its bytes,
+  never feeding the high bytes it targets (now `stdin_bytes`, verbatim); a
+  `SAFETY:` substring inside a string literal passed the unsafe gate (now checked
+  in a real comment span); and `scan_c_flaws` had no `memcpy`/`memmove` check and
+  missed pre-computed overflow (`t=n*w; malloc(t)`) and a UAF across a nested
+  block — a Phase-0 scanner reporting "0 flaws" on vulnerable C (all added). And
+  the pass tripped one more, in the gate that enforces *this very field*: the
+  lessons-pinned check (LESSONS #13) silently skipped any `Section amended` path a
+  markdown line-wrap split after a `/` (`harnesses/cando/`⏎`cando_diff.py`) —
+  matching neither half — so `audit_unsafe.py` here went unchecked until it too
+  was flagged. The extractor now rejoins wrapped paths (pinned self-test); the gate
+  meant to make pinning fail-closed had itself been failing open.
+- **Section amended:** harnesses/differential/diff_run.py (`compare_one`
+  LEDGER-STALE + `run_one` byte fidelity + `load_matrix` empty-guard);
+  harnesses/library-differential/lib_diff.py (`compare_call`);
+  harnesses/cando/cando_diff.py; harnesses/diff-fuzz/diff_fuzz.py;
+  harnesses/unsafe-audit/audit_unsafe.py;
+  harnesses/c-flaw-scan/scan_c_flaws.py;
+  harnesses/doc-check/check_lessons_pinned.py (rejoin wrapped paths + self-test);
+  and RETROSPECTIVE-kit-audit.md (the finding inventory + the v1.x backlog of
+  what was NOT fixed).
