@@ -175,9 +175,11 @@ team owns, or a real toolchain/port this repo can't provide).
 
 **Burn-down status** (updated as items land, so this stays the live backlog rather
 than a snapshot): ✅ **2** (threat-model gate), ✅ **4** (ledger name collisions),
-✅ **6** (orphan linked), ✅ **7** (gate count) — all closed 2026-07-25. Item **3**
-is partially discharged (CI now runs; sanitizers still don't). Items **1**, **5**,
-**8** remain open, plus the keystone: port foreign C.
+✅ **5** (perf NOISY + advisory mode), ✅ **6** (orphan linked), ✅ **7** (gate
+count), ✅ **8** (report provenance) — all closed 2026-07-25. Item **3** is
+partially discharged (CI now runs; sanitizers still don't). What remains: item
+**1** (`warn`→`deny`, a kickoff policy call), the sanitizers, and the keystone:
+**port foreign C**.
 
 Also closed 2026-07-25, from the *v1* backlog rather than this list:
 `RETROSPECTIVE-kit-v1.md` §5 item 2 — **gate-mutation verification** now exists
@@ -225,10 +227,16 @@ diff-fuzz self-test that crashed rather than failed on zero findings. Both fixed
    hard error** instead of a silent `dict` overwrite — which also closes the
    related fail-open where a duplicate entry's later pin silently won over the
    earlier one. Truncation collisions now announce themselves at parse time.
-5. **The perf gate is wall-clock and inherently flaky.** `perf_gate.py` compares
-   a ratio against a default 1.3× threshold over N repeats; on a noisy CI runner
-   this can false-fail or false-pass. Acceptable as an advisory gate; should be
-   documented as non-blocking-by-default rather than presented as a hard gate.
+5. ✅ **CLOSED 2026-07-25 — the perf gate is wall-clock and was presented as
+   always-blocking.** Two controls now make it honest: a **NOISY** verdict when a
+   side's own repeats disagree beyond `--noise` (a machine drowning the signal
+   cannot support OK *or* SLOW — like UNMEASURABLE, can't-measure is a failure,
+   not a pass), and a **`--warn` advisory mode** for shared/noisy runners, where
+   the hard gate belongs on a quiet box. The diagnosis was then **confirmed
+   live**: the first busy-machine run after the change flaked the flagship
+   adler32 exit test at its perf phase — `run.sh` (which runs on GitHub-hosted
+   shared runners) now uses `--warn`, with the hard gate reserved for a quiet
+   machine before cutover.
 
 **P3 — hygiene and honesty:**
 
@@ -244,10 +252,16 @@ diff-fuzz self-test that crashed rather than failed on zero findings. Both fixed
    falsify history. The note carries the current count and points to this document.
    Prose counts remain outside the doc-flags gate's reach — the durable fix is to
    stop hard-coding them, which the note now does by deferring to `make check-kit`.
-8. **`progress.py` trusts that a well-formed report reflects a real run.** Ingest
-   is correctly fail-closed on *malformed/missing* reports, but it cannot detect a
-   *stale* or hand-authored `--json` report that is shape-valid. A run-provenance
-   stamp (git SHA + timestamp the ingest verifies against the tree) would close it.
+8. ✅ **CLOSED 2026-07-25 — `progress.py` trusted that a well-formed report
+   reflects a real run.** Every ingested harness (`diff_run`, `lib_diff`,
+   `diff_fuzz`, `audit_unsafe`) now stamps its `--json` report with run
+   provenance — harness name, UTC timestamp, and the git sha it ran at (one
+   shared `provenance_stamp`, in `diff_run`) — and ingest **verifies the stamp
+   against the tree**: a report from a different commit is refused as STALE, a
+   sha-less report falls back to an age check (`--max-age-min`, default 24 h),
+   an unstamped legacy report is refused unless `--allow-unstamped`, and an
+   unreadable timestamp fails closed. A shape-valid report generated before the
+   code changed can no longer advance a gate.
 
 ## 7. Bottom line
 

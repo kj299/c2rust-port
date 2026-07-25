@@ -58,7 +58,7 @@ repo-root `porting-kit/`; adjust the paths inside if you vendor it elsewhere).
 | `harnesses/diff-fuzz/diff_fuzz.py` | differential fuzzing: same generated input to C & Rust, minimize divergences | CI + nightly |
 | `harnesses/cando/cando_diff.py` (+ driver templates) | function-level differential for C-ABI **libraries**; C-baseline-validated vectors | CI |
 | `harnesses/library-differential/lib_diff.py` | complementary ctypes library differential — no driver, auto return + output-buffer/ptr compare | CI |
-| `harnesses/perf/perf_gate.py` | fail a module >1.3× the C median runtime (a perf bug, not "the cost of Rust") | CI |
+| `harnesses/perf/perf_gate.py` | fail a module >1.3× the C median runtime (a perf bug, not "the cost of Rust"); NOISY when repeats disagree; `--warn` advisory mode for shared/noisy runners | CI (advisory on shared runners) |
 | `harnesses/golden/golden.py` | capture/version/replay the oracle; flag oracle nondeterminism | CI |
 | `harnesses/fuzz/gen_fuzz_target.sh` | scaffold a cargo-fuzz target per module | CI smoke + nightly |
 | `harnesses/sanitizers/run_sanitizers.sh` | Miri / ASan / UBSan / TSan over the unsafe layer | CI |

@@ -104,6 +104,27 @@ _FP_RE = re.compile(r"\[sha256:([0-9a-fA-F]{6,64})\]")
 _QUOTED_NAME_RE = re.compile(r"^`([^`]+)`")
 
 
+def provenance_stamp(harness):
+    """Run-provenance stamp for --json reports: which harness, when, and at what
+    git commit. `progress.py ingest` verifies the stamp against the tree it runs
+    in, so a STALE report (generated before the code changed) or a hand-authored
+    shape-valid one can no longer advance a gate silently
+    (RETROSPECTIVE-kit-audit.md §6 item 8). `git_sha` is None outside a git
+    checkout — ingest then falls back to an age check."""
+    import datetime
+    import subprocess
+    try:
+        p = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True,
+                           text=True, timeout=10)
+        sha = p.stdout.strip() if p.returncode == 0 and p.stdout.strip() else None
+    except (OSError, subprocess.SubprocessError):
+        sha = None
+    return {"harness": harness,
+            "generated_at": datetime.datetime.now(datetime.timezone.utc)
+                            .isoformat(timespec="seconds"),
+            "git_sha": sha}
+
+
 def load_ledger(path):
     """Known-intentional divergences as {case-name: fingerprint-or-None}. The
     ledger is human-readable Markdown; we harvest `- [x] case-name: reason`
@@ -326,7 +347,10 @@ def main(argv=None):
     timeouts = [r for r in results if r["verdict"] == "TIMEOUT"]
     stale = [r for r in results if r["verdict"] == "LEDGER-STALE"]
     if args.json:
-        print(json.dumps(results, indent=2))
+        # Wrapped shape {provenance, results} so `progress.py ingest` can verify
+        # the report is from THIS tree, not a stale or hand-authored one.
+        print(json.dumps({"provenance": provenance_stamp("diff_run"),
+                          "results": results}, indent=2))
     else:
         for r in results:
             print(f"[{r['verdict']:18}] {r['name']}")

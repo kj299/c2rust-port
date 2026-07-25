@@ -87,6 +87,10 @@ import os
 import queue as _queue
 import struct
 import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                "..", "differential"))
+import diff_run as _D  # noqa: E402  (shared provenance_stamp)
 import time
 
 # On macOS, forking after the Objective-C runtime initializes aborts the child;
@@ -361,7 +365,8 @@ _FAIL_VERDICTS = ("DIVERGE", "CRASH", "TIMEOUT", "ERROR", "LEDGER-STALE")
 def _report(results, as_json):
     fails = [r for r in results if r["verdict"] in _FAIL_VERDICTS]
     if as_json:
-        print(json.dumps(results, indent=2))
+        print(json.dumps({"provenance": _D.provenance_stamp("lib_diff"),
+                          "results": results}, indent=2))
     else:
         for r in results:
             print(f"[{r['verdict']:18}] {r['name']}")

@@ -252,7 +252,11 @@ def run(paths, window, warn, as_json, quiet):
             findings.append({"file": path, "line": line_no, "kind": kind})
 
     if as_json:
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                        "..", "differential"))
+        import diff_run as _D
         print(json.dumps({
+            "provenance": _D.provenance_stamp("audit_unsafe"),
             "documented": total_doc,
             "undocumented": total_undoc,
             "findings": findings,

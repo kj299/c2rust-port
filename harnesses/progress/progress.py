@@ -112,6 +112,71 @@ def _load_report(jf):
         return None
 
 
+def _repo_head():
+    """HEAD sha of the repo we're ingesting in, or None outside a checkout."""
+    import subprocess
+    try:
+        p = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True,
+                           text=True, timeout=10)
+        return p.stdout.strip() if p.returncode == 0 and p.stdout.strip() else None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def _split_report(rep):
+    """(provenance-stamp-or-None, payload). Stamped diff_run/lib_diff reports are
+    wrapped `{"provenance": .., "results": [..]}`; stamped diff_fuzz/audit_unsafe
+    reports are dicts with a `provenance` key; a bare list is a legacy unstamped
+    report."""
+    if isinstance(rep, dict) and "results" in rep:
+        return rep.get("provenance"), rep["results"]
+    if isinstance(rep, dict):
+        return rep.get("provenance"), rep
+    return None, rep
+
+
+def _provenance_ok(stamp, jf, max_age_min, allow_unstamped, repo_sha):
+    """Verify a report's run-provenance against the tree (RETROSPECTIVE-kit-audit
+    §6 item 8): a shape-valid report may still be STALE — generated before the
+    code changed — or hand-authored. sha comparison is primary (report's commit
+    must BE the tree's commit); when either side has no sha, the stamp's age is
+    the fallback. Unstamped legacy reports are refused unless --allow-unstamped.
+    Returns True to ingest; on False the report is skipped with a warning (fail
+    closed: skipping never advances a gate)."""
+    import datetime
+    if not isinstance(stamp, dict):
+        if allow_unstamped:
+            print(f"warn: {jf}: unstamped legacy report ingested via "
+                  f"--allow-unstamped; re-run the harness to stamp it", file=sys.stderr)
+            return True
+        print(f"warn: skipping {jf}: no provenance stamp — a report must prove "
+              f"which tree it came from (re-run the harness with --json, or pass "
+              f"--allow-unstamped to ingest legacy reports)", file=sys.stderr)
+        return False
+    rep_sha = stamp.get("git_sha")
+    if rep_sha and repo_sha:
+        if rep_sha != repo_sha:
+            print(f"warn: skipping {jf}: STALE report — generated at commit "
+                  f"{rep_sha[:12]}, tree is at {repo_sha[:12]}; re-run the harness "
+                  f"against the current code", file=sys.stderr)
+            return False
+        return True
+    # no sha on one side (outside a checkout) → the stamp's age decides
+    try:
+        gen = datetime.datetime.fromisoformat(stamp["generated_at"])
+        age_min = (datetime.datetime.now(datetime.timezone.utc) - gen).total_seconds() / 60
+    except (KeyError, TypeError, ValueError):
+        print(f"warn: skipping {jf}: unreadable provenance timestamp (fail closed)",
+              file=sys.stderr)
+        return False
+    if age_min > max_age_min:
+        print(f"warn: skipping {jf}: report is {age_min:.0f} min old "
+              f"(> --max-age-min {max_age_min}) and carries no git sha to verify — "
+              f"re-run the harness", file=sys.stderr)
+        return False
+    return True
+
+
 def _clean_unsafe(rep):
     return isinstance(rep, dict) and rep.get("undocumented", 1) == 0
 
@@ -131,7 +196,8 @@ def _clean_fuzz(rep):
             and rep.get("findings", [None]) == [])
 
 
-def cmd_ingest(path, unsafe_jsons=None, diff_jsons=None, lib_jsons=None, fuzz_jsons=None):
+def cmd_ingest(path, unsafe_jsons=None, diff_jsons=None, lib_jsons=None, fuzz_jsons=None,
+               allow_unstamped=False, max_age_min=1440, repo_sha="auto"):
     """Auto-advance modules from the harnesses' own --json reports. Each report's
     file STEM must equal the module name (name reports per module, e.g.
     `diff_run.py ... --json > <mod>.json`); substring matching would let module
@@ -141,14 +207,27 @@ def cmd_ingest(path, unsafe_jsons=None, diff_jsons=None, lib_jsons=None, fuzz_js
         --unsafe-json (audit_unsafe, 0 undocumented)               -> unsafe_audited
     A gate advances a module only from its immediate predecessor, and the steps
     run in rung order, so a module with several clean reports climbs several gates
-    in one ingest. (`sanitized` has no --json harness — set it manually.)"""
+    in one ingest. (`sanitized` has no --json harness — set it manually.)
+
+    Every report must also clear PROVENANCE (RETROSPECTIVE-kit-audit §6 item 8):
+    its stamp's git sha must match the tree's HEAD (age is the fallback when a
+    sha is unavailable; `--max-age-min`, default 1440). A shape-valid report is
+    not proof of a clean run — it may predate the code it vouches for. Unstamped
+    legacy reports need `--allow-unstamped`."""
     state = load(path)
+    if repo_sha == "auto":
+        repo_sha = _repo_head()
 
     def clean(files, predicate):
         stems = set()
         for jf in (files or []):
             rep = _load_report(jf)
-            if rep is not None and predicate(rep):
+            if rep is None:
+                continue
+            stamp, payload = _split_report(rep)
+            if not _provenance_ok(stamp, jf, max_age_min, allow_unstamped, repo_sha):
+                continue
+            if predicate(payload):
                 stems.add(_stem(jf))
         return stems
 
@@ -215,14 +294,34 @@ def _self_test():
               cmd_set(p2, "newmod", "ported", add=True) == 0
               and load(p2)["modules"]["newmod"] == "ported")
 
+        # Stamped-fixture helpers: every ingest fixture carries provenance so
+        # these checks pin the PREDICATES; the provenance layer has its own
+        # checks below. repo_sha is passed explicitly everywhere so the tests
+        # are deterministic inside and outside a git checkout.
+        import datetime
+        import json as _json
+
+        def _prov(sha=None, age_min=0.0):
+            gen = (datetime.datetime.now(datetime.timezone.utc)
+                   - datetime.timedelta(minutes=age_min)).isoformat(timespec="seconds")
+            return {"harness": "t", "generated_at": gen, "git_sha": sha}
+
+        def wdict(path_, payload, sha=None, age_min=0.0):
+            payload = dict(payload, provenance=_prov(sha, age_min))
+            open(path_, "w").write(_json.dumps(payload))
+
+        def wlist(path_, results, sha=None, age_min=0.0):
+            open(path_, "w").write(_json.dumps(
+                {"provenance": _prov(sha, age_min), "results": results}))
+
         # ingest: exact-stem matching only, and only from `sanitized`
         cmd_set(p, "handles", "sanitized")
         rep = os.path.join(d, "handles.json")
-        open(rep, "w").write('{"undocumented": 0}')
+        wdict(rep, {"undocumented": 0})
         stray = os.path.join(d, "sockets-extra.json")  # substring trap
-        open(stray, "w").write('{"undocumented": 0}')
+        wdict(stray, {"undocumented": 0})
         cmd_set(p, "sockets", "sanitized")
-        cmd_ingest(p, [rep, stray])
+        cmd_ingest(p, [rep, stray], repo_sha=None)
         st = load(p)
         check("ingest advances the exact-stem module",
               st["modules"]["handles"] == "unsafe_audited")
@@ -239,26 +338,27 @@ def _self_test():
         os.makedirs(os.path.join(d, "fuz"))
         dif = lambda n: os.path.join(d, "dif", n)
         fuz = lambda n: os.path.join(d, "fuz", n)
-        open(dif("parser.json"), "w").write(
-            '[{"name":"a","verdict":"MATCH"},{"name":"b","verdict":"DIVERGE(ledgered)"}]')
-        cmd_ingest(p3, diff_jsons=[dif("parser.json")])
+        wlist(dif("parser.json"),
+              [{"name": "a", "verdict": "MATCH"}, {"name": "b", "verdict": "DIVERGE(ledgered)"}])
+        cmd_ingest(p3, diff_jsons=[dif("parser.json")], repo_sha=None)
         check("clean diff_run report advances ported→differential",
               load(p3)["modules"]["parser"] == "differential")
-        open(dif("codec.json"), "w").write('[{"name":"a","verdict":"DIVERGE"}]')
-        cmd_ingest(p3, diff_jsons=[dif("codec.json")])
+        wlist(dif("codec.json"), [{"name": "a", "verdict": "DIVERGE"}])
+        cmd_ingest(p3, diff_jsons=[dif("codec.json")], repo_sha=None)
         check("an unexplained DIVERGE does not advance", load(p3)["modules"]["codec"] == "ported")
-        open(dif("codec.json"), "w").write('[{"name":"fn","verdict":"MATCH"}]')
-        cmd_ingest(p3, lib_jsons=[dif("codec.json")])
+        wlist(dif("codec.json"), [{"name": "fn", "verdict": "MATCH"}])
+        cmd_ingest(p3, lib_jsons=[dif("codec.json")], repo_sha=None)
         check("clean lib_diff report advances ported→differential (library port)",
               load(p3)["modules"]["codec"] == "differential")
         # multi-rung: clean diff AND clean fuzz climb ported→fuzzed in one ingest
-        open(dif("io.json"), "w").write('[{"name":"x","verdict":"MATCH"}]')
-        open(fuz("io.json"), "w").write('{"iterations": 2000, "findings": []}')
-        cmd_ingest(p3, diff_jsons=[dif("io.json")], fuzz_jsons=[fuz("io.json")])
+        wlist(dif("io.json"), [{"name": "x", "verdict": "MATCH"}])
+        wdict(fuz("io.json"), {"iterations": 2000, "findings": []})
+        cmd_ingest(p3, diff_jsons=[dif("io.json")], fuzz_jsons=[fuz("io.json")],
+                   repo_sha=None)
         check("multi-rung: clean diff + clean fuzz climb ported→fuzzed in one ingest",
               load(p3)["modules"]["io"] == "fuzzed")
-        open(fuz("parser.json"), "w").write('{"iterations": 2000, "findings": [{"fingerprint": "x"}]}')
-        cmd_ingest(p3, fuzz_jsons=[fuz("parser.json")])
+        wdict(fuz("parser.json"), {"iterations": 2000, "findings": [{"fingerprint": "x"}]})
+        cmd_ingest(p3, fuzz_jsons=[fuz("parser.json")], repo_sha=None)
         check("a diff-fuzz report with findings does not advance",
               load(p3)["modules"]["parser"] == "differential")
         # a malformed report is skipped (fail-closed), never crashes the ingest
@@ -267,10 +367,69 @@ def _self_test():
         open(dif("codec.json"), "w").write("{ not json")
         buf = _io.StringIO()
         with contextlib.redirect_stderr(buf):
-            rc_ig = cmd_ingest(p3, diff_jsons=[dif("codec.json")])
+            rc_ig = cmd_ingest(p3, diff_jsons=[dif("codec.json")], repo_sha=None)
         check("a malformed report is skipped (no crash, no advance)",
               rc_ig == 0 and "skipping unreadable" in buf.getvalue()
               and load(p3)["modules"]["codec"] == "differential")
+
+        # PROVENANCE (RETROSPECTIVE-kit-audit §6 item 8): a shape-valid report is
+        # not proof of a clean run. All repo_sha values are explicit so these are
+        # deterministic in and out of a git checkout.
+        SHA_A, SHA_B = "a" * 40, "b" * 40
+        p4 = os.path.join(d, "p4.json")
+        cmd_init(p4, ["mod"])
+        cmd_set(p4, "mod", "ported")
+        pv = lambda n: os.path.join(d, n)
+
+        # unstamped legacy report: refused by default, ingested with the opt-in
+        open(pv("mod.json"), "w").write('[{"name":"x","verdict":"MATCH"}]')
+        buf = _io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            cmd_ingest(p4, diff_jsons=[pv("mod.json")], repo_sha=None)
+        check("an unstamped report is refused by default (fail closed)",
+              load(p4)["modules"]["mod"] == "ported"
+              and "no provenance stamp" in buf.getvalue())
+        with contextlib.redirect_stderr(_io.StringIO()):
+            cmd_ingest(p4, diff_jsons=[pv("mod.json")], repo_sha=None,
+                       allow_unstamped=True)
+        check("--allow-unstamped ingests the legacy report",
+              load(p4)["modules"]["mod"] == "differential")
+
+        # sha match advances; sha MISMATCH (stale report) is refused
+        cmd_set(p4, "mod", "ported")
+        wlist(pv("mod.json"), [{"name": "x", "verdict": "MATCH"}], sha=SHA_A)
+        buf = _io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            cmd_ingest(p4, diff_jsons=[pv("mod.json")], repo_sha=SHA_B)
+        check("a report from a DIFFERENT commit is refused as stale",
+              load(p4)["modules"]["mod"] == "ported" and "STALE report" in buf.getvalue())
+        cmd_ingest(p4, diff_jsons=[pv("mod.json")], repo_sha=SHA_A)
+        check("a report from THIS commit advances", load(p4)["modules"]["mod"] == "differential")
+
+        # no comparable sha → age decides: too old refused, fresh accepted
+        cmd_set(p4, "mod", "ported")
+        wlist(pv("mod.json"), [{"name": "x", "verdict": "MATCH"}], age_min=2000)
+        buf = _io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            cmd_ingest(p4, diff_jsons=[pv("mod.json")], repo_sha=None)
+        check("an over-age unverifiable report is refused",
+              load(p4)["modules"]["mod"] == "ported" and "min old" in buf.getvalue())
+        wlist(pv("mod.json"), [{"name": "x", "verdict": "MATCH"}], age_min=1)
+        cmd_ingest(p4, diff_jsons=[pv("mod.json")], repo_sha=None)
+        check("a fresh unverifiable report is accepted via the age fallback",
+              load(p4)["modules"]["mod"] == "differential")
+
+        # a stamp with an unreadable timestamp fails closed
+        cmd_set(p4, "mod", "ported")
+        open(pv("mod.json"), "w").write(
+            '{"provenance": {"harness": "t", "generated_at": "not-a-date"}, '
+            '"results": [{"name":"x","verdict":"MATCH"}]}')
+        buf = _io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            cmd_ingest(p4, diff_jsons=[pv("mod.json")], repo_sha=None)
+        check("an unreadable provenance timestamp fails closed",
+              load(p4)["modules"]["mod"] == "ported"
+              and "unreadable provenance timestamp" in buf.getvalue())
     print("\nself-test:", "OK" if ok else "FAILED")
     return 0 if ok else 1
 
@@ -289,6 +448,10 @@ def main(argv=None):
     pg.add_argument("--diff-json", nargs="+", default=[], help="diff_run.py --json → differential")
     pg.add_argument("--lib-json", nargs="+", default=[], help="lib_diff.py --json → differential")
     pg.add_argument("--fuzz-json", nargs="+", default=[], help="diff_fuzz.py --json → fuzzed")
+    pg.add_argument("--allow-unstamped", action="store_true",
+                    help="ingest legacy reports that carry no provenance stamp")
+    pg.add_argument("--max-age-min", type=float, default=1440,
+                    help="max stamp age (minutes) when no git sha is comparable (default 1440)")
     # Accept --file AFTER the subcommand too (the natural paste order, and the
     # order the docstring shows). SUPPRESS keeps a pre-subcommand --file (or
     # the top-level default) intact when the flag isn't repeated here.
@@ -306,7 +469,9 @@ def main(argv=None):
     if args.cmd == "show":
         return cmd_show(args.file, args.json)
     if args.cmd == "ingest":
-        return cmd_ingest(args.file, args.unsafe_json, args.diff_json, args.lib_json, args.fuzz_json)
+        return cmd_ingest(args.file, args.unsafe_json, args.diff_json, args.lib_json,
+                          args.fuzz_json, allow_unstamped=args.allow_unstamped,
+                          max_age_min=args.max_age_min)
     ap.print_help()
     return 2
 
