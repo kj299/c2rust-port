@@ -1,0 +1,30 @@
+# cJSON port workspace — layering per the kit skeleton (ARCHITECTURE-TEMPLATE):
+#   core   : #![forbid(unsafe_code)] — the translated cJSON logic (value model,
+#            parse, print). Everything observable lives here.
+#   driver : thin bin implementing the same stdin→stdout contract as
+#            ../oracle/driver.c, so diff_run can diff the two byte-for-byte.
+# A `sys`/FFI crate (the C-ABI `cJSON_*` surface as a cdylib) arrives with the
+# dom module — until then the workspace has NO unsafe anywhere.
+[workspace]
+resolver = "2"
+members = ["crates/core", "crates/driver"]
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+rust-version = "1.74"
+
+[profile.release]
+# Overflow checks ON even in release: silent wraparound is exactly the class of
+# C bug a safety-first rewrite must not reproduce (kit skeleton default).
+overflow-checks = true
+lto = true
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+undocumented_unsafe_blocks = "warn"
+missing_safety_doc = "warn"
+cast_possible_truncation = "warn"
+arithmetic_side_effects = "warn"

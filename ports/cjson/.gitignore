@@ -3,3 +3,4 @@ oracle/cjson_oracle
 oracle/corpus/
 oracle/reports/
 rust/target/
+reports/

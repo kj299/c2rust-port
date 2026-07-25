@@ -37,7 +37,17 @@ the port diverges and the divergence is judged an intentional fix-of-C-defect.
 - **Number re-formatting.** `print_number` uses `%1.15g`/`%1.17g` with a
   round-trip check (cJSON.c:553–620). If Rust's float formatting produces
   different (but numerically equal) bytes for any value, the round-trip vectors
-  DIVERGE and each such value is ledgered. **Decision deferred to `scalar-parse`.**
+  DIVERGE and each such value is ledgered. **RESOLVED at `scalar-parse`
+  (2026-07-25): no divergence.** The port re-implements C's `%g` byte-for-byte
+  (`num.rs::fmt_g`) — 25/25 scalar vectors MATCH, including the discovered
+  **DBL_MAX lossy-print quirk**: C's 15-digit form `1.79769313486232e+308`
+  reparses as *inf* (it rounds above DBL_MAX), and `compare_double(inf, d)` is
+  `inf <= inf·ε` → *true*, so C keeps the lossy form and never falls back to 17
+  digits — meaning `print(DBL_MAX)` → reparse → reprint yields `null`. The port
+  reproduces this faithfully (pinned in `num.rs` tests and the
+  `dbl-max-lossy-print` / `dbl-max-reparse-null` vectors, both validated against
+  the C). A future *fix* of this lossiness would be a ledgerable divergence;
+  today it is exact-match behavior.
 
 - **Parse error position / text.** The driver keeps error offsets on STDERR (off
   the compared contract) precisely so error-message wording need not match. If a

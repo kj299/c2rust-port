@@ -1,11 +1,11 @@
 {
   "modules": {
-    "alloc-node": "not_started",
+    "alloc-node": "differential",
     "buffer-plumbing": "not_started",
     "dom": "not_started",
     "entry-minify": "not_started",
     "recursive-core": "not_started",
-    "scalar-parse": "not_started",
+    "scalar-parse": "differential",
     "string-parse": "not_started"
   }
 }
