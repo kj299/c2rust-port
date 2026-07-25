@@ -1,0 +1,5 @@
+# Build + capture artifacts (regenerable by oracle/run.sh); sources are committed.
+oracle/cjson_oracle
+oracle/corpus/
+oracle/reports/
+rust/target/
