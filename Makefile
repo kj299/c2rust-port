@@ -32,6 +32,8 @@ check-kit:
 	@echo "== lessons-pinned integrity =="; $(PY) $(H)/doc-check/check_lessons_pinned.py
 	@echo "== skills self-test =="; $(PY) skills/check_skills.py --self-test
 	@echo "== skills integrity =="; $(PY) skills/check_skills.py
+	@echo "== gate-mutation self-test =="; $(PY) $(H)/gate-mutation/mutate_gates.py --self-test
+	@echo "== gate-mutation sweep =="; $(PY) $(H)/gate-mutation/mutate_gates.py .
 	@echo "== skeleton gate ==";    bash  $(H)/skeleton-check/check_skeleton.sh
 	@echo ""
 	@echo "check-kit: ALL HARNESSES OK"

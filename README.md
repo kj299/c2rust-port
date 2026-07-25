@@ -68,6 +68,7 @@ repo-root `porting-kit/`; adjust the paths inside if you vendor it elsewhere).
 | `harnesses/progress/progress.py` | per-module status table incl. safety gates | tracking |
 | `harnesses/doc-check/check_doc_flags.py` | doc'd harness flags must exist (anti-drift) | `check-kit` |
 | `harnesses/doc-check/check_lessons_pinned.py` | every lesson that amends a harness stays cited/pinned there | `check-kit` |
+| `harnesses/gate-mutation/mutate_gates.py` | break each gate's verdict on purpose; its self-test must go red (self-verifying gate set) | `check-kit` |
 | `harnesses/skeleton-check/check_skeleton.sh` | the skeleton passes the gates it ships (fmt/clippy/build/test) | `check-kit` (toolchain-optional) |
 | `harnesses/ci/porting-ci.template.yml` | wires all gates into GitHub Actions | — |
 
