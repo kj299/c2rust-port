@@ -100,6 +100,8 @@ def load_matrix(path, allow_empty=False):
 
 
 _FP_RE = re.compile(r"\[sha256:([0-9a-fA-F]{6,64})\]")
+# A backtick-quoted ledger case name, so a name containing ':' survives parsing.
+_QUOTED_NAME_RE = re.compile(r"^`([^`]+)`")
 
 
 def load_ledger(path):
@@ -108,20 +110,40 @@ def load_ledger(path):
     lines and, when present, a pinned fingerprint of the accepted diff:
     `- [x] case-name [sha256:abcdef123456]: reason`. A pinned entry suppresses
     only that exact divergence; an unpinned one suppresses by name alone
-    (legacy) — pin them, or a new regression can hide behind an old acceptance."""
+    (legacy) — pin them, or a new regression can hide behind an old acceptance.
+
+    The name ends at the first `:`, so a case whose OWN name contains a colon
+    (`parse:header`) would truncate to `parse` — quietly suppressing a divergence
+    in the wrong case. Two guards (RETROSPECTIVE-kit-audit.md §6 item 4):
+      * backtick-quote the name to include colons verbatim —
+        ``- [x] `parse:header` [sha256:..]: why``;
+      * a name harvested twice is a hard error, never a silent overwrite. That is
+        both the genuine-duplicate case (one entry would be dead, and the later
+        pin would silently win over the earlier) and the collision that
+        truncation causes (`parse:header` + `parse:footer` → both `parse`)."""
     known = {}
     if path and os.path.exists(path):
-        for line in open(path, encoding="utf-8"):
+        for lineno, line in enumerate(open(path, encoding="utf-8"), 1):
             s = line.strip()
             if s.startswith(("- [x]", "* [x]")):
                 body = s[5:].strip()
                 m = _FP_RE.search(body)
                 fp = m.group(1).lower() if m else None
                 if m:  # remove the pin before splitting on ':' (the pin has one)
-                    body = body[: m.start()] + body[m.end():]
-                name = body.split(":", 1)[0].strip().strip("`")
-                if name:
-                    known[name] = fp
+                    body = (body[: m.start()] + body[m.end():]).strip()
+                q = _QUOTED_NAME_RE.match(body)
+                name = q.group(1).strip() if q else body.split(":", 1)[0].strip().strip("`")
+                if not name:
+                    continue
+                if name in known:
+                    sys.exit(
+                        f"error: ledger {path!r}:{lineno}: case {name!r} is already "
+                        f"ledgered — a duplicate entry means one of them is dead, and "
+                        f"the later pin would silently override the earlier. If two "
+                        f"cases only differ after a ':' they collapse to the same name "
+                        f"here; backtick-quote the full name to keep it "
+                        f"(`- [x] `case:with:colons`: why`). Remove or rename one.")
+                known[name] = fp
     return known
 
 
@@ -316,6 +338,15 @@ def main(argv=None):
     return 1 if (unexplained or timeouts or stale) else 0
 
 
+def _exits(fn):
+    """True if fn() refuses via sys.exit — the fail-closed fixtures' assertion."""
+    try:
+        fn()
+        return False
+    except SystemExit:
+        return True
+
+
 def _self_test():
     """Prove the harness detects both a match and an unexplained divergence,
     and that the ledger suppresses a known one — using /bin/echo as both sides."""
@@ -363,6 +394,24 @@ def _self_test():
     res = compare(echo, printf, diff_case, ledger=ledger_path, sort=False, mask_numbers=False)
     check("changed divergence breaks the pin → DIVERGE again",
           res[0]["verdict"] == "DIVERGE" and "fingerprint mismatch" in res[0]["diff"])
+
+    # Ledger NAME parsing (RETROSPECTIVE-kit-audit.md §6 item 4). The name ends at
+    # the first ':', so a colon-bearing case name must be backtick-quotable, and a
+    # name harvested twice must be a hard error — never a silent overwrite, which is
+    # how a truncation collision would mis-suppress the wrong case.
+    open(ledger_path, "w").write("- [x] `parse:header` [sha256:abc123]: colon in the name\n")
+    check("a backtick-quoted case name keeps its colons",
+          load_ledger(ledger_path) == {"parse:header": "abc123"})
+    open(ledger_path, "w").write("- [x] plain: unquoted still splits at the first colon\n")
+    check("an unquoted name still parses (back-compat)",
+          load_ledger(ledger_path) == {"plain": None})
+    open(ledger_path, "w").write("- [x] dup: first\n- [x] dup [sha256:abc123]: second\n")
+    check("a duplicate ledger name is a hard error, not a silent overwrite",
+          _exits(lambda: load_ledger(ledger_path)))
+    # the truncation collision itself: two distinct cases → same harvested name
+    open(ledger_path, "w").write("- [x] parse:header: one\n- [x] parse:footer: two\n")
+    check("two names colliding via ':' truncation is refused",
+          _exits(lambda: load_ledger(ledger_path)))
     os.unlink(ledger_path)
 
     # exit-code fidelity: same stdout, different exit status must DIVERGE.
