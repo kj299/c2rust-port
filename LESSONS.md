@@ -692,3 +692,39 @@ the emphasized half.
 - **Section amended:** harnesses/library-differential/lib_diff.py (`_jsonable` +
   self-test); PROMPTS/90-retrospective.md · report-back discipline;
   RETROSPECTIVE-cjson.md · §5.
+
+---
+
+## 021. Generate test expectations from the oracle — a convention is not a control
+
+- **Date:** 2026-07-25
+- **Codebase:** the kit itself (post-cJSON), closing RETROSPECTIVE-cjson.md §6
+- **What happened:** LESSONS #17 established probe-then-port as a *convention*:
+  run the C on the module's edge cases, paste the transcript, write expectations
+  from it. But every §2 mistake on the cJSON port had already shown what happens
+  without enforcement — wrong unit tests written from reasoning happily agreed
+  with wrong Rust until a gate outside the tests disagreed — and LESSONS #13 is
+  explicit that conventions decay: two logged lessons recurred in code written
+  after them. Nothing stopped the *next* port's author from hand-writing an
+  expectation that contradicts the C, or from quietly editing a pasted
+  transcript to match their code.
+- **Kit change:** `harnesses/probe/probe.py` mechanizes the convention end to
+  end: `run` executes the probes against the C oracle and pins the observed
+  (rc, stdout) byte-faithfully under a fingerprint; `gen` **generates** the Rust
+  `#[test]` expectations from the transcript (one hand-written glue fn maps
+  driver modes to the crate's API — the expectations themselves are never
+  hand-written, so one that contradicts the C cannot exist); `verify` fails
+  closed on oracle drift (every probe re-run, behavior re-compared — never
+  hash-trusted), on a tampered transcript (fingerprint), and on a hand-edited
+  or stale generated file (byte-compare against a fresh regeneration).
+  Fail-closed per the kit's characteristic bug: zero probes, a hanging oracle,
+  and a missing artifact are all failures, never passes. Wired: `make check-kit`
+  self-test, a gate-mutation entry (neutralized drift-verdict → self-test red),
+  and the worked integration — the cJSON port's eight §2 quirks are now pinned
+  in `ports/cjson/oracle/probes-quirks.json`, generated into
+  `crates/core/tests/probes_quirks.rs`, and verified in `ports/cjson/check.sh`
+  step 1b.
+- **Section amended:** harnesses/probe/probe.py (the harness + self-test);
+  harnesses/gate-mutation/mutate_gates.py (probe entry); ports/cjson/check.sh
+  (step 1b); PLAYBOOK · Phase 4 entry criteria; PROMPTS/10-module-port.md ·
+  step 0; skills/porting-kit-module/SKILL.md · step 0.

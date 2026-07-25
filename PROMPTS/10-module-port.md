@@ -15,15 +15,22 @@ the retrospective.
 
 Then run every gate; each is a hard requirement before merge:
 
-0. **Probe the oracle before you write a line of Rust** (LESSONS #17). Run the C
-   on this module's edge cases — boundaries, malformed input, the values its own
-   code special-cases — and paste the observed bytes into the module's doc
-   comment. Write every unit-test expectation from that transcript. Do NOT reason
-   from the C source about what it "must" do: on the cJSON port that reasoning was
-   wrong every time it mattered (a lossy `%1.15g` the C happily accepts; `Compare`
-   rejecting a value's own duplicate; minify ignoring escape parity). Where a
-   probed behavior looks like a bug, that is a *decision* — reproduce it
-   faithfully, or fix it and ledger the divergence — never a silent cleanup.
+0. **Probe the oracle before you write a line of Rust** (LESSONS #17, mechanized
+   by LESSONS #21). Write this module's edge cases — boundaries, malformed input,
+   the values its own code special-cases — as a probes file, then:
+   `python3 porting-kit/harnesses/probe/probe.py run --probes <probes.json>
+   --oracle <c-oracle> --transcript <t.json>` pins the C's observed bytes, and
+   `probe.py gen --transcript <t.json> --out <crate>/tests/<module>_probes.rs`
+   **generates** the unit-test expectations from them (you supply one
+   `tests/probe_glue/mod.rs` mapping driver modes to the crate's API). Do NOT
+   write an expectation by hand and do NOT reason from the C source about what it
+   "must" do: on the cJSON port that reasoning was wrong every time it mattered
+   (a lossy `%1.15g` the C happily accepts; `Compare` rejecting a value's own
+   duplicate; minify ignoring escape parity). Wire `probe.py verify` into the
+   port's gate script — it fails closed on oracle drift, transcript tampering,
+   and hand-edits to the generated file. Where a probed behavior looks like a
+   bug, that is a *decision* — reproduce it faithfully, or fix it and ledger the
+   divergence — never a silent cleanup.
 
 1. **Port** into `core` (pure logic) or a safe wrapper in `sys` (if it touches
    FFI). Translate idioms safely: call-twice-for-size → growing `Vec` + length

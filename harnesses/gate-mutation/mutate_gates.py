@@ -88,6 +88,14 @@ MUTATIONS = [
      "why": "the Phase-0 scanner reports 0 flaws on any C",
      "cmd": ["harnesses/c-flaw-scan/scan_c_flaws.py", "--self-test"]},
 
+    # (LESSONS #21: test expectations are GENERATED from the oracle transcript;
+    # a verify that can't see oracle drift would bless any live behavior)
+    {"gate": "probe", "file": "harnesses/probe/probe.py",
+     "old": '        behavior_matches = rc == e["rc"] and out_b64 == e["stdout_b64"]',
+     "new": "        behavior_matches = True",
+     "why": "oracle drift invisible: verify blesses any live behavior as pinned",
+     "cmd": ["harnesses/probe/probe.py", "--self-test"]},
+
     {"gate": "golden", "file": "harnesses/golden/golden.py",
      "old": '    matched, note = got == golden, ""',
      "new": '    matched, note = True, ""',

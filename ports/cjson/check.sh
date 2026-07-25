@@ -25,6 +25,18 @@ echo "===== 1. oracle (build + validate all vectors against C) ====="
 bash "$HERE/oracle/run.sh" > /dev/null
 echo "oracle locked"
 
+echo "===== 1b. probe-then-port — quirk transcript pinned, tests generated ====="
+# The module's quirk expectations are GENERATED from the C's observed bytes
+# (harnesses/probe/probe.py, LESSONS #17 mechanized as LESSONS #21): verify
+# fails closed on oracle drift, a tampered transcript, or a hand-edited/stale
+# generated test file. The generated tests themselves run under `cargo test`
+# in step 2.
+"$PY" "$KIT/harnesses/probe/probe.py" verify \
+    --probes "$HERE/oracle/probes-quirks.json" \
+    --oracle "$HERE/oracle/cjson_oracle" \
+    --transcript "$HERE/oracle/probes-quirks.transcript.json" \
+    --out "$HERE/rust/crates/core/tests/probes_quirks.rs"
+
 echo "===== 2. rust workspace (fmt / clippy / build / test) ====="
 ( cd "$HERE/rust"
   cargo fmt --all -- --check
