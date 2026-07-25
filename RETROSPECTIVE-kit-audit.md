@@ -179,6 +179,15 @@ than a snapshot): ✅ **2** (threat-model gate), ✅ **4** (ledger name collisio
 is partially discharged (CI now runs; sanitizers still don't). Items **1**, **5**,
 **8** remain open, plus the keystone: port foreign C.
 
+Also closed 2026-07-25, from the *v1* backlog rather than this list:
+`RETROSPECTIVE-kit-v1.md` §5 item 2 — **gate-mutation verification** now exists
+(`harnesses/gate-mutation/mutate_gates.py`, in `check-kit`): each gate's verdict
+is neutralized in a scratch copy and its self-test must go red. Its first sweep
+found one survivor — `check_skills`' missing-path check could be deleted with the
+suite staying green (a bundled two-defect fixture pinned only the union) — and a
+diff-fuzz self-test that crashed rather than failed on zero findings. Both fixed
+(LESSONS #16). 14/14 mutations now caught.
+
 **P1 — could let an unsafe port through:**
 
 1. **Workspace unsafe-doc lints are `warn`, not `deny`.** `skeleton/Cargo.toml`
