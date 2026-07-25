@@ -235,7 +235,8 @@ def fuzz(oracle, rust, opts):
 
 def _report(summary, as_json):
     if as_json:
-        print(json.dumps(summary, indent=2))
+        print(json.dumps(dict(summary, provenance=D.provenance_stamp("diff_fuzz")),
+                         indent=2))
         return
     for f in summary["findings"]:
         print(f"[{f['verdict']:8}] fp={f['fingerprint']}  "
