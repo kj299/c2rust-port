@@ -5,14 +5,21 @@ with a decade of CVE history. This is the keystone the retrospectives kept namin
 the moment the compounding loop stops feeding on itself and learns from code the
 kit did not write (`RETROSPECTIVE-kit-audit.md` §6, keystone item).
 
-## Status: **Phase 4 in progress — modules 1–2 ported, 25/25 differential MATCH**
+## Status: **Phase 4 in progress — modules 1–3 ported, 44/44 differential MATCH**
 
 Phase 0 (inventory/plan) merged in #15; Phase 2 (oracle) merged in #16. The Rust
 port now exists (`rust/`: `#![forbid(unsafe_code)]` core + differential driver)
-with modules **alloc-node** and **scalar-parse** at the `differential` gate —
-**the first time the kit's differential has run green on foreign code.** The
-corpus is 57 vectors (all validated against C); the scalar increment diffs the
-25 whose behavior the ported modules fully determine.
+with modules **alloc-node**, **scalar-parse**, and **string-parse** at the
+`differential` gate — the kit's differential running green on foreign code. The
+corpus is 69 vectors (all validated against C); the increment diffs the 44 whose
+behavior the ported modules fully determine, including the `cve-lone-surrogate`
+regression (the a167d9e OOB-read class) now exercised against the Rust.
+
+String values are **bytes, not `String`** — probed against the oracle: cJSON
+copies string content verbatim with no UTF-8 validation (a raw `0xFF`
+round-trips), `\uZZZZ` (invalid hex) parses as a NUL rather than failing, and
+the printer truncates at the first interior NUL. All three quirks are pinned in
+unit tests and C-validated vectors.
 
 Run the whole port gate (also a CI job, `cjson-port`):
 

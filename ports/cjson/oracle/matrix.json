@@ -124,7 +124,7 @@
     "stdin": "\"hello\"",
     "expect_rc": 0,
     "mods": [
-      "tree"
+      "string"
     ],
     "expect_contains": "\"hello\""
   },
@@ -136,7 +136,7 @@
     "stdin": "\"tab\\tnl\\nquote\\\"backslash\\\\\"",
     "expect_rc": 0,
     "mods": [
-      "tree"
+      "string"
     ]
   },
   {
@@ -147,7 +147,7 @@
     "stdin": "\"\u00e9\u00e8\"",
     "expect_rc": 0,
     "mods": [
-      "tree"
+      "string"
     ]
   },
   {
@@ -158,7 +158,7 @@
     "stdin": "\"\ud834\udd1e\"",
     "expect_rc": 0,
     "mods": [
-      "tree"
+      "string"
     ]
   },
   {
@@ -351,7 +351,7 @@
     "stdin": "\"abc",
     "expect_rc": 1,
     "mods": [
-      "tree"
+      "string"
     ]
   },
   {
@@ -406,7 +406,7 @@
     "stdin": "\"\\x41\"",
     "expect_rc": 1,
     "mods": [
-      "tree"
+      "string"
     ]
   },
   {
@@ -550,6 +550,148 @@
     "expect_contains": "null"
   },
   {
+    "name": "esc-roundtrip",
+    "args": [
+      "print-unformatted"
+    ],
+    "stdin": "\"\\b\\f\\n\\r\\t x \\/ \\\" y\"",
+    "expect_rc": 0,
+    "mods": [
+      "string"
+    ],
+    "expect_contains": "\"\\b\\f\\n\\r\\t x / \\\" y\""
+  },
+  {
+    "name": "esc-slash-unescaped-out",
+    "args": [
+      "print-unformatted"
+    ],
+    "stdin": "\"a\\/b\"",
+    "expect_rc": 0,
+    "mods": [
+      "string"
+    ],
+    "expect_contains": "\"a/b\""
+  },
+  {
+    "name": "ctrl-reescape",
+    "args": [
+      "print-unformatted"
+    ],
+    "stdin": "\"\\u0001\"",
+    "expect_rc": 0,
+    "mods": [
+      "string"
+    ],
+    "expect_contains": "\"\\u0001\""
+  },
+  {
+    "name": "invalid-hex-as-nul",
+    "args": [
+      "print-unformatted"
+    ],
+    "stdin": "\"a\\uZZZZb\"",
+    "expect_rc": 0,
+    "mods": [
+      "string"
+    ],
+    "expect_contains": "\"a\"",
+    "expect_absent": "b"
+  },
+  {
+    "name": "nul-escape-truncates-print",
+    "args": [
+      "print-unformatted"
+    ],
+    "stdin": "\"a\\u0000b\"",
+    "expect_rc": 0,
+    "mods": [
+      "string"
+    ],
+    "expect_contains": "\"a\"",
+    "expect_absent": "b"
+  },
+  {
+    "name": "raw-nul-byte-in-string",
+    "args": [
+      "print-unformatted"
+    ],
+    "stdin": "\"a\u0000b\"",
+    "expect_rc": 0,
+    "mods": [
+      "string"
+    ],
+    "expect_contains": "\"a\""
+  },
+  {
+    "name": "escaped-surrogate-pair",
+    "args": [
+      "print-unformatted"
+    ],
+    "stdin": "\"\\uD834\\uDD1E\"",
+    "expect_rc": 0,
+    "mods": [
+      "string"
+    ],
+    "expect_contains": "\"\ud834\udd1e\""
+  },
+  {
+    "name": "empty-string-value",
+    "args": [
+      "print-unformatted"
+    ],
+    "stdin": "\"\"",
+    "expect_rc": 0,
+    "mods": [
+      "string"
+    ],
+    "expect_contains": "\"\""
+  },
+  {
+    "name": "reject-short-u-before-quote",
+    "args": [
+      "print-unformatted"
+    ],
+    "stdin": "\"\\u041\"",
+    "expect_rc": 1,
+    "mods": [
+      "string"
+    ]
+  },
+  {
+    "name": "reject-lone-low-surrogate",
+    "args": [
+      "print-unformatted"
+    ],
+    "stdin": "\"\\uDC00\"",
+    "expect_rc": 1,
+    "mods": [
+      "string"
+    ]
+  },
+  {
+    "name": "reject-surrogate-bad-second",
+    "args": [
+      "print-unformatted"
+    ],
+    "stdin": "\"\\uD800\\u0041\"",
+    "expect_rc": 1,
+    "mods": [
+      "string"
+    ]
+  },
+  {
+    "name": "reject-trailing-backslash",
+    "args": [
+      "print-unformatted"
+    ],
+    "stdin": "\"abc\\",
+    "expect_rc": 1,
+    "mods": [
+      "string"
+    ]
+  },
+  {
     "name": "cve-lone-surrogate",
     "args": [
       "print-unformatted"
@@ -557,7 +699,7 @@
     "stdin": "\"\\uD800\"",
     "expect_rc": 1,
     "mods": [
-      "tree"
+      "string"
     ]
   },
   {
