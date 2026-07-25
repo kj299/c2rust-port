@@ -276,6 +276,124 @@
     ]
   },
   {
+    "name": "minify-ws",
+    "args": [
+      "minify"
+    ],
+    "stdin": "{ \"a\" : 1 ,  \"b\" : [ 2 , 3 ] }",
+    "expect_rc": 0,
+    "mods": [
+      "minify"
+    ],
+    "expect_contains": "{\"a\":1,\"b\":[2,3]}"
+  },
+  {
+    "name": "minify-line-comment",
+    "args": [
+      "minify"
+    ],
+    "stdin": "{\"a\":1} // tail comment",
+    "expect_rc": 0,
+    "mods": [
+      "minify"
+    ]
+  },
+  {
+    "name": "minify-block-comment",
+    "args": [
+      "minify"
+    ],
+    "stdin": "/* lead */ {\"a\":1}",
+    "expect_rc": 0,
+    "mods": [
+      "minify"
+    ]
+  },
+  {
+    "name": "minify-unterminated-block",
+    "args": [
+      "minify"
+    ],
+    "stdin": "/* never closed",
+    "expect_rc": 0,
+    "mods": [
+      "minify"
+    ],
+    "expect_absent": "never"
+  },
+  {
+    "name": "minify-string-verbatim",
+    "args": [
+      "minify"
+    ],
+    "stdin": "{ \"a b\" : \"c d\" }",
+    "expect_rc": 0,
+    "mods": [
+      "minify"
+    ],
+    "expect_contains": "{\"a b\":\"c d\"}"
+  },
+  {
+    "name": "minify-comment-in-string",
+    "args": [
+      "minify"
+    ],
+    "stdin": "{\"k\":\"a // b /* c */ d\"}",
+    "expect_rc": 0,
+    "mods": [
+      "minify"
+    ],
+    "expect_contains": "\"a // b /* c */ d\""
+  },
+  {
+    "name": "minify-lone-slash-dropped",
+    "args": [
+      "minify"
+    ],
+    "stdin": "{\"a\":1/2}",
+    "expect_rc": 0,
+    "mods": [
+      "minify"
+    ],
+    "expect_contains": "{\"a\":12}"
+  },
+  {
+    "name": "minify-interleaved-comments",
+    "args": [
+      "minify"
+    ],
+    "stdin": "[ 1, /* c */ 2, // d\n 3 ]",
+    "expect_rc": 0,
+    "mods": [
+      "minify"
+    ],
+    "expect_contains": "[1,2,3]"
+  },
+  {
+    "name": "minify-escaped-quote",
+    "args": [
+      "minify"
+    ],
+    "stdin": "{\"a\":\"x\\\"y\"}",
+    "expect_rc": 0,
+    "mods": [
+      "minify"
+    ],
+    "expect_contains": "\"x\\\"y\""
+  },
+  {
+    "name": "minify-escape-parity-quirk",
+    "args": [
+      "minify"
+    ],
+    "stdin": "\"\\\\\" \"",
+    "expect_rc": 0,
+    "mods": [
+      "minify"
+    ],
+    "expect_contains": "\" \""
+  },
+  {
     "name": "reject-empty",
     "args": [
       "print-unformatted"
