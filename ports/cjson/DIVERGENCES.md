@@ -14,10 +14,25 @@ Format:
 - [x] <case-name> [sha256:<12-hex>]: <why the Rust intentionally differs; CWE if a security fix>
 ```
 
-## Confirmed divergences (none yet — no Rust written)
+## Confirmed divergences
 
-Phase 2 is the oracle only. No module has been ported, so there is nothing to
-diverge yet. Entries land here as modules are ported and triaged.
+- [x] `custom-allocator-dropped`: **cJSON_InitHooks / global_hooks not
+  reproduced** (CWE-362, race condition / thread-safety). cJSON keeps a
+  process-global MUTABLE `internal_hooks global_hooks` (cJSON.c:186) that
+  `cJSON_InitHooks` overwrites — any thread calling it mutates allocation
+  behavior for all others, with no synchronization. The Rust port uses the
+  global allocator and offers no `InitHooks` equivalent, so this shared-mutable-
+  state hazard is designed out rather than ported. This is a *safety* divergence
+  (the port refuses to reproduce a data race), not a missing feature; it changes
+  no parse/print/minify output, so it produces no differential divergence — it
+  is recorded here as the deliberate decision (THREAT-MODEL §5, agreed at the DOM
+  module). Not fingerprint-pinned: there is no observable output diff to pin; the
+  assertion is architectural (no `cJSON_InitHooks` symbol will exist in the FFI
+  crate).
+
+No output-level divergences yet: every ported module matches the C byte-for-byte
+(the `dom` module's Compare/Duplicate quirks — inf never equals itself, dup-keys
+never compare equal — are REPRODUCED, so they are matches, not divergences).
 
 ## Candidate divergences (anticipated in Phase 0/2 — decide when the module lands)
 

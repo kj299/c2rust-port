@@ -1,0 +1,761 @@
+[
+  {
+    "name": "dup-eq-empty-object",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "{}",
+    "expect_rc": 0,
+    "mods": [
+      "tree"
+    ]
+  },
+  {
+    "name": "dup-eq-empty-array",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "[]",
+    "expect_rc": 0,
+    "mods": [
+      "tree"
+    ]
+  },
+  {
+    "name": "dup-eq-true",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "true",
+    "expect_rc": 0,
+    "mods": [
+      "scalar"
+    ]
+  },
+  {
+    "name": "dup-eq-false",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "false",
+    "expect_rc": 0,
+    "mods": [
+      "scalar"
+    ]
+  },
+  {
+    "name": "dup-eq-null",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "null",
+    "expect_rc": 0,
+    "mods": [
+      "scalar"
+    ]
+  },
+  {
+    "name": "dup-eq-int",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "42",
+    "expect_rc": 0,
+    "mods": [
+      "scalar"
+    ]
+  },
+  {
+    "name": "dup-eq-negative",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "-17",
+    "expect_rc": 0,
+    "mods": [
+      "scalar"
+    ]
+  },
+  {
+    "name": "dup-eq-zero",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "0",
+    "expect_rc": 0,
+    "mods": [
+      "scalar"
+    ]
+  },
+  {
+    "name": "dup-eq-float",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "3.14159",
+    "expect_rc": 0,
+    "mods": [
+      "scalar"
+    ]
+  },
+  {
+    "name": "dup-eq-exponent",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "6.022e23",
+    "expect_rc": 0,
+    "mods": [
+      "scalar"
+    ]
+  },
+  {
+    "name": "dup-eq-bare-string",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "\"hello\"",
+    "expect_rc": 0,
+    "mods": [
+      "string"
+    ]
+  },
+  {
+    "name": "dup-eq-string-escapes",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "\"tab\\tnl\\nquote\\\"backslash\\\\\"",
+    "expect_rc": 0,
+    "mods": [
+      "string"
+    ]
+  },
+  {
+    "name": "dup-eq-unicode-escape",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "\"\u00e9\u00e8\"",
+    "expect_rc": 0,
+    "mods": [
+      "string"
+    ]
+  },
+  {
+    "name": "dup-eq-surrogate-pair",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "\"\ud834\udd1e\"",
+    "expect_rc": 0,
+    "mods": [
+      "string"
+    ]
+  },
+  {
+    "name": "dup-eq-nested-object",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "{\"a\":1,\"b\":{\"c\":[true,null,\"x\"],\"d\":{}}}",
+    "expect_rc": 0,
+    "mods": [
+      "tree"
+    ]
+  },
+  {
+    "name": "dup-eq-mixed-array",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "[1,\"two\",3.0,true,null,{}]",
+    "expect_rc": 0,
+    "mods": [
+      "tree"
+    ]
+  },
+  {
+    "name": "dup-eq-big-int",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "2147483647",
+    "expect_rc": 0,
+    "mods": [
+      "scalar"
+    ]
+  },
+  {
+    "name": "dup-eq-min-int",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "-2147483648",
+    "expect_rc": 0,
+    "mods": [
+      "scalar"
+    ]
+  },
+  {
+    "name": "dup-eq-large-double",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "1.7976931348623157e308",
+    "expect_rc": 0,
+    "mods": [
+      "scalar"
+    ]
+  },
+  {
+    "name": "dup-eq-whitespace-around",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "   {  \"k\" : 1 }   ",
+    "expect_rc": 0,
+    "mods": [
+      "tree"
+    ]
+  },
+  {
+    "name": "dup-eq-nesting-limit-ok",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]",
+    "expect_rc": 0,
+    "mods": [
+      "tree"
+    ]
+  },
+  {
+    "name": "dup-eq-trailing-garbage-lax",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "{\"a\":1}trailing",
+    "expect_rc": 0,
+    "mods": [
+      "tree"
+    ]
+  },
+  {
+    "name": "dup-eq-fmt-object",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "{\"a\":1,\"b\":2}",
+    "expect_rc": 0,
+    "mods": [
+      "tree"
+    ]
+  },
+  {
+    "name": "dup-eq-fmt-array",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "[1,2,3]",
+    "expect_rc": 0,
+    "mods": [
+      "tree"
+    ]
+  },
+  {
+    "name": "dup-eq-reject-empty",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "",
+    "expect_rc": 1,
+    "mods": [
+      "scalar"
+    ]
+  },
+  {
+    "name": "dup-eq-reject-garbage",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "xyzzy",
+    "expect_rc": 1,
+    "mods": [
+      "scalar"
+    ]
+  },
+  {
+    "name": "dup-eq-reject-unterminated-string",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "\"abc",
+    "expect_rc": 1,
+    "mods": [
+      "string"
+    ]
+  },
+  {
+    "name": "dup-eq-reject-unterminated-object",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "{\"a\":1",
+    "expect_rc": 1,
+    "mods": [
+      "tree"
+    ]
+  },
+  {
+    "name": "dup-eq-reject-unterminated-array",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "[1,2",
+    "expect_rc": 1,
+    "mods": [
+      "tree"
+    ]
+  },
+  {
+    "name": "dup-eq-reject-trailing-comma",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "[1,2,]",
+    "expect_rc": 1,
+    "mods": [
+      "tree"
+    ]
+  },
+  {
+    "name": "dup-eq-reject-comment-in-parse",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "// c\n{}",
+    "expect_rc": 1,
+    "mods": [
+      "tree"
+    ]
+  },
+  {
+    "name": "dup-eq-reject-bad-escape",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "\"\\x41\"",
+    "expect_rc": 1,
+    "mods": [
+      "string"
+    ]
+  },
+  {
+    "name": "dup-eq-ws-number",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "   42  ",
+    "expect_rc": 0,
+    "mods": [
+      "scalar"
+    ]
+  },
+  {
+    "name": "dup-eq-trailing-after-number",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "123 456",
+    "expect_rc": 0,
+    "mods": [
+      "scalar"
+    ]
+  },
+  {
+    "name": "dup-eq-neg-zero",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "-0",
+    "expect_rc": 0,
+    "mods": [
+      "scalar"
+    ]
+  },
+  {
+    "name": "dup-eq-num-overflow-inf",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "1e999",
+    "expect_rc": 0,
+    "mods": [
+      "scalar"
+    ]
+  },
+  {
+    "name": "dup-eq-num-underflow",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "1e-999",
+    "expect_rc": 0,
+    "mods": [
+      "scalar"
+    ]
+  },
+  {
+    "name": "dup-eq-small-exp",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "1e-05",
+    "expect_rc": 0,
+    "mods": [
+      "scalar"
+    ]
+  },
+  {
+    "name": "dup-eq-exp-boundary-fixed",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "0.0001",
+    "expect_rc": 0,
+    "mods": [
+      "scalar"
+    ]
+  },
+  {
+    "name": "dup-eq-reject-lone-minus",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "-",
+    "expect_rc": 1,
+    "mods": [
+      "scalar"
+    ]
+  },
+  {
+    "name": "dup-eq-reject-incomplete-exp",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "1e+",
+    "expect_rc": 0,
+    "mods": [
+      "scalar"
+    ]
+  },
+  {
+    "name": "dup-eq-bom-number",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "\ufeff42",
+    "expect_rc": 0,
+    "mods": [
+      "scalar"
+    ]
+  },
+  {
+    "name": "dup-eq-dbl-max-lossy-print",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "1.7976931348623157e308",
+    "expect_rc": 0,
+    "mods": [
+      "scalar"
+    ]
+  },
+  {
+    "name": "dup-eq-dbl-max-reparse-null",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "1.79769313486232e+308",
+    "expect_rc": 0,
+    "mods": [
+      "scalar"
+    ]
+  },
+  {
+    "name": "dup-eq-esc-roundtrip",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "\"\\b\\f\\n\\r\\t x \\/ \\\" y\"",
+    "expect_rc": 0,
+    "mods": [
+      "string"
+    ]
+  },
+  {
+    "name": "dup-eq-esc-slash-unescaped-out",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "\"a\\/b\"",
+    "expect_rc": 0,
+    "mods": [
+      "string"
+    ]
+  },
+  {
+    "name": "dup-eq-ctrl-reescape",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "\"\\u0001\"",
+    "expect_rc": 0,
+    "mods": [
+      "string"
+    ]
+  },
+  {
+    "name": "dup-eq-invalid-hex-as-nul",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "\"a\\uZZZZb\"",
+    "expect_rc": 0,
+    "mods": [
+      "string"
+    ]
+  },
+  {
+    "name": "dup-eq-nul-escape-truncates-print",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "\"a\\u0000b\"",
+    "expect_rc": 0,
+    "mods": [
+      "string"
+    ]
+  },
+  {
+    "name": "dup-eq-raw-nul-byte-in-string",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "\"a\u0000b\"",
+    "expect_rc": 0,
+    "mods": [
+      "string"
+    ]
+  },
+  {
+    "name": "dup-eq-escaped-surrogate-pair",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "\"\\uD834\\uDD1E\"",
+    "expect_rc": 0,
+    "mods": [
+      "string"
+    ]
+  },
+  {
+    "name": "dup-eq-empty-string-value",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "\"\"",
+    "expect_rc": 0,
+    "mods": [
+      "string"
+    ]
+  },
+  {
+    "name": "dup-eq-reject-short-u-before-quote",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "\"\\u041\"",
+    "expect_rc": 1,
+    "mods": [
+      "string"
+    ]
+  },
+  {
+    "name": "dup-eq-reject-lone-low-surrogate",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "\"\\uDC00\"",
+    "expect_rc": 1,
+    "mods": [
+      "string"
+    ]
+  },
+  {
+    "name": "dup-eq-reject-surrogate-bad-second",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "\"\\uD800\\u0041\"",
+    "expect_rc": 1,
+    "mods": [
+      "string"
+    ]
+  },
+  {
+    "name": "dup-eq-reject-trailing-backslash",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "\"abc\\",
+    "expect_rc": 1,
+    "mods": [
+      "string"
+    ]
+  },
+  {
+    "name": "dup-eq-dup-keys-preserved",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "{\"a\":1,\"a\":2}",
+    "expect_rc": 0,
+    "mods": [
+      "tree"
+    ]
+  },
+  {
+    "name": "dup-eq-empty-key",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "{\"\":1}",
+    "expect_rc": 0,
+    "mods": [
+      "tree"
+    ]
+  },
+  {
+    "name": "dup-eq-ws-heavy-array",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "[  1 ,   2  ]",
+    "expect_rc": 0,
+    "mods": [
+      "tree"
+    ]
+  },
+  {
+    "name": "dup-eq-nested-empty-arrays",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "[[[]]]",
+    "expect_rc": 0,
+    "mods": [
+      "tree"
+    ]
+  },
+  {
+    "name": "dup-eq-fmt-nested-obj-in-array",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "[1,{\"a\":1}]",
+    "expect_rc": 0,
+    "mods": [
+      "tree"
+    ]
+  },
+  {
+    "name": "dup-eq-fmt-nested-empty-obj",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "{\"a\":{}}",
+    "expect_rc": 0,
+    "mods": [
+      "tree"
+    ]
+  },
+  {
+    "name": "dup-eq-reject-missing-colon",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "{\"k\" 1}",
+    "expect_rc": 1,
+    "mods": [
+      "tree"
+    ]
+  },
+  {
+    "name": "dup-eq-reject-missing-comma",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "[1 2]",
+    "expect_rc": 1,
+    "mods": [
+      "tree"
+    ]
+  },
+  {
+    "name": "dup-eq-reject-leading-comma",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "[,1]",
+    "expect_rc": 1,
+    "mods": [
+      "tree"
+    ]
+  },
+  {
+    "name": "dup-eq-reject-obj-trailing-comma",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "{\"a\":1,}",
+    "expect_rc": 1,
+    "mods": [
+      "tree"
+    ]
+  },
+  {
+    "name": "dup-eq-reject-colon-no-value",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "{\"a\":}",
+    "expect_rc": 1,
+    "mods": [
+      "tree"
+    ]
+  },
+  {
+    "name": "dup-eq-cve-lone-surrogate",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "\"\\uD800\"",
+    "expect_rc": 1,
+    "mods": [
+      "string"
+    ]
+  },
+  {
+    "name": "dup-eq-cve-nesting-1001",
+    "args": [
+      "dup-eq"
+    ],
+    "stdin": "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]",
+    "expect_rc": 1,
+    "mods": [
+      "tree"
+    ]
+  }
+]

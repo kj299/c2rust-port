@@ -13,8 +13,9 @@ use crate::value::Number;
 const NUM_SCAN_CAP: usize = 63;
 
 /// cJSON.c:546 `compare_double` — relative-epsilon equality, used by the
-/// printer's 15-vs-17-digit round-trip check (NOT exact `==`).
-fn compare_double(a: f64, b: f64) -> bool {
+/// printer's 15-vs-17-digit round-trip check (NOT exact `==`) and by
+/// `dom::compare` for `cJSON_Number` equality.
+pub(crate) fn compare_double(a: f64, b: f64) -> bool {
     let max_val = a.abs().max(b.abs());
     (a - b).abs() <= max_val * f64::EPSILON
 }

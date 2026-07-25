@@ -202,8 +202,37 @@ def main():
     ported = [c for c in MATRIX if set(c["mods"]) <= ported_mods]
     with open(os.path.join(HERE, "matrix-ported.json"), "w") as f:
         json.dump(ported, f, indent=2)
+
+    # DOM (module 6) differential matrices: every PARSE-testable case (not the
+    # minify-only ones) re-run in `dup` mode (parse -> Duplicate -> print; must
+    # byte-match a plain round-trip) and `dup-eq` mode (a value equals its
+    # duplicate -> always "true"). Both sides run the same mode, so the C's dup
+    # output is the reference. Rejections still reject (parse fails first).
+    def _remode(cases, mode, expect_contains=None):
+        out = []
+        for c in cases:
+            if "minify" in c["mods"]:
+                continue
+            d = {"name": f"{mode}-{c['name']}", "args": [mode],
+                 "stdin": c["stdin"], "expect_rc": c["expect_rc"], "mods": c["mods"]}
+            if expect_contains and c["expect_rc"] == 0:
+                d["expect_contains"] = expect_contains
+            out.append(d)
+        return out
+    dup = _remode(MATRIX, "dup")
+    # NB: no expect_contains for dup-eq — cJSON_Compare returns FALSE for inf/nan
+    # numbers (compare_double(inf,inf) = nan<=inf = false) and for duplicate
+    # object keys (first-match can't resolve the 2nd key). Discovered by this
+    # matrix's own C-baseline validation. The Rust must MATCH C's true/false,
+    # which diff_run checks; asserting "true" here would be wrong.
+    dupeq = _remode(MATRIX, "dup-eq")
+    with open(os.path.join(HERE, "matrix-dup.json"), "w") as f:
+        json.dump(dup, f, indent=2)
+    with open(os.path.join(HERE, "matrix-dupeq.json"), "w") as f:
+        json.dump(dupeq, f, indent=2)
     print(f"wrote matrix.json ({len(MATRIX)} cases), holdout.json ({len(HOLDOUT)}), "
-          f"matrix-ported.json ({len(ported)})")
+          f"matrix-ported.json ({len(ported)}), matrix-dup.json ({len(dup)}), "
+          f"matrix-dupeq.json ({len(dupeq)})")
 
 
 if __name__ == "__main__":

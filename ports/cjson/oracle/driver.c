@@ -76,11 +76,31 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    /* DOM invariant mode: a value compares equal to its duplicate. */
+    if (strcmp(mode, "dup-eq") == 0) {
+        cJSON *dup = cJSON_Duplicate(item, 1);
+        int eq = (dup != NULL) && cJSON_Compare(item, dup, 1);
+        fputs(eq ? "true" : "false", stdout);
+        cJSON_Delete(dup);
+        cJSON_Delete(item);
+        free(input);
+        return 0;
+    }
+
+    /* For `dup`, print the DUPLICATE (must byte-match a plain round-trip). */
+    cJSON *to_print = item;
+    cJSON *dup = NULL;
+    if (strcmp(mode, "dup") == 0) {
+        dup = cJSON_Duplicate(item, 1);
+        if (dup == NULL) { fprintf(stderr, "duplicate failed\n"); cJSON_Delete(item); free(input); return 2; }
+        to_print = dup;
+    }
+
     char *out = NULL;
     if (strcmp(mode, "print") == 0) {
-        out = cJSON_Print(item);
-    } else { /* print-unformatted / roundtrip */
-        out = cJSON_PrintUnformatted(item);
+        out = cJSON_Print(to_print);
+    } else { /* print-unformatted / roundtrip / dup */
+        out = cJSON_PrintUnformatted(to_print);
     }
     int rc = 0;
     if (out == NULL) {
@@ -90,6 +110,7 @@ int main(int argc, char **argv) {
         fputs(out, stdout);
         free(out);
     }
+    cJSON_Delete(dup);
     cJSON_Delete(item);
     free(input);
     return rc;
