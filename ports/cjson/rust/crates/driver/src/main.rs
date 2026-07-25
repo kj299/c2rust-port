@@ -52,7 +52,7 @@ fn main() -> ExitCode {
         Ok((value, _consumed)) => match cjson_core::print_value(&value, formatted) {
             Some(out) => {
                 // fputs semantics: the exact bytes, no trailing newline
-                if std::io::stdout().write_all(out.as_bytes()).is_err() {
+                if std::io::stdout().write_all(&out).is_err() {
                     return ExitCode::from(2);
                 }
                 ExitCode::SUCCESS

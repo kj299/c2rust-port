@@ -45,10 +45,10 @@ MATRIX = [
     case("zero", "print-unformatted", "0", 0, mods=("scalar",)),
     case("float", "print-unformatted", "3.14159", 0, mods=("scalar",)),
     case("exponent", "print-unformatted", "6.022e23", 0, mods=("scalar",)),
-    case("bare-string", "print-unformatted", '"hello"', 0, expect_contains='"hello"'),
-    case("string-escapes", "print-unformatted", r'"tab\tnl\nquote\"backslash\\"', 0),
-    case("unicode-escape", "print-unformatted", r'"éè"', 0),
-    case("surrogate-pair", "print-unformatted", '"\U0001d11e"', 0),  # G-clef 𝄞
+    case("bare-string", "print-unformatted", '"hello"', 0, mods=("string",), expect_contains='"hello"'),
+    case("string-escapes", "print-unformatted", r'"tab\tnl\nquote\"backslash\\"', 0, mods=("string",)),
+    case("unicode-escape", "print-unformatted", r'"éè"', 0, mods=("string",)),
+    case("surrogate-pair", "print-unformatted", '"\U0001d11e"', 0, mods=("string",)),  # G-clef 𝄞
     case("nested-object", "print-unformatted",
          '{"a":1,"b":{"c":[true,null,"x"],"d":{}}}', 0, expect_contains='"c"'),
     case("mixed-array", "print-unformatted", '[1,"two",3.0,true,null,{}]', 0),
@@ -81,12 +81,12 @@ MATRIX = [
     # --- rejected (expect_rc 1): each pins a bug class ---
     case("reject-empty", "print-unformatted", "", 1, mods=("scalar",)),
     case("reject-garbage", "print-unformatted", "xyzzy", 1, mods=("scalar",)),
-    case("reject-unterminated-string", "print-unformatted", '"abc', 1),
+    case("reject-unterminated-string", "print-unformatted", '"abc', 1, mods=("string",)),
     case("reject-unterminated-object", "print-unformatted", '{"a":1', 1),
     case("reject-unterminated-array", "print-unformatted", "[1,2", 1),
     case("reject-trailing-comma", "print-unformatted", "[1,2,]", 1),
     case("reject-comment-in-parse", "print-unformatted", "// c\n{}", 1),
-    case("reject-bad-escape", "print-unformatted", r'"\x41"', 1),
+    case("reject-bad-escape", "print-unformatted", r'"\x41"', 1, mods=("string",)),
     # --- scalar-only additions (modules 1-2 differential; all validated vs C) ---
     case("ws-number", "print-unformatted", "   42  ", 0, mods=("scalar",),
          expect_contains="42"),
@@ -110,8 +110,36 @@ MATRIX = [
     case("dbl-max-reparse-null", "print-unformatted", "1.79769313486232e+308", 0,
          mods=("scalar",), expect_contains="null"),
 
+    # --- string-module additions (all probed against C, 2026-07-25) ---
+    case("esc-roundtrip", "print-unformatted", r'"\b\f\n\r\t x \/ \" y"', 0,
+         mods=("string",), expect_contains=r'"\b\f\n\r\t x / \" y"'),
+    case("esc-slash-unescaped-out", "print-unformatted", r'"a\/b"', 0,
+         mods=("string",), expect_contains='"a/b"'),
+    case("ctrl-reescape", "print-unformatted", r'"\u0001"', 0,
+         mods=("string",), expect_contains=r'"\u0001"'),
+    # parse_hex4 returns 0 on INVALID hex → \uZZZZ becomes a NUL, and the
+    # printer (walking a C string) truncates there: "a\uZZZZb" prints "a"
+    case("invalid-hex-as-nul", "print-unformatted", r'"a\uZZZZb"', 0,
+         mods=("string",), expect_contains='"a"', expect_absent="b"),
+    case("nul-escape-truncates-print", "print-unformatted", r'"a\u0000b"', 0,
+         mods=("string",), expect_contains='"a"', expect_absent="b"),
+    case("raw-nul-byte-in-string", "print-unformatted", '"a\x00b"', 0,
+         mods=("string",), expect_contains='"a"'),  # a REAL NUL byte in stdin
+    case("escaped-surrogate-pair", "print-unformatted", r'"\uD834\uDD1E"', 0,
+         mods=("string",), expect_contains='"\U0001d11e"'),
+    case("empty-string-value", "print-unformatted", '""', 0, mods=("string",),
+         expect_contains='""'),
+    case("reject-short-u-before-quote", "print-unformatted", r'"\u041"', 1,
+         mods=("string",)),
+    case("reject-lone-low-surrogate", "print-unformatted", r'"\uDC00"', 1,
+         mods=("string",)),
+    case("reject-surrogate-bad-second", "print-unformatted", r'"\uD800\u0041"', 1,
+         mods=("string",)),
+    case("reject-trailing-backslash", "print-unformatted", '"abc\\', 1,
+         mods=("string",)),
+
     # CVE-class regressions (FLAW-SCAN.md):
-    case("cve-lone-surrogate", "print-unformatted", r'"\uD800"', 1),   # a167d9e OOB-read class
+    case("cve-lone-surrogate", "print-unformatted", r'"\uD800"', 1, mods=("string",)),   # a167d9e OOB-read class
     case("cve-nesting-1001", "print-unformatted", "[" * 1001 + "]" * 1001, 1),  # stack-overflow guard
 ]
 
@@ -135,11 +163,15 @@ def main():
         json.dump(MATRIX, f, indent=2)
     with open(os.path.join(HERE, "holdout.json"), "w") as f:
         json.dump(HOLDOUT, f, indent=2)
-    scalar = [c for c in MATRIX if "scalar" in c["mods"]]
-    with open(os.path.join(HERE, "matrix-scalar.json"), "w") as f:
-        json.dump(scalar, f, indent=2)
+    # The PORTED set grows as modules land; a case is included when every
+    # module it depends on is ported. (matrix-scalar.json was this file's
+    # first-increment name; matrix-ported.json is the evolving one.)
+    ported_mods = {"scalar", "string"}
+    ported = [c for c in MATRIX if set(c["mods"]) <= ported_mods]
+    with open(os.path.join(HERE, "matrix-ported.json"), "w") as f:
+        json.dump(ported, f, indent=2)
     print(f"wrote matrix.json ({len(MATRIX)} cases), holdout.json ({len(HOLDOUT)}), "
-          f"matrix-scalar.json ({len(scalar)})")
+          f"matrix-ported.json ({len(ported)})")
 
 
 if __name__ == "__main__":

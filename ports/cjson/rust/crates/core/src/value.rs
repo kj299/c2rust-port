@@ -41,13 +41,21 @@ pub enum Value {
     /// `cJSON_Number`
     Number(Number),
     /// `cJSON_String` — `valuestring` is owned; no NULL state exists.
-    String(String),
+    ///
+    /// BYTES, not `String`: cJSON copies string content verbatim with no UTF-8
+    /// validation (probed: a raw 0xFF inside a quoted string round-trips), so
+    /// a Rust `String` could not represent every value the C accepts. The
+    /// bytes may also contain interior NULs (`\u0000` parses); the C printer
+    /// truncates at the first NUL because valuestring is a C string — the
+    /// port replicates that at print time (see `string::print_string`).
+    String(Vec<u8>),
     /// `cJSON_Raw` — pre-rendered JSON passed through verbatim by the printer.
-    Raw(String),
+    Raw(Vec<u8>),
     /// `cJSON_Array` — children in order.
     Array(Vec<Value>),
-    /// `cJSON_Object` — (key, value) in insertion order, duplicates allowed.
-    Object(Vec<(String, Value)>),
+    /// `cJSON_Object` — (key, value) in insertion order, duplicates allowed;
+    /// keys are bytes for the same reason values are.
+    Object(Vec<(Vec<u8>, Value)>),
 }
 
 #[cfg(test)]
@@ -59,8 +67,8 @@ mod tests {
         // cJSON_Delete walks and frees the whole tree; here dropping the root
         // is the same operation, with double-free/leak unrepresentable.
         let v = Value::Object(vec![
-            ("a".into(), Value::Array(vec![Value::True, Value::Null])),
-            ("a".into(), Value::String("dup keys allowed".into())),
+            (b"a".to_vec(), Value::Array(vec![Value::True, Value::Null])),
+            (b"a".to_vec(), Value::String(b"dup keys allowed".to_vec())),
         ]);
         drop(v);
     }

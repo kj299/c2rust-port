@@ -9,21 +9,23 @@
 //!   1. alloc-node — ✅ `value`: the owned tree; C's malloc/free discipline
 //!      becomes ownership (`Box`/`String`/`Vec`).
 //!   2. scalar-parse — ✅ `num` + the scalar arms of `parse`/`print`.
-//!   3. string-parse — ⏳ `parse_string`/`print_string` NOT PORTED: a `"` at
-//!      value position currently fails the parse.
+//!   3. string-parse — ✅ `string`: parse/print with the C's probed quirks
+//!      (invalid-hex→NUL, print-truncates-at-NUL, verbatim non-UTF-8 bytes).
 //!   4. buffer-plumbing — ✅ the parse-side half (`ParseBuffer`, whitespace/BOM).
 //!   5. recursive-core — ⏳ `[`/`{` currently fail the parse (NESTING_LIMIT is
 //!      declared so the guard cannot be forgotten).
 //!   6. dom / 7. entry-minify — ⏳.
 //!
-//! Every ⏳ arm returns a parse failure — the differential matrix for this
-//! increment (`oracle/matrix-scalar.json`) only contains inputs whose behavior
-//! is fully determined by the ported modules, so the diff verdict is meaningful.
+//! Every ⏳ arm returns a parse failure — the differential matrix for the
+//! current increment (`oracle/matrix-ported.json`) only contains inputs whose
+//! behavior is fully determined by the ported modules, so the diff verdict is
+//! meaningful.
 #![forbid(unsafe_code)]
 
 pub mod num;
 pub mod parse;
 pub mod print;
+pub mod string;
 pub mod value;
 
 pub use parse::{parse_with_length, ParseError};

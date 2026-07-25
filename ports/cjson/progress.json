@@ -6,6 +6,6 @@
     "entry-minify": "not_started",
     "recursive-core": "not_started",
     "scalar-parse": "differential",
-    "string-parse": "not_started"
+    "string-parse": "differential"
   }
 }

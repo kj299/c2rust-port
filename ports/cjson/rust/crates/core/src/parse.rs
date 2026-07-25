@@ -11,6 +11,7 @@
 //!     document like BOM+"1" keeps its BOM and fails to parse — same as C.
 
 use crate::num::parse_number;
+use crate::string::parse_string;
 use crate::value::Value;
 
 /// cJSON.h:137 `CJSON_NESTING_LIMIT` — THE guard Rust does not provide for
@@ -90,7 +91,8 @@ fn parse_value(buf: &mut ParseBuffer) -> Result<Value, ()> {
         return Ok(Value::True);
     }
     if buf.can_access(0) && buf.content[buf.offset] == b'"' {
-        return Err(()); // ⏳ module 3 (string-parse) not yet ported
+        // module 3: parse_string sets the offset (past-quote or error site)
+        return parse_string(buf).map(Value::String);
     }
     if buf.can_access(0)
         && (buf.content[buf.offset] == b'-' || buf.content[buf.offset].is_ascii_digit())
