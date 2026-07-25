@@ -123,8 +123,19 @@ def load_ledger(path):
         truncation causes (`parse:header` + `parse:footer` → both `parse`)."""
     known = {}
     if path and os.path.exists(path):
+        in_fence = False
         for lineno, line in enumerate(open(path, encoding="utf-8"), 1):
             s = line.strip()
+            # Lines inside a ``` fence are FORMAT DOCUMENTATION, not entries. The
+            # shipped skeleton/DIVERGENCES.md shows the format in a fenced block
+            # using `- [x]` — harvested literally, that gave a port three bogus
+            # by-name suppressions (`fuzz` among them) the moment it copied the
+            # template: a template failing the gate it ships (LESSONS #9).
+            if s.startswith("```"):
+                in_fence = not in_fence
+                continue
+            if in_fence:
+                continue
             if s.startswith(("- [x]", "* [x]")):
                 body = s[5:].strip()
                 m = _FP_RE.search(body)
@@ -412,6 +423,14 @@ def _self_test():
     open(ledger_path, "w").write("- [x] parse:header: one\n- [x] parse:footer: two\n")
     check("two names colliding via ':' truncation is refused",
           _exits(lambda: load_ledger(ledger_path)))
+    # A ``` fenced block documents the FORMAT — its `- [x]` lines are not entries.
+    # (The shipped skeleton ledger does exactly this; harvesting them handed every
+    # port that copied it three bogus by-name suppressions.)
+    open(ledger_path, "w").write(
+        "text\n```\n- [x] <case-name> [sha256:<hex>]: format example\n- [x] fuzz:<desc>: example\n```\n"
+        "- [x] real: an actual entry outside the fence\n")
+    check("`- [x]` lines inside a ``` fence are documentation, not entries",
+          load_ledger(ledger_path) == {"real": None})
     os.unlink(ledger_path)
 
     # exit-code fidelity: same stdout, different exit status must DIVERGE.
