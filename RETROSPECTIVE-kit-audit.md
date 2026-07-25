@@ -181,6 +181,11 @@ partially discharged (CI now runs; sanitizers still don't). What remains: item
 **1** (`warn`→`deny`, a kickoff policy call), the sanitizers, and the keystone:
 **port foreign C**.
 
+**The keystone is closed:** `RETROSPECTIVE-kit-v1.md` §5 item 1 — *port a real,
+foreign, CVE-bearing C codebase* — is done. cJSON v1.7.18 is ported through all
+six gates (`ports/cjson/`, `RETROSPECTIVE-cjson.md`), and LESSONS 017–020 are the
+first entries in this kit's history that came from code the kit did not write.
+
 Also closed 2026-07-25, from the *v1* backlog rather than this list:
 `RETROSPECTIVE-kit-v1.md` §5 item 2 — **gate-mutation verification** now exists
 (`harnesses/gate-mutation/mutate_gates.py`, in `check-kit`): each gate's verdict

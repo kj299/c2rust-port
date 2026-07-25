@@ -122,6 +122,14 @@ winlsof's phase order was sound; its one miss was not spiking the hang first.
   inherits *nothing* ambient — a runner that lets a stdin-reading binary inherit the
   parent's stdin hangs or passes depending on who launched it (`run_one` feeds
   `DEVNULL` when a case has no stdin, for exactly this reason).
+- **Tag every corpus vector with the module(s) whose behavior decides it**, and
+  run each increment's differential against the *ported subset* — the full matrix
+  is the cutover gate (LESSONS #19). Write the corpus ONCE against the C (validate
+  all of it up front); only the filter moves as modules land. Without this, a
+  multi-module port spends its early increments staring at failures that mean
+  "not written yet" rather than "wrong" — noise that trains you to ignore red
+  (the LESSONS #2 failure mode). `ports/cjson/oracle/gen_corpus.py` is the worked
+  reference: `mods: [...]` per vector, emitting a `matrix-ported.json` filter.
 - Stand up an **intentional-divergence ledger** (`DIVERGENCES.md`, template in
   the skeleton): every place the Rust will *deliberately* differ from C —
   starting with the Phase-0 flaw scan's findings.
@@ -231,7 +239,15 @@ Then the loop — each step is a CI-enforced gate:
 6. **Review & merge.** Update the `progress` table (the module advances
    ported → differential-passing → fuzzed → sanitized → unsafe-audited).
 
-**Entry criteria:** skeleton + oracle.
+**Entry criteria:** skeleton + oracle — and, per module, a **probe transcript**:
+before writing the Rust, run the oracle on that module's edge cases and paste the
+observed bytes into the module's doc comment. Write the unit-test expectations
+from that transcript, never from reasoning about what the C "must" do (LESSONS
+#17: on the cJSON port, every first-try mistake came from reasoning — `%1.15g`
+printing of DBL_MAX is *lossy* and the C accepts it; `cJSON_Compare` says a value
+differs from its own duplicate for inf/nan and for duplicate keys; minify does not
+track escape parity. A mature C library's behavior is accreted quirks, several of
+which look like bugs; a port that silently "cleans them up" is differently wrong).
 **Exit criteria (per module):** all six gates green; `progress` row fully ticked.
 **Artifacts:** the module, its fuzz target, its golden cases, divergence entries.
 **lsof failure modes this prevents:** the 7-commit hang (spike-first + sanitizer

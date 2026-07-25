@@ -64,6 +64,14 @@ retrospective and **patch the Porting Kit** with what you learned.
    (date, codebase, lesson, playbook section amended). If the kit already had
    the lesson but it didn't fire, say why (friction? unclear? not wired to CI?).
 
+4b. **Send every harness fix the port forced back to the kit, in this session**
+   (LESSONS #20). A harness meets its real bugs only on a real port: `lib_diff`
+   had a full self-test suite, survived the gate-mutation sweep, and still crashed
+   the first time a foreign port passed it a bytes-valued return through `--json`.
+   Coverage of a gate's *decision* is not coverage of the plumbing around it. If
+   the port worked around a harness rather than fixing it, that workaround is the
+   bug report — fix the harness and pin it.
+
 5. **Commit the kit changes separately** from the port, with a message explaining
    which failure each edit prevents next time.
 

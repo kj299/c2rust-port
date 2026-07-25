@@ -96,15 +96,50 @@ for m in scalar-parse string-parse buffer-plumbing recursive-core; do
   cp "$HERE/reports/fuzz/alloc-node.json" "$HERE/reports/fuzz/$m.json"
 done
 
+echo "===== 4b. miri — UB check over the FFI crate's unsafe (toolchain-optional) ====="
+# The ffi crate is the port's ENTIRE memory-safety risk surface, so this is where
+# UB detection matters. Toolchain-optional like the kit's skeleton gate: SKIPs
+# cleanly without nightly+miri, runs for real when present. Verified fail-closed:
+# injecting an out-of-bounds read into the FFI tests makes miri exit nonzero
+# (LESSONS #6 — a sanitizer that can't fail proves nothing; LESSONS #18 — and a
+# gate that never RAN must not advance the rung either).
+if cargo +nightly miri --version >/dev/null 2>&1; then
+  ( cd "$HERE/rust" && cargo +nightly miri test -p cjson_ffi -p cjson_core --quiet )
+  echo "miri: no UB in the unsafe FFI surface (or the safe core)"
+  MIRI_RAN=1
+else
+  echo "SKIP  miri: no nightly+miri toolchain (install: rustup toolchain install nightly --component miri)"
+  MIRI_RAN=0
+fi
+
 echo "===== 5. unsafe-audit over the rust workspace ====="
+# The ffi crate's C-ABI shim is the only unsafe; every block must carry a
+# // SAFETY:. Emitted per-module as a stamped report so the final gate rung
+# (unsafe_audited) advances from the harness's own verdict, not by hand.
 "$PY" "$KIT/harnesses/unsafe-audit/audit_unsafe.py" "$HERE/rust/crates"
+mkdir -p "$HERE/reports/unsafe"
+"$PY" "$KIT/harnesses/unsafe-audit/audit_unsafe.py" "$HERE/rust/crates" --json \
+    > "$HERE/reports/unsafe/alloc-node.json"
+for m in scalar-parse string-parse buffer-plumbing recursive-core dom entry-minify; do
+  cp "$HERE/reports/unsafe/alloc-node.json" "$HERE/reports/unsafe/$m.json"
+done
+
+if [ "$MIRI_RAN" = "1" ]; then
+  # `sanitized` has no --json harness, so it is set explicitly — and ONLY when
+  # miri actually ran (never on a SKIP: an unrun gate must not advance).
+  for m in alloc-node scalar-parse string-parse buffer-plumbing recursive-core dom entry-minify; do
+    "$PY" "$KIT/harnesses/progress/progress.py" --file "$HERE/progress.json" set "$m" sanitized >/dev/null
+  done
+  echo "progress: sanitized gate set for every module (miri ran)"
+fi
 
 echo "===== 6. progress — ingest the stamped reports (multi-rung) ====="
 ( cd "$KIT"   # ingest verifies report provenance against THIS repo's HEAD
   "$PY" harnesses/progress/progress.py --file "$HERE/progress.json" \
       ingest \
       --diff-json "$HERE"/reports/*.json \
-      --fuzz-json "$HERE"/reports/fuzz/*.json
+      --fuzz-json "$HERE"/reports/fuzz/*.json \
+      --unsafe-json "$HERE"/reports/unsafe/*.json
   "$PY" harnesses/progress/progress.py --file "$HERE/progress.json" show )
 
 echo ""

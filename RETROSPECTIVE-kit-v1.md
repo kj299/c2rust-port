@@ -15,6 +15,11 @@
 >   in CI. The residual gap is narrower — the **sanitizers** and the **`porting-ci`
 >   template** are still unexercised (LESSONS #15).
 >
+> * **The §5 plan is done.** Item 1 (port real foreign CVE-bearing C) landed as
+>   the cJSON port — see `RETROSPECTIVE-cjson.md`; item 2 (gate-mutation
+>   verification) exists as `harnesses/gate-mutation/`; item 3's CI half runs and
+>   its sanitizer half now runs miri against that port.
+>
 > **Where to read next:** `RETROSPECTIVE-kit-audit.md` is the current-state
 > document — the six-lens audit that followed, its findings, and the live v1.x
 > backlog with burn-down status. `CODE-REVIEW.md` is the frozen full review of the

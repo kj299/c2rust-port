@@ -1,11 +1,11 @@
 {
   "modules": {
-    "alloc-node": "fuzzed",
-    "buffer-plumbing": "fuzzed",
-    "dom": "fuzzed",
-    "entry-minify": "fuzzed",
-    "recursive-core": "fuzzed",
-    "scalar-parse": "fuzzed",
-    "string-parse": "fuzzed"
+    "alloc-node": "unsafe_audited",
+    "buffer-plumbing": "unsafe_audited",
+    "dom": "unsafe_audited",
+    "entry-minify": "unsafe_audited",
+    "recursive-core": "unsafe_audited",
+    "scalar-parse": "unsafe_audited",
+    "string-parse": "unsafe_audited"
   }
 }
