@@ -109,11 +109,19 @@ def _self_test():
         open(os.path.join(good, "SKILL.md"), "w").write(
             "---\nname: good-skill\ndescription: ok\n---\nsee porting-kit/PLAYBOOK.md\n")
         check("clean suite passes", run(skills) == 0)
-        # bad skill: name mismatch + missing referenced path
+        # ONE fixture per defect (LESSONS #16): the original fixture bundled a name
+        # mismatch AND a missing path into one exit-code assertion, so the
+        # missing-path check could be deleted outright and this self-test stayed
+        # green — the name mismatch alone drove the exit code. Found by the
+        # gate-mutation harness on its first run. Each check gets its own fixture
+        # so each is pinned independently.
         bad = os.path.join(skills, "bad-skill"); os.makedirs(bad)
         open(os.path.join(bad, "SKILL.md"), "w").write(
-            "---\nname: WRONG\ndescription: d\n---\nrun porting-kit/harnesses/gone.py\n")
-        check("name mismatch + missing path is caught", run(skills) == 1)
+            "---\nname: bad-skill\ndescription: d\n---\nrun porting-kit/harnesses/gone.py\n")
+        check("a missing referenced path ALONE is caught", run(skills) == 1)
+        open(os.path.join(bad, "SKILL.md"), "w").write(
+            "---\nname: WRONG\ndescription: d\n---\nsee porting-kit/PLAYBOOK.md\n")
+        check("a name mismatch ALONE is caught", run(skills) == 1)
     print("\nself-test:", "OK" if ok else "FAILED")
     return 0 if ok else 1
 

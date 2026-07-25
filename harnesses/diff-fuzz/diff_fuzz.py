@@ -299,9 +299,14 @@ def _self_test():
 
         summary = fuzz(oracle, rust, dict(base_opts))
         check("finds the format-string divergence", len(summary["findings"]) >= 1)
+        # Guard the [0] access so a zero-findings run FAILS these checks instead of
+        # crashing the self-test: the gate-mutation harness (LESSONS #16) requires
+        # red to come from a failed check, not a Traceback — crash-red is
+        # indistinguishable from harness-broken-red.
+        first = summary["findings"][0] if summary["findings"] else {}
         check("minimizes to the single triggering byte '%'",
-              summary["findings"][0]["input_repr"] == repr(b"%"))
-        fp = summary["findings"][0]["fingerprint"]
+              first.get("input_repr") == repr(b"%"))
+        fp = first.get("fingerprint")
 
         # deterministic: same seed → identical finding
         s2 = fuzz(oracle, rust, dict(base_opts))
@@ -322,11 +327,14 @@ def _self_test():
         fdir = os.path.join(d, "findings")
         opts_f = dict(base_opts); opts_f["findings_dir"] = fdir
         summary = fuzz(oracle, rust, opts_f)
-        saved = summary["findings"][0]["saved"]
-        check("saves a reproducer input file", os.path.exists(saved))
+        # guarded like `first` above: zero findings must FAIL, not crash
+        saved = (summary["findings"][0].get("saved", "")
+                 if summary["findings"] else "")
+        check("saves a reproducer input file", bool(saved) and os.path.exists(saved))
         check("saved reproducer actually re-triggers the divergence",
-              _is_finding(_judge(open(saved, "rb").read(), oracle, rust, [],
-                                 opts_f)["verdict"]))
+              bool(saved) and _is_finding(
+                  _judge(open(saved, "rb").read(), oracle, rust, [],
+                         opts_f)["verdict"]))
 
         # a rust-side HANG on some input is a finding, not a pass (LESSONS #6).
         # Tight timeout + small minimize budget keep this cheap.

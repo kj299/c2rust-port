@@ -526,3 +526,40 @@ the emphasized half.
 - **Section amended:** RETROSPECTIVE-kit-v1.md · status note;
   RETROSPECTIVE-kit-audit.md · §5 correction + §6 burn-down;
   PROMPTS/90-retrospective.md · step 0.
+
+---
+
+## 016. A multi-defect fixture pins only the union — mutate the gates to prove them
+
+- **Date:** 2026-07-25
+- **Codebase:** the Porting Kit itself (gate-mutation verification, the standing
+  `RETROSPECTIVE-kit-v1.md` §5 item 2)
+- **What happened:** Every fail-open this kit has ever shipped — the both-hang
+  MATCH, LEDGER-STALE, the wrapped-path skip, the fenced-block harvest — was a
+  gate that *passed while checking nothing*, and every one was found by a human
+  probing by hand. The gate-mutation harness makes that probe mechanical:
+  neutralize each gate's crown verdict in a scratch copy (`is_match = True`,
+  `return []`, `if False:`) and require its own self-test to go red. **Its first
+  sweep found a survivor.** `check_skills.py`'s missing-path detection could be
+  deleted outright with the suite staying green, because its "bad skill" fixture
+  bundled TWO defects — a name mismatch and a missing path — into one
+  `exit == 1` assertion: the name mismatch alone drove the exit code, so the
+  path check was pinned by nothing. The general form: **a fixture that carries N
+  defects pins only their union — any N−1 of the checks can silently die.** The
+  sweep also showed diff-fuzz's self-test *crashing* (unguarded `findings[0]`)
+  instead of failing when findings vanish; crash-red is indistinguishable from
+  harness-broken-red, so the mutation harness treats a Traceback as a hard
+  error, not a catch.
+- **Kit change:** `harnesses/gate-mutation/mutate_gates.py` — a 14-gate mutation
+  table wired into `make check-kit` (self-test + full sweep). Fail-closed at
+  every joint: a stale or ambiguous table entry, a syntax-breaking mutation, a
+  Traceback under mutation, or a red baseline are all hard errors, so the sweep
+  can neither rot silently nor claim fake coverage. The survivor was fixed by
+  splitting the bundled fixture (one fixture per defect, each pinned
+  independently) and the diff-fuzz self-test now fails cleanly on zero findings.
+  14/14 mutations caught; the gate set is self-verifying.
+- **Section amended:** harnesses/gate-mutation/mutate_gates.py (new);
+  skills/check_skills.py (one fixture per defect);
+  harnesses/diff-fuzz/diff_fuzz.py (guarded `findings[0]`);
+  Makefile · check-kit; README · harness table;
+  RETROSPECTIVE-kit-audit.md · §6 burn-down.
