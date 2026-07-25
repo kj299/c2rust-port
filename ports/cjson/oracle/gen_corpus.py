@@ -78,6 +78,21 @@ MATRIX = [
     case("minify-unterminated-block", "minify", "/* never closed", 0,
          mods=("minify",), expect_absent="never"),
 
+    case("minify-string-verbatim", "minify", '{ "a b" : "c d" }', 0,
+         mods=("minify",), expect_contains='{"a b":"c d"}'),
+    case("minify-comment-in-string", "minify", '{"k":"a // b /* c */ d"}', 0,
+         mods=("minify",), expect_contains='"a // b /* c */ d"'),
+    case("minify-lone-slash-dropped", "minify", '{"a":1/2}', 0, mods=("minify",),
+         expect_contains='{"a":12}'),  # the lone-'/' quirk
+    case("minify-interleaved-comments", "minify", '[ 1, /* c */ 2, // d\n 3 ]', 0,
+         mods=("minify",), expect_contains="[1,2,3]"),
+    case("minify-escaped-quote", "minify", r'{"a":"x\"y"}', 0, mods=("minify",),
+         expect_contains=r'"x\"y"'),
+    # diff-fuzz finding (2026-07-25): C minify doesn't track escape parity, so
+    # `\` before a `"` still escapes the quote — "\\" " keeps its space.
+    case("minify-escape-parity-quirk", "minify", '"\\\\" "', 0, mods=("minify",),
+         expect_contains='" "'),
+
     # --- rejected (expect_rc 1): each pins a bug class ---
     case("reject-empty", "print-unformatted", "", 1, mods=("scalar",)),
     case("reject-garbage", "print-unformatted", "xyzzy", 1, mods=("scalar",)),
@@ -183,7 +198,7 @@ def main():
     # The PORTED set grows as modules land; a case is included when every
     # module it depends on is ported. (matrix-scalar.json was this file's
     # first-increment name; matrix-ported.json is the evolving one.)
-    ported_mods = {"scalar", "string", "tree"}
+    ported_mods = {"scalar", "string", "tree", "minify"}
     ported = [c for c in MATRIX if set(c["mods"]) <= ported_mods]
     with open(os.path.join(HERE, "matrix-ported.json"), "w") as f:
         json.dump(ported, f, indent=2)

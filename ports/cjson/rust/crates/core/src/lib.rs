@@ -17,19 +17,23 @@
 //!   5. recursive-core — ✅ `parse_array`/`parse_object` + the printer, with
 //!      the NESTING_LIMIT depth guard (the one guard Rust doesn't inherit;
 //!      spiked: depth-1000 parses, depth-1001 rejects).
-//!   6. dom / 7. entry-minify — ⏳ (`Raw` printing and `minify` are the only
-//!      unreachable-from-parse arms left).
+//!   7. entry-minify — ✅ `minify`: cJSON_Minify with the #338 bound made
+//!      structural (slice indices, no raw pointer walk).
+//!   6. dom — ⏳ the DOM builder/query API + the C-ABI FFI crate.
 //!
-//! The differential matrix (`oracle/matrix-ported.json`) now covers every
-//! input the parse entry points decide — everything except `minify` mode.
+//! The differential matrix (`oracle/matrix-ported.json`) now covers the ENTIRE
+//! CLI surface — parse, print, and minify. Only the DOM builder/query API and
+//! the C-ABI FFI crate (module 6) remain.
 #![forbid(unsafe_code)]
 
+pub mod minify;
 pub mod num;
 pub mod parse;
 pub mod print;
 pub mod string;
 pub mod value;
 
+pub use minify::minify;
 pub use parse::{parse_with_length, ParseError};
 pub use print::print_value;
 pub use value::{Number, Value};

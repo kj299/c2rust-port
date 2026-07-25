@@ -3,7 +3,7 @@
     "alloc-node": "fuzzed",
     "buffer-plumbing": "fuzzed",
     "dom": "not_started",
-    "entry-minify": "not_started",
+    "entry-minify": "fuzzed",
     "recursive-core": "fuzzed",
     "scalar-parse": "fuzzed",
     "string-parse": "fuzzed"

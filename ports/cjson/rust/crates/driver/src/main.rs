@@ -35,8 +35,12 @@ fn main() -> ExitCode {
         "print" => true,
         "print-unformatted" | "roundtrip" => false,
         "minify" => {
-            eprintln!("minify: not yet ported (module 7)");
-            return ExitCode::from(2);
+            // module 7: cJSON_Minify — bytes in, minified bytes out, exit 0
+            let out = cjson_core::minify(&input);
+            if std::io::stdout().write_all(&out).is_err() {
+                return ExitCode::from(2);
+            }
+            return ExitCode::SUCCESS;
         }
         other => {
             eprintln!("unknown mode: {other}");

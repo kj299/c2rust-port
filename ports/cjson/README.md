@@ -5,20 +5,33 @@ with a decade of CVE history. This is the keystone the retrospectives kept namin
 the moment the compounding loop stops feeding on itself and learns from code the
 kit did not write (`RETROSPECTIVE-kit-audit.md` §6, keystone item).
 
-## Status: **Phase 4 — modules 1–5 ported and FUZZED; 69/69 differential MATCH**
+## Status: **Phase 4 — 6/7 modules FUZZED; full CLI surface done; 79/79 diff, fuzz-clean**
 
 Phase 0 (inventory/plan) merged in #15; Phase 2 (oracle) merged in #16. The Rust
 port now exists (`rust/`: `#![forbid(unsafe_code)]` core + differential driver)
-with five modules (**alloc-node**, **scalar-parse**, **string-parse**,
-**buffer-plumbing**, **recursive-core**) at the **fuzzed** gate. The corpus is 80
-C-validated vectors; the differential covers the 69 the parse entry points
-decide (everything except minify) — **69/69 MATCH**, including both CVE-class
-regressions now exercised against the Rust: `cve-lone-surrogate` (the a167d9e
-OOB-read class, rejected identically) and **`cve-nesting-1001`** (the
-stack-overflow guard: the ported `NESTING_LIMIT` rejects depth-1001 exactly
-where the C does, and depth-1000 parses — the boundary spiked and pinned).
-Differential FUZZING is live: thousands of matrix-seeded mutated inputs,
-zero findings — the fuzzer cannot tell the Rust from the C.
+with **six of seven modules** at the **fuzzed** gate — the entire CLI-observable
+surface (parse, print, **minify**) is ported. The corpus is 86 C-validated
+vectors; the differential covers all 79 (`matrix-ported.json` == the full
+matrix now) — **79/79 MATCH**, including both CVE-class regressions live against
+the Rust: `cve-lone-surrogate` (a167d9e OOB-read class) and **`cve-nesting-1001`**
+(the stack-overflow guard — depth-1001 rejected, depth-1000 parses, the boundary
+spiked and pinned). Differential FUZZING runs in **both** print and minify
+modes, thousands of iterations, zero findings.
+
+**The fuzzer earned its keep on minify.** A first minify-fuzz run found a real
+divergence: the C's `minify_string` does not track escape parity, so a `\`
+before a `"` escapes that quote even when the backslash is itself escaped
+(`"\\" "` keeps its space). The escape-tracking port dropped the space;
+the fix replicates the C's actual (arguably buggy) bytes, pinned in a unit test
+and the `minify-escape-parity-quirk` corpus vector, and re-fuzzed 6000 iters
+clean. This is the compounding loop working on foreign code: fuzz → find →
+fix-forward → pin, in one change.
+
+**Remaining: module 6 (`dom`)** — the DOM builder/query API
+(`cJSON_Create*`/`Add*`/`Get*`/`Duplicate`/`Compare`) and the C-ABI FFI
+`cdylib`. This is the port's first `unsafe` (the audited `extern "C"` shim over
+the `#![forbid(unsafe_code)]` core) and where the `cJSON_InitHooks` allocator
+decision lands. It is a large, self-contained final increment.
 
 The `sanitized` gate stays honestly unset: miri/asan need toolchains this
 environment lacks; they ride the CI-with-sanitizers item in the kit backlog.

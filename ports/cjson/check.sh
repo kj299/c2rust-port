@@ -46,6 +46,7 @@ cp "$HERE/reports/alloc-node.json" "$HERE/reports/scalar-parse.json"
 cp "$HERE/reports/alloc-node.json" "$HERE/reports/string-parse.json"
 cp "$HERE/reports/alloc-node.json" "$HERE/reports/buffer-plumbing.json"
 cp "$HERE/reports/alloc-node.json" "$HERE/reports/recursive-core.json"
+cp "$HERE/reports/alloc-node.json" "$HERE/reports/entry-minify.json"
 
 echo "===== 4. diff-fuzz — differential fuzzing, Rust vs C ====="
 mkdir -p "$HERE/reports/fuzz"
@@ -54,6 +55,13 @@ mkdir -p "$HERE/reports/fuzz"
     --args print-unformatted --matrix "$HERE/oracle/matrix.json" \
     --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
     --json > "$HERE/reports/fuzz/alloc-node.json"
+# minify mode too — the #338 site, and where the fuzzer found the escape-parity
+# quirk. Both modes must stay clean.
+"$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
+    --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
+    --args minify --matrix "$HERE/oracle/matrix.json" \
+    --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
+    --json > "$HERE/reports/fuzz/entry-minify.json"
 for m in scalar-parse string-parse buffer-plumbing recursive-core; do
   cp "$HERE/reports/fuzz/alloc-node.json" "$HERE/reports/fuzz/$m.json"
 done
