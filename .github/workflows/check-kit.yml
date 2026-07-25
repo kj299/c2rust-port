@@ -61,3 +61,16 @@ jobs:
       - run: rustup toolchain install stable --profile minimal --no-self-update
       - run: rustup default stable
       - run: examples/adler32/run.sh
+
+  cjson-port:
+    name: cJSON port gate (oracle + differential over the ported modules)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The keystone port's live gate: locks the C oracle (build + validate all
+      # vectors against the vendored cJSON), then diffs the Rust port over the
+      # matrices its ported modules support. Runs in CI from day one so the
+      # port's gates cannot rot unexecuted (LESSONS #13).
+      - run: rustup toolchain install stable --profile minimal --component clippy,rustfmt --no-self-update
+      - run: rustup default stable
+      - run: ports/cjson/check.sh

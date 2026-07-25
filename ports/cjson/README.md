@@ -5,11 +5,25 @@ with a decade of CVE history. This is the keystone the retrospectives kept namin
 the moment the compounding loop stops feeding on itself and learns from code the
 kit did not write (`RETROSPECTIVE-kit-audit.md` §6, keystone item).
 
-## Status: **Phase 2 complete (oracle locked) — no Rust written yet, awaiting review**
+## Status: **Phase 4 in progress — modules 1–2 ported, 25/25 differential MATCH**
 
-Phase 0 (inventory/flaw-scan/threat-model/plan) merged in #15. Phase 2 builds the
-differential **oracle**: a C driver over the pristine source + a 45-vector corpus,
-every vector validated against the C baseline.
+Phase 0 (inventory/plan) merged in #15; Phase 2 (oracle) merged in #16. The Rust
+port now exists (`rust/`: `#![forbid(unsafe_code)]` core + differential driver)
+with modules **alloc-node** and **scalar-parse** at the `differential` gate —
+**the first time the kit's differential has run green on foreign code.** The
+corpus is 57 vectors (all validated against C); the scalar increment diffs the
+25 whose behavior the ported modules fully determine.
+
+Run the whole port gate (also a CI job, `cjson-port`):
+
+    bash ports/cjson/check.sh   # oracle lock → fmt/clippy/test → diff_run 25/25 → unsafe-audit → progress ingest
+
+First differential discovery, pinned in tests + vectors: **C's DBL_MAX printing
+is lossy** — the `%1.15g` form reparses as *inf* (above DBL_MAX), and
+`compare_double(inf, d)` = `inf ≤ inf·ε` is *true*, so C never falls back to 17
+digits; `print(DBL_MAX)` → reparse → reprint gives `null`. The port reproduces
+it byte-for-byte (see DIVERGENCES.md — faithfulness first, a "fix" would be a
+ledgerable divergence).
 
 | Artifact | What |
 |---|---|
