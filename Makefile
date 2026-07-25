@@ -24,6 +24,8 @@ check-kit:
 	@echo "== sanitizers ==";       bash  $(H)/sanitizers/run_sanitizers.sh --check
 	@echo "== matrix parses ==";    $(PY) -c "import tomllib; tomllib.load(open('$(H)/differential/input-matrix.example.toml','rb')); print('PASS  matrix parses')"
 	@echo "== vectors parse ==";    $(PY) -c "import tomllib; tomllib.load(open('$(H)/cando/vectors.example.toml','rb')); print('PASS  vectors parse')"
+	@echo "== threat-model self-test =="; $(PY) $(H)/threat-model/check_threat_model.py --self-test
+	@echo "== threat-model template =="; $(PY) $(H)/threat-model/check_threat_model.py skeleton/THREAT-MODEL.md --template
 	@echo "== doc-flags self-test ==="; $(PY) $(H)/doc-check/check_doc_flags.py --self-test
 	@echo "== doc-flags integrity =="; $(PY) $(H)/doc-check/check_doc_flags.py
 	@echo "== lessons-pinned self-test =="; $(PY) $(H)/doc-check/check_lessons_pinned.py --self-test

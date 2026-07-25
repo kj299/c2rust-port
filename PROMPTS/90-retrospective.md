@@ -20,6 +20,15 @@ retrospective and **patch the Porting Kit** with what you learned.
    degenerate case — no targets, a hung binary on both sides, a missing
    component — and confirm it goes red. A gate that passes when nothing ran is
    the failure class reading can't find and green CI actively hides.
+   **And re-verify every inherited "this doesn't work here" claim before you
+   repeat it** (LESSONS #15): a negative environment finding — Actions is blocked,
+   that tool isn't installed, the API is unavailable — is the fact most likely to
+   be carried across sessions and least likely to be re-tested, because retesting
+   feels redundant. The v1.x audit published "CI has never executed" hours before
+   its own PR went green in CI. No gate watches prose: re-run the thing, and write
+   environment claims **dated and scoped** ("as of YYYY-MM-DD, in this repo").
+   When one turns out stale, correct it with a dated note — never a silent rewrite,
+   which erases the failure mode instead of recording it.
 
 1. **Reconstruct the experience from artifacts**, the way
    `RETROSPECTIVE-lsof.md` was built — lean on git history, especially:

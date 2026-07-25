@@ -40,6 +40,7 @@ A module that compiles and matches the oracle is at step 2 of 6, not done.
 | clean deps | `harnesses/supply-chain/run_supply_chain.sh` |
 | no silent drift | `harnesses/differential/diff_run.py` + `DIVERGENCES.md` |
 | don't re-port a vuln | `harnesses/c-flaw-scan/scan_c_flaws.py` at Phase 0 |
+| threat model filled in | `harnesses/threat-model/check_threat_model.py THREAT-MODEL.md` — **hard fail** |
 
 Smoke-test the harnesses anytime with `make check-kit` from the kit root —
 `make -C porting-kit check-kit` in a repo that vendors the kit at `porting-kit/`

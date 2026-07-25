@@ -83,6 +83,20 @@ jobs:
       # Fails the build if ANY `unsafe {}` block lacks a // SAFETY: comment.
       - run: python3 porting-kit/harnesses/unsafe-audit/audit_unsafe.py crates/
 
+  threat-model:
+    name: threat-model (must be filled in, not the shipped template)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        with: { python-version: "3.11" }
+      # Phase 0 requires a real threat model: it picks the fuzz targets (trust
+      # boundaries) and the audit hotspots (privilege transitions). Fails on a
+      # missing file, a missing required section, or a leftover <placeholder> —
+      # so a port cannot cut over still carrying the skeleton's blank.
+      - run: python3 porting-kit/harnesses/threat-model/check_threat_model.py THREAT-MODEL.md
+
   miri:
     name: miri (UB in unsafe)
     runs-on: ubuntu-latest

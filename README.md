@@ -64,6 +64,7 @@ repo-root `porting-kit/`; adjust the paths inside if you vendor it elsewhere).
 | `harnesses/sanitizers/run_sanitizers.sh` | Miri / ASan / UBSan / TSan over the unsafe layer | CI |
 | `harnesses/supply-chain/run_supply_chain.sh` | `cargo audit` + `cargo deny` | CI |
 | `harnesses/c-flaw-scan/scan_c_flaws.py` | find C vuln classes *before* porting | Phase 0 |
+| `harnesses/threat-model/check_threat_model.py` | the threat model must be filled in, not the shipped blank | Phase 0 + CI |
 | `harnesses/progress/progress.py` | per-module status table incl. safety gates | tracking |
 | `harnesses/doc-check/check_doc_flags.py` | doc'd harness flags must exist (anti-drift) | `check-kit` |
 | `harnesses/doc-check/check_lessons_pinned.py` | every lesson that amends a harness stays cited/pinned there | `check-kit` |

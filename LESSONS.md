@@ -488,3 +488,41 @@ the emphasized half.
   harnesses/doc-check/check_lessons_pinned.py (rejoin wrapped paths + self-test);
   and RETROSPECTIVE-kit-audit.md (the finding inventory + the v1.x backlog of
   what was NOT fixed).
+
+---
+
+## 015. An inherited environment constraint is a dated observation, not a fact
+
+- **Date:** 2026-07-25
+- **Codebase:** the Porting Kit itself (v1.x backlog burn-down)
+- **What happened:** The comprehensive audit (LESSONS #14) shipped a **false claim
+  about the present**, and it was one this session inherited rather than checked.
+  Earlier sessions established that GitHub Actions was policy-blocked in this repo
+  (every run a `startup_failure`, zero jobs — LESSONS #10), and that fact was
+  reasonably carried forward: `RETROSPECTIVE-kit-v1.md` §5 and then
+  `RETROSPECTIVE-kit-audit.md` §5/§6 both asserted the workflows "have never
+  executed." Within the hour of the audit merging, the very PR carrying it went
+  **green on all three CI jobs** — Actions had been enabled at some point and
+  nobody re-checked. The audit's own headline discipline is "execution beats
+  reading," and it had just published an unexecuted claim about execution. The
+  generalization is the uncomfortable half: a *negative* environment finding ("X
+  doesn't work here," "the API is unavailable," "that tool isn't installed") is
+  the kind of fact most likely to be inherited across sessions and least likely to
+  be re-tested, because re-testing looks redundant and the claim is usually still
+  true. It ages silently, and unlike a wrong lint or a bad pin, **no gate watches
+  prose**. It also biases the backlog: an item filed as "blocked by the
+  environment" stops being attempted, so the constraint outlives itself.
+- **Kit change:** no new harness — this is a *documentation-integrity* lesson and
+  the honest move is a convention, not machinery I'd be pretending enforces it.
+  (1) Environment claims in kit docs are now written **dated and scoped** ("as of
+  YYYY-MM-DD, in this repo") rather than as standing facts. (2) Superseded claims
+  are corrected by an in-place **dated correction note**, never a silent rewrite —
+  `RETROSPECTIVE-kit-v1.md` gains a status note and `RETROSPECTIVE-kit-audit.md`
+  §5 keeps its wrong sentence visible above the correction, so the failure mode
+  stays legible instead of being erased. (3) `PROMPTS/90-retrospective.md` step 0
+  now says: before repeating any inherited "this doesn't work here" claim,
+  **re-run the thing** — the cost is one command and the failure mode is publishing
+  a falsehood in the document that exists to be trusted.
+- **Section amended:** RETROSPECTIVE-kit-v1.md · status note;
+  RETROSPECTIVE-kit-audit.md · §5 correction + §6 burn-down;
+  PROMPTS/90-retrospective.md · step 0.

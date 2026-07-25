@@ -56,7 +56,9 @@ per-module control ledger the phases refer to.
 
 **Entry criteria:** access to the C source and its build.
 **Exit criteria:** module inventory table exists; C-flaw scan run and triaged;
-threat model written.
+threat model written — and *checked*: `harnesses/threat-model/check_threat_model.py
+THREAT-MODEL.md` must pass (it hard-fails on a leftover `<placeholder>` or a
+missing required section, so "written" can't mean "copied and never filled in").
 **Artifacts:** `progress` table, `c-flaw-scan` report, `THREAT-MODEL.md`.
 **lsof failure modes this prevents:** going straight to code and discovering the
 scary module (the `NtQueryObject` hang) mid-implementation. Inventory surfaces
