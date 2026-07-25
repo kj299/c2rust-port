@@ -248,3 +248,129 @@ pub unsafe extern "C" fn cjson_rt_fmt(
     // SAFETY: forwarded contract.
     unsafe { roundtrip(json, out, out_size, true) }
 }
+
+#[cfg(test)]
+mod tests {
+    //! These tests exist to give MIRI something to check. The unsafe in this
+    //! crate is the port's entire memory-safety risk surface, and `cargo miri
+    //! test -p cjson_ffi` over a crate with NO tests is a vacuous pass — a gate
+    //! that inspects nothing (LESSONS #6). Each test drives a real C-ABI call
+    //! sequence the way a C consumer would, so miri validates the pointer
+    //! provenance, the Box/CString round-trips, and the in-place minify writes.
+    use super::*;
+
+    fn c(s: &str) -> CString {
+        CString::new(s).expect("no interior NUL in test input")
+    }
+
+    #[test]
+    fn parse_print_free_roundtrip() {
+        let json = c(r#"{"a":1,"b":[true,null,"x"]}"#);
+        // SAFETY: `json` is a live NUL-terminated CString for the whole call.
+        let item = unsafe { cJSON_Parse(json.as_ptr()) };
+        assert!(!item.is_null());
+        // SAFETY: `item` is a live handle from cJSON_Parse above.
+        let printed = unsafe { cJSON_PrintUnformatted(item) };
+        assert!(!printed.is_null());
+        // SAFETY: `printed` is a live CString pointer from PrintUnformatted.
+        let out = unsafe { CStr::from_ptr(printed) }.to_bytes().to_vec();
+        assert_eq!(out, br#"{"a":1,"b":[true,null,"x"]}"#);
+        // SAFETY: both pointers are live and freed exactly once here.
+        unsafe {
+            cJSON_free(printed.cast::<c_void>());
+            cJSON_Delete(item);
+        }
+    }
+
+    #[test]
+    fn parse_with_length_respects_the_bound() {
+        // The buffer is NOT NUL-terminated at the length we pass — the C-ABI
+        // contract is length-bounded, and miri catches any read past it.
+        let raw = b"[1,2,3]xxxxx";
+        // SAFETY: `raw` is valid for reads of 7 bytes (we pass exactly 7).
+        let item = unsafe { cJSON_ParseWithLength(raw.as_ptr().cast::<c_char>(), 7) };
+        assert!(!item.is_null());
+        // SAFETY: live handle.
+        let printed = unsafe { cJSON_PrintUnformatted(item) };
+        // SAFETY: live CString pointer.
+        assert_eq!(unsafe { CStr::from_ptr(printed) }.to_bytes(), b"[1,2,3]");
+        // SAFETY: each freed once.
+        unsafe {
+            cJSON_free(printed.cast::<c_void>());
+            cJSON_Delete(item);
+        }
+    }
+
+    #[test]
+    fn duplicate_and_compare() {
+        let json = c(r#"{"k":[1,2,{"n":true}]}"#);
+        // SAFETY: live CString.
+        let a = unsafe { cJSON_Parse(json.as_ptr()) };
+        // SAFETY: live handle.
+        let b = unsafe { cJSON_Duplicate(a, 1) };
+        assert!(!b.is_null());
+        // SAFETY: both live handles.
+        assert_eq!(unsafe { cJSON_Compare(a, b, 1) }, 1);
+        // SAFETY: freed once each.
+        unsafe {
+            cJSON_Delete(b);
+            cJSON_Delete(a);
+        }
+    }
+
+    #[test]
+    fn minify_in_place_stays_in_bounds() {
+        // A mutable NUL-terminated buffer, exactly what a C caller passes.
+        let mut buf: Vec<c_char> = b"{ \"a\" : 1 , \"b\" : [ 2 , 3 ] }\0"
+            .iter()
+            .map(|&x| x as c_char)
+            .collect();
+        let cap = buf.len();
+        // SAFETY: `buf` is a live, writable, NUL-terminated buffer.
+        unsafe { cJSON_Minify(buf.as_mut_ptr()) };
+        // SAFETY: still NUL-terminated after minify.
+        let got = unsafe { CStr::from_ptr(buf.as_ptr()) }.to_bytes().to_vec();
+        assert_eq!(got, br#"{"a":1,"b":[2,3]}"#);
+        assert_eq!(
+            buf.len(),
+            cap,
+            "minify must not reallocate the caller buffer"
+        );
+    }
+
+    #[test]
+    fn null_and_invalid_inputs_are_safe() {
+        // SAFETY: passing null is explicitly allowed by every contract here.
+        unsafe {
+            assert!(cJSON_Parse(ptr::null()).is_null());
+            assert!(cJSON_ParseWithLength(ptr::null(), 10).is_null());
+            assert!(cJSON_Print(ptr::null_mut()).is_null());
+            assert_eq!(cJSON_Compare(ptr::null_mut(), ptr::null_mut(), 1), 0);
+            assert!(cJSON_Duplicate(ptr::null_mut(), 1).is_null());
+            cJSON_Delete(ptr::null_mut()); // no-op
+            cJSON_free(ptr::null_mut()); // no-op
+            cJSON_Minify(ptr::null_mut()); // no-op
+        }
+        let bad = c("{not json");
+        // SAFETY: live CString; a parse failure must return null, not UB.
+        assert!(unsafe { cJSON_Parse(bad.as_ptr()) }.is_null());
+    }
+
+    #[test]
+    fn version_is_the_c_version() {
+        // SAFETY: cJSON_Version returns a 'static NUL-terminated literal.
+        let v = unsafe { CStr::from_ptr(cJSON_Version()) };
+        assert_eq!(v.to_bytes(), b"1.7.18");
+    }
+
+    #[test]
+    fn roundtrip_shim_truncates_like_snprintf() {
+        let json = c("[1,2,3,4,5]");
+        let mut out = [0 as c_char; 6];
+        // SAFETY: live CString in; `out` is valid for 6 writes.
+        let n = unsafe { cjson_rt(json.as_ptr(), out.as_mut_ptr(), 6) };
+        assert_eq!(n, 11, "returns the FULL length, snprintf-style");
+        // SAFETY: `out` is NUL-terminated by the shim.
+        assert_eq!(unsafe { CStr::from_ptr(out.as_ptr()) }.to_bytes(), b"[1,2,");
+    }
+}

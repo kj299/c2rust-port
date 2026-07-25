@@ -73,4 +73,8 @@ jobs:
       # port's gates cannot rot unexecuted (LESSONS #13).
       - run: rustup toolchain install stable --profile minimal --component clippy,rustfmt --no-self-update
       - run: rustup default stable
+      # nightly+miri so the port's `sanitized` gate RUNS here rather than SKIPping:
+      # the ffi crate's C-ABI shim is the port's entire memory-safety surface, and
+      # check.sh only advances `sanitized` when miri actually ran (LESSONS #6, #18).
+      - run: rustup toolchain install nightly --profile minimal --component miri --no-self-update
       - run: ports/cjson/check.sh

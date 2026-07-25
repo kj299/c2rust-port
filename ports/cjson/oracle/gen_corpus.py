@@ -20,7 +20,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 
 def case(name, mode, stdin, expect_rc, mods=("tree",), **extra):
-    """`mods` names the port modules whose behavior fully determines this case
+    """LESSONS #19 — `mods` names the port modules whose behavior fully determines this case
     ("scalar" = alloc-node + scalar-parse + dispatch only; "tree" needs
     string/array/object; "minify" needs entry-minify). The per-module matrices
     below filter on it so an increment diffs ONLY inputs its ported modules
