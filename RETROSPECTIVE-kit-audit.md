@@ -149,16 +149,35 @@ But three honest limits remain, and a comprehensive retrospective names them:
 
 - **Several controls are self-tested but never run for real.** The sanitizer,
   perf, and CI gates all pass their *self-tests* in the toolchain-free
-  `check-kit`, but the miri/asan/ubsan/tsan passes and both CI workflows have
-  never executed against a real toolchain, because GitHub Actions is policy-
-  blocked in this repo (LESSONS #10). "CI-hardened" and "UB-free" remain claims
-  backed by self-tests, not observations backed by a real run.
+  `check-kit`, but the miri/asan/ubsan/tsan passes have never executed against a
+  real toolchain, so "UB-free" remains a claim backed by self-tests rather than an
+  observation backed by a run.
+
+  > **Correction, 2026-07-25 — this bullet was half wrong within the hour.** As
+  > first written it also said the kit's own CI workflow "has never executed,
+  > because GitHub Actions is policy-blocked in this repo (LESSONS #10)." That was
+  > inherited from earlier sessions and **is no longer true**: Actions runs here
+  > now, and this audit's own PR went green on all three jobs — `check-kit` (22
+  > gates), the skeleton workspace (fmt + clippy `-D warnings` + build + test), and
+  > the adler32 exit test. That is the *first observed* CI success in the project,
+  > and it partially discharges what §6 item 3 below asked for. The residual is
+  > genuinely narrower than the original claim: the **sanitizers** and the
+  > **`porting-ci` template** (as opposed to the kit's own workflow) are still
+  > unexercised. Left visible rather than silently rewritten — see LESSONS #15: an
+  > inherited environment constraint is a *dated observation*, not a standing fact,
+  > and repeating one unverified is how a retrospective ships a false claim.
 
 ## 6. The v1.x backlog — what this pass did NOT fix, and why
 
 Prioritized. Each item is grounded in a fact verified this pass, and each was
 left unfixed for a stated reason (usually: it needs a design decision the porting
 team owns, or a real toolchain/port this repo can't provide).
+
+**Burn-down status** (updated as items land, so this stays the live backlog rather
+than a snapshot): ✅ **2** (threat-model gate), ✅ **4** (ledger name collisions),
+✅ **6** (orphan linked), ✅ **7** (gate count) — all closed 2026-07-25. Item **3**
+is partially discharged (CI now runs; sanitizers still don't). Items **1**, **5**,
+**8** remain open, plus the keystone: port foreign C.
 
 **P1 — could let an unsafe port through:**
 
@@ -169,23 +188,34 @@ team owns, or a real toolchain/port this repo can't provide).
    real target build won't fail on it. *Not flipped unilaterally:* setting `deny`
    can break a port whose existing code has undocumented unsafe, so whether to
    flip is the porting team's call at kickoff. Flag, don't force.
-2. **Nothing enforces the threat model gets filled.** `skeleton/THREAT-MODEL.md`
-   is a 37-line template whose first line is `# Threat model — <project>`. A port
-   can reach cutover with the `<project>` placeholder intact and no gate notices.
-   Needs a small "template still has placeholders" check wired into the skeleton
-   gate.
-3. **Sanitizers / CI never run against real code** (see §5 third bullet). The
-   only discharge is `RETROSPECTIVE-kit-v1.md` §5 items 1 & 3: do a real port,
-   with Actions enabled (or mirrored to a repo where it runs).
+2. ✅ **CLOSED 2026-07-25 — nothing enforced that the threat model gets filled.**
+   `skeleton/THREAT-MODEL.md` is a 37-line template whose first line is `# Threat
+   model — <project>`; a port could reach cutover with the `<project>` placeholder
+   intact and no gate noticed. Now `harnesses/threat-model/check_threat_model.py`
+   hard-fails on a leftover `<placeholder>`, a `TODO`, or an unreplaced `- e.g.`
+   guidance bullet, and — fail-closed — on a **missing** file or a **missing
+   required section**, so the check cannot be dodged by deleting the section that
+   still had placeholders. Two modes, because the kit's own copy is legitimately
+   still blank: `--template` (structure only) is what `check-kit` runs against the
+   skeleton, guarding template rot; the default filled mode is wired into
+   `porting-ci.template.yml` as a `threat-model` job for a real port.
+3. **Sanitizers never run against real code** (see §5 third bullet, and its dated
+   correction — CI itself *now runs and passes*, so this item is **partially
+   discharged**). The residual: miri/asan/ubsan/tsan against real ported code, and
+   the `porting-ci` template exercised in anger. Discharge via
+   `RETROSPECTIVE-kit-v1.md` §5 item 1 — do a real port.
 
 **P2 — could mis-grade a real port:**
 
-4. **The ledger truncates case names at the first colon.** `load_ledger` does
-   `name = body.split(":", 1)[0]` after stripping the pin, so a case named
-   `parse:header` harvests as `parse` — two vectors that differ only after a colon
-   collide, and one ledger entry could suppress a divergence in the *wrong* case.
-   Bounded today (kit case names avoid colons), but a latent mis-suppression that
-   should be a parse-time rejection.
+4. ✅ **CLOSED 2026-07-25 — the ledger truncated case names at the first colon.**
+   `load_ledger` did `name = body.split(":", 1)[0]` after stripping the pin, so a
+   case named `parse:header` harvested as `parse`; two vectors differing only after
+   a colon collided and one entry could suppress a divergence in the *wrong* case.
+   Two fixes: a colon-bearing name is now expressible by backtick-quoting it
+   (``- [x] `parse:header` [sha256:..]: why``), and a name harvested **twice is a
+   hard error** instead of a silent `dict` overwrite — which also closes the
+   related fail-open where a duplicate entry's later pin silently won over the
+   earlier one. Truncation collisions now announce themselves at parse time.
 5. **The perf gate is wall-clock and inherently flaky.** `perf_gate.py` compares
    a ratio against a default 1.3× threshold over N repeats; on a noisy CI runner
    this can false-fail or false-pass. Acceptable as an advisory gate; should be
@@ -193,13 +223,18 @@ team owns, or a real toolchain/port this repo can't provide).
 
 **P3 — hygiene and honesty:**
 
-6. **`CODE-REVIEW.md` is an orphan.** The 19 KB snapshot review (frozen at
-   `9aa5984`) is linked from no other document, so a reader won't find it and
-   won't know it's frozen. Either link it from the v1 retrospective as a historical
-   artifact or fold its still-live items in and delete it.
-7. **`RETROSPECTIVE-kit-v1.md` says "14 gates"; `check-kit` now runs 22.** Prose
-   counts drift and the doc-flags gate doesn't cover prose. A one-line correction,
-   or (better) stop hard-coding the count in prose.
+6. ✅ **CLOSED 2026-07-25 — `CODE-REVIEW.md` was an orphan.** The 19 KB snapshot
+   review (frozen at `9aa5984`) was linked from no other document, so a reader
+   wouldn't find it or know it was frozen. Kept (it is the evidence behind LESSONS
+   006–008) and now linked as a dated historical artifact from
+   `RETROSPECTIVE-kit-v1.md`'s document map.
+7. ✅ **CLOSED 2026-07-25 — the "14 gates" prose count had drifted** (`check-kit`
+   runs 22). Corrected via a dated status note at the top of
+   `RETROSPECTIVE-kit-v1.md` rather than by editing the body: the body is a
+   point-in-time record and "14" was true when written, so rewriting it would
+   falsify history. The note carries the current count and points to this document.
+   Prose counts remain outside the doc-flags gate's reach — the durable fix is to
+   stop hard-coding them, which the note now does by deferring to `make check-kit`.
 8. **`progress.py` trusts that a well-formed report reflects a real run.** Ingest
    is correctly fail-closed on *malformed/missing* reports, but it cannot detect a
    *stale* or hand-authored `--json` report that is shape-valid. A run-provenance

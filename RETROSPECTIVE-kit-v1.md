@@ -1,5 +1,27 @@
 # RETROSPECTIVE — the kit builds itself to v1.0
 
+> **Status note — 2026-07-25.** This document is a **point-in-time record** of the
+> v1.0 project; its body is deliberately left as written. Two of its statements have
+> since been superseded, recorded here rather than edited into the text (a
+> retrospective that quietly updates itself stops being evidence):
+>
+> * **Gate count.** The body says `check-kit` runs **14 gates**; it runs **24 as of
+>   2026-07-25**, and will keep growing. Prose counts drift and no gate watches
+>   prose — `make check-kit` is the only authority for the current number, so prefer
+>   running it over quoting any figure here (LESSONS #15).
+> * **CI.** §5 item 3 says Actions is policy-blocked here and neither workflow has
+>   ever executed. **No longer true:** Actions runs in this repo now, and
+>   `check-kit` + the skeleton workspace + the adler32 exit test have all gone green
+>   in CI. The residual gap is narrower — the **sanitizers** and the **`porting-ci`
+>   template** are still unexercised (LESSONS #15).
+>
+> **Where to read next:** `RETROSPECTIVE-kit-audit.md` is the current-state
+> document — the six-lens audit that followed, its findings, and the live v1.x
+> backlog with burn-down status. `CODE-REVIEW.md` is the frozen full review of the
+> pre-v1.0 snapshot (`9aa5984`) that produced LESSONS 006–008; it is history, kept
+> as the evidence behind those lessons, and is not maintained against the current
+> tree.
+
 Project-wide retrospective (per `PROMPTS/90-retrospective.md`) covering the
 `c2rust-port` repo from the lift snapshot (`9aa5984`, 2026-07-19) to the `v1.0`
 tag (`e1246bd`, 2026-07-20) and the post-tag hardening on top of it. The
