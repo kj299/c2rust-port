@@ -19,7 +19,8 @@ Mechanics (conservative, format-driven):
   * Parse LESSONS.md entries (`## NNN. <title>`) and each entry's
     `- **Section amended:**` field (the format's required final field).
   * From that field, extract kit CODE paths: `harnesses/`, `skills/`,
-    `skeleton/`, `examples/`, or `.github/` files ending in .py/.sh/.yml.
+    `skeleton/`, `examples/`, `ports/`, or `.github/` files ending in
+    .py/.sh/.yml.
     Prose, doc (.md), and bare-basename mentions are not obligations.
   * For each such path that still exists, require a line containing `LESSONS`
     and the token `#<n>` (e.g. `(LESSONS #6)`), any leading zeros ignored.
@@ -39,8 +40,14 @@ import sys
 ENTRY_RE = re.compile(r"(?m)^## (\d{3})\. ")
 AMENDED_RE = re.compile(r"- \*\*Section amended:\*\*(.*?)(?=^-\s\*\*|^##\s|\Z)",
                         re.S | re.M)
+# `ports/` is in the list because a real port's own gate scripts and corpus
+# generators ARE kit code a lesson can amend — the cJSON retrospective found
+# LESSONS #19 naming `ports/cjson/oracle/gen_corpus.py` and this gate silently
+# ignoring it, because the prefix list predated the existence of `ports/`. A
+# path this regex doesn't recognize is checked by nothing and reports nothing:
+# the same not-looking-at-it failure as a 0-of-0 audit (LESSONS #18).
 CODE_PATH_RE = re.compile(
-    r"(?:harnesses|skills|skeleton|examples|\.github)/[A-Za-z0-9_./-]+\.(?:py|sh|yml)")
+    r"(?:harnesses|skills|skeleton|examples|ports|\.github)/[A-Za-z0-9_./-]+\.(?:py|sh|yml)")
 
 
 def parse_lessons(text):
@@ -142,6 +149,18 @@ def _self_test():
             f.write("\n## 010. prose\n- **What happened:** touched harnesses/x/bad.sh\n"
                     "- **Section amended:** PLAYBOOK · Phase 2 only.\n")
         check("prose mentions outside Section-amended are ignored", run(root) == 0)
+
+        # LESSONS #18/#19: a prefix the extractor doesn't know is checked by
+        # NOTHING — `ports/` was missing until a real port's lesson named a file
+        # there and the gate silently ignored it.
+        os.makedirs(os.path.join(root, "ports", "p"))
+        pf = os.path.join(root, "ports", "p", "gate.sh")
+        open(pf, "w").write("#!/bin/sh\necho no citation\n")
+        with open(os.path.join(root, "LESSONS.md"), "a") as f:
+            f.write("\n## 012. ports path\n- **Section amended:** ports/p/gate.sh.\n")
+        check("a ports/ path is checked like any other kit code", run(root) == 1)
+        open(pf, "w").write("#!/bin/sh\n# pinned (LESSONS #12)\n")
+        check("citing it clears the ports/ link", run(root) == 0)
 
         # LESSONS #14: a path a markdown line-wrap split after a `/` must still be
         # extracted and enforced — else the gate silently skips it (fail-open).

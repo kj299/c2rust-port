@@ -344,7 +344,8 @@ def compare_call(vector, c_res, r_res, known):
         # ret may be bytes (a `cstr`/`ptr` return); make it JSON-safe WITHOUT
         # collapsing distinct bytes — backslashreplace keeps the report
         # serializable and byte-faithful (LESSONS #14). Found when the cJSON port
-        # drove a cstr-returning vector (cJSON_Version) through --json.
+        # drove a cstr-returning vector (cJSON_Version) through --json — a harness
+        # bug that only a REAL port could surface (LESSONS #20).
         "c_ret": _jsonable(c_res["ret"]), "rust_ret": _jsonable(r_res["ret"]),
         "fingerprint": None if clean else fp[:12],
         "pinned": pin is not None,

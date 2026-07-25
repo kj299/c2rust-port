@@ -43,3 +43,13 @@ When you do build, copy `porting-kit/skeleton/` for the workspace shape, wire
 `porting-kit/harnesses/ci/porting-ci.template.yml` into CI, and run
 the kit's `make check-kit` (`make -C porting-kit check-kit` in the standard
 vendored layout) to confirm the harnesses work in this repo.
+
+## Tag the corpus by module (LESSONS #19)
+
+A multi-module port cannot diff the whole matrix from increment one — most vectors
+exercise modules that do not exist yet, and failing them all for "not ported" is
+schedule noise, not signal. When you build the oracle (Phase 2), tag each vector
+with the module(s) whose behavior decides it and emit a *ported-subset* matrix per
+increment; the full matrix is the cutover gate. Validate the ENTIRE corpus against
+the C up front — only the filter moves. Worked reference:
+`ports/cjson/oracle/gen_corpus.py`.

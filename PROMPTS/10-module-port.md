@@ -15,6 +15,16 @@ the retrospective.
 
 Then run every gate; each is a hard requirement before merge:
 
+0. **Probe the oracle before you write a line of Rust** (LESSONS #17). Run the C
+   on this module's edge cases — boundaries, malformed input, the values its own
+   code special-cases — and paste the observed bytes into the module's doc
+   comment. Write every unit-test expectation from that transcript. Do NOT reason
+   from the C source about what it "must" do: on the cJSON port that reasoning was
+   wrong every time it mattered (a lossy `%1.15g` the C happily accepts; `Compare`
+   rejecting a value's own duplicate; minify ignoring escape parity). Where a
+   probed behavior looks like a bug, that is a *decision* — reproduce it
+   faithfully, or fix it and ledger the divergence — never a silent cleanup.
+
 1. **Port** into `core` (pure logic) or a safe wrapper in `sys` (if it touches
    FFI). Translate idioms safely: call-twice-for-size → growing `Vec` + length
    checks; pointer/struct math → slices + `repr(C)` with bounds; unions/flexible

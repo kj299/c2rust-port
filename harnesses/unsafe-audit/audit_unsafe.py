@@ -266,6 +266,12 @@ def run(paths, window, warn, as_json, quiet):
             print(f"UNDOCUMENTED unsafe {f['kind']}: {f['file']}:{f['line']}  (needs // SAFETY:)")
         total = total_doc + total_undoc
         print(f"\nunsafe blocks: {total}  documented: {total_doc}  undocumented: {total_undoc}")
+        if total == 0:
+            # LESSONS #18: distinguish "audited, all clean" from "found nothing
+            # to audit". Both exit 0, but only one is evidence.
+            print("NOTHING-TO-AUDIT: no unsafe blocks found in the scanned paths — "
+                  "this is not evidence of a clean unsafe surface (a forbid-unsafe "
+                  "crate, or the wrong path). Point it at the FFI/sys crate.")
 
     if total_undoc and not warn:
         return 1
@@ -308,6 +314,11 @@ def self_test():
     fdoc, fundoc = audit_text(fake, window=3)
     check("SAFETY: inside a string literal does NOT document the block",
           fundoc == [(1, "block")] and fdoc == [])
+    # LESSONS #18: a 0-of-0 audit must be distinguishable from "audited clean".
+    empty_doc, empty_undoc = audit_text("fn safe_only() { let x = 1; }", window=3)
+    check("a source with NO unsafe reports 0 blocks (caller must not read this "
+          "as evidence — LESSONS #18)",
+          len(empty_doc) + len(empty_undoc) == 0)
     real = r'''unsafe { do_it(); } // SAFETY: real trailing comment'''
     rdoc, rundoc = audit_text(real, window=3)
     check("SAFETY: in a real trailing comment DOES document the block",

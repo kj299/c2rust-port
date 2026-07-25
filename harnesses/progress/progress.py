@@ -178,7 +178,15 @@ def _provenance_ok(stamp, jf, max_age_min, allow_unstamped, repo_sha):
 
 
 def _clean_unsafe(rep):
-    return isinstance(rep, dict) and rep.get("undocumented", 1) == 0
+    # audit_unsafe.py --json: zero undocumented blocks AND at least one block
+    # actually audited. A 0-of-0 report means the gate found NOTHING to check
+    # (a forbid-unsafe crate, or the wrong path) — that is not evidence of a
+    # clean unsafe surface and must not advance the gate (LESSONS #18).
+    # `blocks_found` is absent in pre-#18 reports; those fall back to the old
+    # rule rather than silently failing an existing port's ingest.
+    if not isinstance(rep, dict) or rep.get("undocumented", 1) != 0:
+        return False
+    return rep.get("blocks_found", 1) > 0
 
 
 def _clean_verdicts(rep):
@@ -371,6 +379,24 @@ def _self_test():
         check("a malformed report is skipped (no crash, no advance)",
               rc_ig == 0 and "skipping unreadable" in buf.getvalue()
               and load(p3)["modules"]["codec"] == "differential")
+
+        # LESSONS #18: a 0-of-0 unsafe report is NOT evidence — it must not
+        # advance `unsafe_audited`. (A pre-#18 report without the key still
+        # advances, so an existing port's ingest doesn't break.)
+        p5 = os.path.join(d, "p5.json")
+        cmd_init(p5, ["m"])
+        cmd_set(p5, "m", "sanitized")
+        wdict(pv5 := os.path.join(d, "m.json"),
+              {"undocumented": 0, "blocks_found": 0})
+        buf = _io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            cmd_ingest(p5, [pv5], repo_sha=None)
+        check("a 0-of-0 unsafe report does NOT advance unsafe_audited",
+              load(p5)["modules"]["m"] == "sanitized")
+        wdict(pv5, {"undocumented": 0, "blocks_found": 33})
+        cmd_ingest(p5, [pv5], repo_sha=None)
+        check("an unsafe report that audited real blocks DOES advance",
+              load(p5)["modules"]["m"] == "unsafe_audited")
 
         # PROVENANCE (RETROSPECTIVE-kit-audit §6 item 8): a shape-valid report is
         # not proof of a clean run. All repo_sha values are explicit so these are

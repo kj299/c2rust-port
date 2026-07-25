@@ -563,3 +563,132 @@ the emphasized half.
   harnesses/diff-fuzz/diff_fuzz.py (guarded `findings[0]`);
   Makefile · check-kit; README · harness table;
   RETROSPECTIVE-kit-audit.md · §6 burn-down.
+
+---
+
+## 017. The C is a SPEC, and only the oracle knows what it says
+
+- **Date:** 2026-07-25
+- **Codebase:** cJSON v1.7.18 (C JSON parser → Rust) — the kit's first FOREIGN port
+- **What happened:** Every non-trivial behavior I got *wrong* on the first try, I
+  got wrong by **reasoning about what the C must do** instead of **running it**.
+  Four instances, all caught by executing the oracle, none findable by reading:
+  1. **`print(DBL_MAX)` is lossy.** I wrote the unit test asserting the reasoned
+     answer (15 digits can't round-trip DBL_MAX → the 17-digit fallback fires).
+     The oracle refuted it: the `%1.15g` form `1.79769313486232e+308` reparses as
+     **inf**, and cJSON's `compare_double(inf, d)` = `|inf−inf| ≤ inf·ε` =
+     `nan ≤ inf` = **true**, so the C *accepts* the failed round-trip and keeps
+     the lossy form — and `print → reparse → print` yields `null`.
+  2. **`cJSON_Compare` says a value ≠ its own duplicate** for an inf/nan number
+     (same `compare_double` quirk) and for any object with **duplicate keys** (the
+     O(n²) first-match lookup can't resolve the second key). Surfaced by the
+     `dup-eq` matrix's C-baseline validation, which *refused my vectors* because
+     they asserted `"true"`.
+  3. **`cJSON_Minify` doesn't track escape parity** — a `\` before a `"` escapes
+     that quote even when the backslash is itself escaped, so `"\\" "` keeps its
+     space. My "correct" escape-tracking implementation dropped it. Found by
+     differential fuzzing, not by reading `minify_string`.
+  4. **`parse_hex4` returns 0 on INVALID hex**, so `"\uZZZZ"` parses as a NUL
+     byte rather than failing; and the printer then truncates at that NUL.
+  The through-line: a mature C library's observable behavior is a **thicket of
+  accreted quirks**, several of which look like bugs and some of which *are* — and
+  a port that "cleans them up" silently is not safer, it is *differently wrong*.
+  Faithfulness is a decision to make per-quirk with the C's actual bytes in hand.
+- **Kit change:** `PROMPTS/40-port-module.md` and the module skill now open with
+  **probe-then-port**: before writing a module, run the oracle on its edge cases
+  and paste the observed bytes into the module's doc comment; write unit-test
+  expectations from that transcript, never from reasoning about the C source. The
+  kit already said "execution beats reading" for *harness* validation (LESSONS
+  #13/#15); this extends it to the **translation act itself**. `PLAYBOOK.md` Phase
+  4 gains the same line as an entry criterion.
+- **Section amended:** PROMPTS/10-module-port.md · step 0; PLAYBOOK · Phase 4
+  entry criteria; skills/porting-kit-module/SKILL.md; RETROSPECTIVE-cjson.md · §2.
+
+---
+
+## 018. A gate that has nothing to check is not a passing gate
+
+- **Date:** 2026-07-25
+- **Codebase:** cJSON port — the `unsafe-audit` and `sanitized` gates
+- **What happened:** For six of the port's seven increments, `audit_unsafe.py`
+  reported **"unsafe blocks: 0, documented: 0, undocumented: 0" and exited 0** —
+  and I read that as the gate passing. It wasn't: the safe core is
+  `#![forbid(unsafe_code)]`, so there was **nothing for that gate to audit**, and
+  its green was structurally uninformative right up until the FFI crate landed
+  (33 blocks, all documented — the first run where the gate said anything). The
+  same shape, worse: I asserted "miri/asan need toolchains this environment
+  lacks" across five increments and left `sanitized` unset — **an inherited
+  environment claim I never re-tested**, which is precisely LESSONS #15, written
+  by me, in this same session. The retrospective's step-0 probe took one command:
+  `rustup toolchain install nightly --component miri` **succeeded**, miri ran
+  clean over the port, and the gate I'd written off as impossible was available
+  the whole time. The generalization is sharper than "re-verify claims": a gate
+  reporting **0 of 0** and a gate **not installed** are the same failure — a
+  *believed-covered* control that inspected nothing — and both render as green.
+- **Kit change:** `audit_unsafe.py` now reports `NOTHING-TO-AUDIT` when it finds
+  zero blocks across the scanned paths (still exit 0, but never silently
+  green-looking) and its `--json` carries `"blocks_found": 0`, so
+  `progress.py ingest` can refuse to advance `unsafe_audited` on a vacuous
+  report. The port's `check.sh` models the discipline for a gate that cannot run
+  here: miri is toolchain-OPTIONAL and **`sanitized` advances only when miri
+  actually ran** (never on a SKIP), with nightly+miri added to the CI job so it
+  runs for real. Verified fail-closed both ways: clean code passes; an injected
+  out-of-bounds read makes miri exit nonzero.
+- **Section amended:** harnesses/unsafe-audit/audit_unsafe.py (NOTHING-TO-AUDIT +
+  `blocks_found`); harnesses/progress/progress.py (`_clean_unsafe` refuses a
+  0-block report); ports/cjson/check.sh; .github/workflows/check-kit.yml;
+  RETROSPECTIVE-cjson.md · §3.
+
+---
+
+## 019. Scope each increment's differential to what it can decide
+
+- **Date:** 2026-07-25
+- **Codebase:** cJSON port — the module-tagged corpus
+- **What happened:** The kit's loop says "every module is diffed against the
+  oracle the moment it lands," but a 7-module port has a period where the Rust
+  **cannot parse most of the corpus** — module 2 lands and 60 of 79 vectors
+  involve strings, arrays, or objects that don't exist yet. Running the full
+  matrix would fail them all for "not ported yet," which is **schedule, not
+  divergence** — noise that trains you to ignore red, the LESSONS #2 failure mode
+  in a new place. Tagging each vector with the modules whose behavior determines
+  it (`mods: ["scalar"|"string"|"tree"|"minify"]`) and emitting
+  `matrix-ported.json` = "every case my ported modules fully decide" made each
+  increment's differential **meaningful and 100% green**, growing 25 → 44 → 69 →
+  79 as modules landed. The corpus is written ONCE against the C (all 86 vectors
+  validated up front); only the *filter* moves.
+- **Kit change:** `PLAYBOOK.md` Phase 2 now prescribes tagging corpus vectors by
+  the module(s) that decide them and running each increment against the
+  ported-subset filter, with the full matrix as the cutover gate;
+  `PROMPTS/20-oracle.md` and the oracle skill carry the recipe.
+  `ports/cjson/oracle/gen_corpus.py` is the worked reference implementation.
+- **Section amended:** PLAYBOOK · Phase 2 "Do"; PROMPTS/00-new-port-kickoff.md;
+  skills/porting-kit-oracle/SKILL.md; ports/cjson/oracle/gen_corpus.py (the worked
+  reference); RETROSPECTIVE-cjson.md · §4.
+
+---
+
+## 020. A harness meets its real bugs only on a real port
+
+- **Date:** 2026-07-25
+- **Codebase:** cJSON port — `lib_diff.py`
+- **What happened:** `lib_diff` had a full self-test suite, survived the
+  gate-mutation sweep, and had driven the adler32 example end-to-end. It still
+  **crashed** the first time a real port used it: the cJSON FFI vectors include
+  `cJSON_Version`, a `cstr`-returning function, and `--json` died in
+  `json.dumps` because `c_ret`/`rust_ret` held raw `bytes`. Nothing in the kit's
+  own tests had ever exercised a bytes-valued return *through the JSON report* —
+  the self-tests checked verdicts, the mutation sweep checked the verdict logic,
+  and the example's vectors all returned integers. Coverage of the *decision* is
+  not coverage of the *plumbing around it*, and the gap only shows when a foreign
+  port picks a combination the kit's authors never wrote down.
+- **Kit change:** fixed (`_jsonable` backslashreplace-decodes bytes, keeping the
+  report serializable AND byte-faithful per LESSONS #14) and pinned in the
+  self-test. Standing discipline added to `PROMPTS/90-retrospective.md`: a port
+  that *uses* a kit harness in a new shape must send the resulting harness fix
+  back to the kit in the same session — this is the compounding loop's actual
+  mechanism, and it only fires when the kit is exercised by code it did not
+  author.
+- **Section amended:** harnesses/library-differential/lib_diff.py (`_jsonable` +
+  self-test); PROMPTS/90-retrospective.md · report-back discipline;
+  RETROSPECTIVE-cjson.md · §5.

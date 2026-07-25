@@ -54,3 +54,11 @@ semantic-comparison stage, not build time — "it builds" tells you almost nothi
 ## Integrity
 Harness paths/subcommands/flags must match the kit. If they drift, fix the reference
 and re-run the kit's `make check-kit` (`make -C porting-kit check-kit` when vendored).
+
+## Tag the corpus by module (LESSONS #19)
+
+A multi-module port cannot diff the whole matrix from increment one. Tag each
+vector with the module(s) whose behavior decides it, validate the ENTIRE corpus
+against the C up front, and run each increment against a *ported-subset* filter —
+the full matrix is the cutover gate. Worked reference:
+`porting-kit/ports/cjson/oracle/gen_corpus.py`.
