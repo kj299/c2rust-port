@@ -4,3 +4,6 @@ oracle/corpus/
 oracle/reports/
 rust/target/
 reports/
+libcjson_c.so
+libcjson_rs.so
+reports_ffi.json

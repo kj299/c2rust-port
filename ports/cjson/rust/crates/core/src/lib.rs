@@ -21,8 +21,11 @@
 //!      structural (slice indices, no raw pointer walk).
 //!   6. dom — ✅ (core) `dom`: constructors, accessors, Add builders,
 //!      Compare, Duplicate (= clone). Custom-allocator parity DROPPED (a
-//!      thread-safety hazard, ledgered). The C-ABI FFI cdylib + lib_diff is
-//!      the following increment.
+//!      thread-safety hazard, ledgered).
+//!
+//! The C-ABI FFI cdylib (`crates/ffi`, `libcjson_rs.so`) wraps this core and is
+//! ABI-differentially verified drop-in against the pristine C `.so` (lib_diff,
+//! 15/15). It is the ONLY crate with `unsafe`; this core stays forbid-unsafe.
 //!
 //! The differential matrix (`oracle/matrix-ported.json`) now covers the ENTIRE
 //! CLI surface — parse, print, and minify. Only the DOM builder/query API and

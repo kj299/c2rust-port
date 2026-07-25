@@ -3,11 +3,12 @@
 #            parse, print). Everything observable lives here.
 #   driver : thin bin implementing the same stdin→stdout contract as
 #            ../oracle/driver.c, so diff_run can diff the two byte-for-byte.
-# A `sys`/FFI crate (the C-ABI `cJSON_*` surface as a cdylib) arrives with the
-# dom module — until then the workspace has NO unsafe anywhere.
+#   ffi    : the C-ABI `cJSON_*` surface as a cdylib (libcjson_rs.so) — the
+#            ONLY crate with `unsafe`, every block // SAFETY:-documented and
+#            audited; it wraps the safe core for drop-in-.so consumers.
 [workspace]
 resolver = "2"
-members = ["crates/core", "crates/driver"]
+members = ["crates/core", "crates/driver", "crates/ffi"]
 
 [workspace.package]
 edition = "2021"

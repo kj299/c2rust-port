@@ -5,7 +5,7 @@ with a decade of CVE history. This is the keystone the retrospectives kept namin
 the moment the compounding loop stops feeding on itself and learns from code the
 kit did not write (`RETROSPECTIVE-kit-audit.md` §6, keystone item).
 
-## Status: **Phase 4 — ALL 7 modules FUZZED (DOM core in pure Rust)**
+## Status: **Phase 5 (cutover) — drop-in `.so` verified against the C at the ABI level**
 
 Phase 0 (inventory/plan) merged in #15; Phase 2 (oracle) merged in #16. The Rust
 port now exists (`rust/`: `#![forbid(unsafe_code)]` core + differential driver)
@@ -43,10 +43,30 @@ Rust port refuses to reproduce cJSON's process-global mutable allocator hooks (a
 data-race hazard, CWE-362); it uses the global allocator with no `InitHooks`
 equivalent (DIVERGENCES.md · `custom-allocator-dropped`).
 
-**Remaining: the C-ABI FFI `cdylib`** — the port's first `unsafe` (the audited
-`extern "C"` shim over the forbid-unsafe core) and the ABI-level `lib_diff`
-proving drop-in `.so` compatibility. The reference-flag DOM feature
-(`create_reference`) rides that increment.
+**The C-ABI FFI `cdylib` is done and drop-in-verified.** `crates/ffi`
+(`libcjson_rs.so`) is the port's ONLY `unsafe` — the audited `extern "C"` shim
+over the `#![forbid(unsafe_code)]` core, **14 unsafe blocks, every one
+`// SAFETY:`-documented** (the unsafe-audit gate's first real subject). It
+exports the real `cJSON_*` parse/print/minify/compare/duplicate ABI over an
+opaque handle, and `lib_diff` drives it against the pristine C `.so`
+(`libcjson_c.so`, built from the vendored source) — **15/15 vectors MATCH at the
+ABI level**, including `cJSON_Version`, `cJSON_Minify` in-place (the escape-parity
+regression), and the full parse→print pipeline via single-shot shims. The Rust
+library is a genuine drop-in replacement for the serialize/parse/minify surface.
+
+**Documented remainder (not blocking):** the struct-field ABI (a caller reading
+`item->valueint` directly rather than through accessors), the full `Add*`/`Get*`
+builder surface over the FFI boundary, `create_reference`/`cJSON_IsReference`
+aliasing, and the `sanitized` gate (miri/asan need a toolchain this environment
+lacks — it rides the kit's CI-sanitizers backlog item). The safe-Rust
+implementations of all of these already exist in `crates/core`; exposing the
+rest over FFI is mechanical.
+
+Next: the **kit retrospective** — LESSONS 017+ from the first foreign port
+(the fuzz-found minify escape-parity bug, the two `cJSON_Compare` quirks, the
+DBL_MAX lossy-print discovery, the `lib_diff --json` bytes bug this increment
+found and fixed, and the "probe the oracle before you assume" discipline the
+whole port ran on).
 
 The `sanitized` gate stays honestly unset: miri/asan need toolchains this
 environment lacks; they ride the CI-with-sanitizers item in the kit backlog.

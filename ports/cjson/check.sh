@@ -10,7 +10,9 @@
 #   4. diff-fuzz          : differential fuzzing, seeds from the full matrix —
 #                           live since the recursive core landed (the parse
 #                           entry points now decide every non-minify input)
-#   5. unsafe-audit       : zero undocumented unsafe (the core FORBIDS unsafe)
+#   5. unsafe-audit       : every unsafe block // SAFETY:-documented (the core
+#                           FORBIDS unsafe; the ffi crate's C-ABI shim is the
+#                           only unsafe, and every block is audited)
 #   6. progress ingest    : advance module gates from the harnesses' own stamped
 #                           --json reports (provenance-verified against HEAD)
 set -euo pipefail
@@ -30,6 +32,15 @@ echo "===== 2. rust workspace (fmt / clippy / build / test) ====="
   cargo build --release --quiet
   cargo test --all --quiet )
 echo "rust workspace clean"
+
+echo "===== 2b. FFI ABI differential — the Rust .so is drop-in for the C .so ====="
+bash "$HERE/ffi/build.sh"                       # libcjson_c.so (pristine cJSON + shims)
+"$PY" "$KIT/harnesses/library-differential/lib_diff.py" \
+    --c-lib "$HERE/ffi/libcjson_c.so" \
+    --rust-lib "$HERE/rust/target/release/libcjson_rs.so" \
+    --vectors "$HERE/ffi/vectors.json" --ledger "$HERE/DIVERGENCES.md" \
+    --json > "$HERE/reports_ffi.json" || { cat "$HERE/reports_ffi.json"; exit 1; }
+echo "FFI ABI differential clean (Rust cdylib == C .so)"
 
 echo "===== 3. differential — Rust vs C over the ported modules ====="
 mkdir -p "$HERE/reports"
