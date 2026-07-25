@@ -341,11 +341,23 @@ def compare_call(vector, c_res, r_res, known):
     return {
         "name": name, "verdict": verdict,
         "c_status": c_res["status"], "rust_status": r_res["status"],
-        "c_ret": c_res["ret"], "rust_ret": r_res["ret"],
+        # ret may be bytes (a `cstr`/`ptr` return); make it JSON-safe WITHOUT
+        # collapsing distinct bytes — backslashreplace keeps the report
+        # serializable and byte-faithful (LESSONS #14). Found when the cJSON port
+        # drove a cstr-returning vector (cJSON_Version) through --json.
+        "c_ret": _jsonable(c_res["ret"]), "rust_ret": _jsonable(r_res["ret"]),
         "fingerprint": None if clean else fp[:12],
         "pinned": pin is not None,
         "diff": None if verdict == "MATCH" else text,
     }
+
+
+def _jsonable(x):
+    """A ret value that json.dumps can encode. Bytes (a cstr/ptr return) become a
+    backslashreplace string so distinct bytes stay distinct (LESSONS #14)."""
+    if isinstance(x, (bytes, bytearray)):
+        return bytes(x).decode("utf-8", "backslashreplace")
+    return x
 
 
 def compare(c_lib, rust_lib, vectors, c_symbols, rust_symbols, ledger,
@@ -456,6 +468,13 @@ def _self_test():
              "args": [{"type": "cstr", "value": "hello"}]}
     check("string-arg function matches → MATCH", verdict(v_len)["verdict"] == "MATCH")
     check("strlen('hello')==5 via FFI", invoke(None, {}, v_len, 3)["ret"] == 5)
+
+    # A `cstr`/`ptr` return is bytes; the --json report must serialize it without
+    # collapsing distinct bytes (LESSONS #14). Found when the cJSON port drove a
+    # cstr-returning vector (cJSON_Version) through --json and json.dumps crashed.
+    check("a bytes return is JSON-safe and byte-faithful in the report",
+          json.dumps({"c_ret": _jsonable(b"1.7.18")}) == '{"c_ret": "1.7.18"}'
+          and _jsonable(b"\xff\xfe") == "\\xff\\xfe")
 
     v_cpy = {"name": "strcpy", "function": "strcpy", "returns": "ptr", "returns_ignore": True,
              "args": [{"type": "outbuf", "size": 8, "id": "dst"}, {"type": "cstr", "value": "abc"}]}
