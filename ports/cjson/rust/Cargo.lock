@@ -12,3 +12,10 @@ version = "0.1.0"
 dependencies = [
  "cjson_core",
 ]
+
+[[package]]
+name = "cjson_ffi"
+version = "0.1.0"
+dependencies = [
+ "cjson_core",
+]
