@@ -7,8 +7,11 @@
 #   2. rust workspace     : fmt --check, clippy -D warnings, build --release, test
 #   3. differential       : diff_run over matrix-ported.json (the modules ported
 #                           so far), ledgered via ../DIVERGENCES.md
-#   4. unsafe-audit       : zero undocumented unsafe (the core FORBIDS unsafe)
-#   5. progress ingest    : advance module gates from the harnesses' own stamped
+#   4. diff-fuzz          : differential fuzzing, seeds from the full matrix —
+#                           live since the recursive core landed (the parse
+#                           entry points now decide every non-minify input)
+#   5. unsafe-audit       : zero undocumented unsafe (the core FORBIDS unsafe)
+#   6. progress ingest    : advance module gates from the harnesses' own stamped
 #                           --json reports (provenance-verified against HEAD)
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -41,14 +44,29 @@ mkdir -p "$HERE/reports"
     --json > "$HERE/reports/alloc-node.json"
 cp "$HERE/reports/alloc-node.json" "$HERE/reports/scalar-parse.json"
 cp "$HERE/reports/alloc-node.json" "$HERE/reports/string-parse.json"
+cp "$HERE/reports/alloc-node.json" "$HERE/reports/buffer-plumbing.json"
+cp "$HERE/reports/alloc-node.json" "$HERE/reports/recursive-core.json"
 
-echo "===== 4. unsafe-audit over the rust workspace ====="
+echo "===== 4. diff-fuzz — differential fuzzing, Rust vs C ====="
+mkdir -p "$HERE/reports/fuzz"
+"$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
+    --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
+    --args print-unformatted --matrix "$HERE/oracle/matrix.json" \
+    --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
+    --json > "$HERE/reports/fuzz/alloc-node.json"
+for m in scalar-parse string-parse buffer-plumbing recursive-core; do
+  cp "$HERE/reports/fuzz/alloc-node.json" "$HERE/reports/fuzz/$m.json"
+done
+
+echo "===== 5. unsafe-audit over the rust workspace ====="
 "$PY" "$KIT/harnesses/unsafe-audit/audit_unsafe.py" "$HERE/rust/crates"
 
-echo "===== 5. progress — ingest the stamped differential reports ====="
+echo "===== 6. progress — ingest the stamped reports (multi-rung) ====="
 ( cd "$KIT"   # ingest verifies report provenance against THIS repo's HEAD
   "$PY" harnesses/progress/progress.py --file "$HERE/progress.json" \
-      ingest --diff-json "$HERE/reports/alloc-node.json" "$HERE/reports/scalar-parse.json" "$HERE/reports/string-parse.json"
+      ingest \
+      --diff-json "$HERE"/reports/*.json \
+      --fuzz-json "$HERE"/reports/fuzz/*.json
   "$PY" harnesses/progress/progress.py --file "$HERE/progress.json" show )
 
 echo ""

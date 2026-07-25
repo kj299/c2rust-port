@@ -1,11 +1,11 @@
 {
   "modules": {
-    "alloc-node": "differential",
-    "buffer-plumbing": "not_started",
+    "alloc-node": "fuzzed",
+    "buffer-plumbing": "fuzzed",
     "dom": "not_started",
     "entry-minify": "not_started",
-    "recursive-core": "not_started",
-    "scalar-parse": "differential",
-    "string-parse": "differential"
+    "recursive-core": "fuzzed",
+    "scalar-parse": "fuzzed",
+    "string-parse": "fuzzed"
   }
 }

@@ -5,15 +5,23 @@ with a decade of CVE history. This is the keystone the retrospectives kept namin
 the moment the compounding loop stops feeding on itself and learns from code the
 kit did not write (`RETROSPECTIVE-kit-audit.md` §6, keystone item).
 
-## Status: **Phase 4 in progress — modules 1–3 ported, 44/44 differential MATCH**
+## Status: **Phase 4 — modules 1–5 ported and FUZZED; 69/69 differential MATCH**
 
 Phase 0 (inventory/plan) merged in #15; Phase 2 (oracle) merged in #16. The Rust
 port now exists (`rust/`: `#![forbid(unsafe_code)]` core + differential driver)
-with modules **alloc-node**, **scalar-parse**, and **string-parse** at the
-`differential` gate — the kit's differential running green on foreign code. The
-corpus is 69 vectors (all validated against C); the increment diffs the 44 whose
-behavior the ported modules fully determine, including the `cve-lone-surrogate`
-regression (the a167d9e OOB-read class) now exercised against the Rust.
+with five modules (**alloc-node**, **scalar-parse**, **string-parse**,
+**buffer-plumbing**, **recursive-core**) at the **fuzzed** gate. The corpus is 80
+C-validated vectors; the differential covers the 69 the parse entry points
+decide (everything except minify) — **69/69 MATCH**, including both CVE-class
+regressions now exercised against the Rust: `cve-lone-surrogate` (the a167d9e
+OOB-read class, rejected identically) and **`cve-nesting-1001`** (the
+stack-overflow guard: the ported `NESTING_LIMIT` rejects depth-1001 exactly
+where the C does, and depth-1000 parses — the boundary spiked and pinned).
+Differential FUZZING is live: thousands of matrix-seeded mutated inputs,
+zero findings — the fuzzer cannot tell the Rust from the C.
+
+The `sanitized` gate stays honestly unset: miri/asan need toolchains this
+environment lacks; they ride the CI-with-sanitizers item in the kit backlog.
 
 String values are **bytes, not `String`** — probed against the oracle: cJSON
 copies string content verbatim with no UTF-8 validation (a raw `0xFF`

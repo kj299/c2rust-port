@@ -35,8 +35,8 @@ def case(name, mode, stdin, expect_rc, mods=("tree",), **extra):
 # ---- validation matrix -----------------------------------------------------
 MATRIX = [
     # --- accepted round-trips (print-unformatted) ---
-    case("empty-object", "print-unformatted", "{}", 0, expect_contains="{}"),
-    case("empty-array", "print-unformatted", "[]", 0, expect_contains="[]"),
+    case("empty-object", "print-unformatted", "{}", 0, mods=("tree",), expect_contains="{}"),
+    case("empty-array", "print-unformatted", "[]", 0, mods=("tree",), expect_contains="[]"),
     case("true", "print-unformatted", "true", 0, mods=("scalar",), expect_contains="true"),
     case("false", "print-unformatted", "false", 0, mods=("scalar",), expect_contains="false"),
     case("null", "print-unformatted", "null", 0, mods=("scalar",), expect_contains="null"),
@@ -50,42 +50,42 @@ MATRIX = [
     case("unicode-escape", "print-unformatted", r'"éè"', 0, mods=("string",)),
     case("surrogate-pair", "print-unformatted", '"\U0001d11e"', 0, mods=("string",)),  # G-clef 𝄞
     case("nested-object", "print-unformatted",
-         '{"a":1,"b":{"c":[true,null,"x"],"d":{}}}', 0, expect_contains='"c"'),
-    case("mixed-array", "print-unformatted", '[1,"two",3.0,true,null,{}]', 0),
+         '{"a":1,"b":{"c":[true,null,"x"],"d":{}}}', 0, mods=("tree",), expect_contains='"c"'),
+    case("mixed-array", "print-unformatted", '[1,"two",3.0,true,null,{}]', 0, mods=("tree",)),
     case("big-int", "print-unformatted", "2147483647", 0, mods=("scalar",)),           # INT_MAX
     case("min-int", "print-unformatted", "-2147483648", 0, mods=("scalar",)),          # INT_MIN
     case("large-double", "print-unformatted", "1.7976931348623157e308", 0, mods=("scalar",)),
     case("whitespace-around", "print-unformatted", '   {  "k" : 1 }   ', 0,
-         expect_contains='"k":1'),
+         mods=("tree",), expect_contains='"k":1'),
     # nesting AT the limit is accepted (depth 1000); 1001 is not (below)
-    case("nesting-limit-ok", "print-unformatted", "[" * 1000 + "]" * 1000, 0),
+    case("nesting-limit-ok", "print-unformatted", "[" * 1000 + "]" * 1000, 0, mods=("tree",)),
     # trailing garbage is ACCEPTED by cJSON (lax; parses the first value) — a
     # documented candidate divergence, captured here as the C's actual behavior.
     case("trailing-garbage-lax", "print-unformatted", '{"a":1}trailing', 0,
-         expect_contains='{"a":1}'),
+         mods=("tree",), expect_contains='{"a":1}'),
 
     # --- accepted, formatted (print) ---
-    case("fmt-object", "print", '{"a":1,"b":2}', 0, expect_contains='"a"'),
-    case("fmt-array", "print", "[1,2,3]", 0),
+    case("fmt-object", "print", '{"a":1,"b":2}', 0, mods=("tree",), expect_contains='"a"'),
+    case("fmt-array", "print", "[1,2,3]", 0, mods=("tree",)),
 
     # --- accepted, minify ---
     case("minify-ws", "minify", '{ "a" : 1 ,  "b" : [ 2 , 3 ] }', 0,
-         expect_contains='{"a":1,"b":[2,3]}'),
-    case("minify-line-comment", "minify", '{"a":1} // tail comment', 0),
-    case("minify-block-comment", "minify", '/* lead */ {"a":1}', 0),
+         mods=("minify",), expect_contains='{"a":1,"b":[2,3]}'),
+    case("minify-line-comment", "minify", '{"a":1} // tail comment', 0, mods=("minify",)),
+    case("minify-block-comment", "minify", '/* lead */ {"a":1}', 0, mods=("minify",)),
     # #338 regression: an unterminated block comment must NOT OOB — the fixed C
     # yields empty output safely.
     case("minify-unterminated-block", "minify", "/* never closed", 0,
-         expect_absent="never"),
+         mods=("minify",), expect_absent="never"),
 
     # --- rejected (expect_rc 1): each pins a bug class ---
     case("reject-empty", "print-unformatted", "", 1, mods=("scalar",)),
     case("reject-garbage", "print-unformatted", "xyzzy", 1, mods=("scalar",)),
     case("reject-unterminated-string", "print-unformatted", '"abc', 1, mods=("string",)),
-    case("reject-unterminated-object", "print-unformatted", '{"a":1', 1),
-    case("reject-unterminated-array", "print-unformatted", "[1,2", 1),
-    case("reject-trailing-comma", "print-unformatted", "[1,2,]", 1),
-    case("reject-comment-in-parse", "print-unformatted", "// c\n{}", 1),
+    case("reject-unterminated-object", "print-unformatted", '{"a":1', 1, mods=("tree",)),
+    case("reject-unterminated-array", "print-unformatted", "[1,2", 1, mods=("tree",)),
+    case("reject-trailing-comma", "print-unformatted", "[1,2,]", 1, mods=("tree",)),
+    case("reject-comment-in-parse", "print-unformatted", "// c\n{}", 1, mods=("tree",)),
     case("reject-bad-escape", "print-unformatted", r'"\x41"', 1, mods=("string",)),
     # --- scalar-only additions (modules 1-2 differential; all validated vs C) ---
     case("ws-number", "print-unformatted", "   42  ", 0, mods=("scalar",),
@@ -138,9 +138,26 @@ MATRIX = [
     case("reject-trailing-backslash", "print-unformatted", '"abc\\', 1,
          mods=("string",)),
 
+    # --- tree-module additions (all probed against C, 2026-07-25) ---
+    case("dup-keys-preserved", "print-unformatted", '{"a":1,"a":2}', 0,
+         mods=("tree",), expect_contains='{"a":1,"a":2}'),
+    case("empty-key", "print-unformatted", '{"":1}', 0, mods=("tree",),
+         expect_contains='{"":1}'),
+    case("ws-heavy-array", "print-unformatted", "[  1 ,   2  ]", 0,
+         mods=("tree",), expect_contains="[1,2]"),
+    case("nested-empty-arrays", "print-unformatted", "[[[]]]", 0,
+         mods=("tree",), expect_contains="[[[]]]"),
+    case("fmt-nested-obj-in-array", "print", '[1,{"a":1}]', 0, mods=("tree",)),
+    case("fmt-nested-empty-obj", "print", '{"a":{}}', 0, mods=("tree",)),
+    case("reject-missing-colon", "print-unformatted", '{"k" 1}', 1, mods=("tree",)),
+    case("reject-missing-comma", "print-unformatted", "[1 2]", 1, mods=("tree",)),
+    case("reject-leading-comma", "print-unformatted", "[,1]", 1, mods=("tree",)),
+    case("reject-obj-trailing-comma", "print-unformatted", '{"a":1,}', 1, mods=("tree",)),
+    case("reject-colon-no-value", "print-unformatted", '{"a":}', 1, mods=("tree",)),
+
     # CVE-class regressions (FLAW-SCAN.md):
     case("cve-lone-surrogate", "print-unformatted", r'"\uD800"', 1, mods=("string",)),   # a167d9e OOB-read class
-    case("cve-nesting-1001", "print-unformatted", "[" * 1001 + "]" * 1001, 1),  # stack-overflow guard
+    case("cve-nesting-1001", "print-unformatted", "[" * 1001 + "]" * 1001, 1, mods=("tree",)),  # stack-overflow guard
 ]
 
 # ---- hidden acceptance holdout (different inputs, same spirit) --------------
@@ -166,7 +183,7 @@ def main():
     # The PORTED set grows as modules land; a case is included when every
     # module it depends on is ported. (matrix-scalar.json was this file's
     # first-increment name; matrix-ported.json is the evolving one.)
-    ported_mods = {"scalar", "string"}
+    ported_mods = {"scalar", "string", "tree"}
     ported = [c for c in MATRIX if set(c["mods"]) <= ported_mods]
     with open(os.path.join(HERE, "matrix-ported.json"), "w") as f:
         json.dump(ported, f, indent=2)

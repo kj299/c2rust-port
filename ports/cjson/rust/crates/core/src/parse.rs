@@ -1,6 +1,14 @@
-//! Modules 4/5 (the parse-side buffer plumbing + value dispatch), ported from
-//! cJSON.c:288–305 (`parse_buffer`), 1047–1096 (whitespace/BOM), 1104–1195
-//! (`cJSON_ParseWithLengthOpts`), 1325–1378 (`parse_value`).
+//! Modules 4/5 (the parse-side buffer plumbing + the recursive core), ported
+//! from cJSON.c:288–305 (`parse_buffer`), 1047–1096 (whitespace/BOM),
+//! 1104–1195 (`cJSON_ParseWithLengthOpts`), 1325–1378 (`parse_value`),
+//! 1454–1550 (`parse_array`), 1614–1730 (`parse_object`).
+//!
+//! THE HAZARD GUARD (PORT-PLAN module 5): `parse_array`/`parse_object` check
+//! `depth >= NESTING_LIMIT` BEFORE recursing — Rust recursion overflows the
+//! stack exactly like C's, so this is the one historical cJSON guard the port
+//! must carry rather than inherit. Spiked: depth-1000 balanced input parses,
+//! depth-1001 is REJECTED by the guard (pinned below and in the
+//! `cve-nesting-1001` corpus vector).
 //!
 //! Two C quirks are ported FAITHFULLY on purpose (a silent "improvement" here
 //! would be an unledgered divergence):
@@ -73,10 +81,8 @@ fn skip_utf8_bom(buf: &mut ParseBuffer) {
     }
 }
 
-/// cJSON.c:1325 `parse_value` — literal dispatch in the C's exact order.
-/// The ⏳ arms (string / array / object) are NOT yet ported and fail the parse;
-/// the increment's differential matrix contains no input that reaches them
-/// with a C-accepting document (see lib.rs porting status).
+/// cJSON.c:1325 `parse_value` — literal dispatch in the C's exact order, now
+/// fully wired: null/false/true, string, number, array, object.
 fn parse_value(buf: &mut ParseBuffer) -> Result<Value, ()> {
     if buf.can_read(4) && buf.rest().starts_with(b"null") {
         buf.offset = buf.offset.saturating_add(4);
@@ -107,12 +113,112 @@ fn parse_value(buf: &mut ParseBuffer) -> Result<Value, ()> {
         };
     }
     if buf.can_access(0) && buf.content[buf.offset] == b'[' {
-        return Err(()); // ⏳ module 5 (recursive-core) not yet ported
+        return parse_array(buf);
     }
     if buf.can_access(0) && buf.content[buf.offset] == b'{' {
-        return Err(()); // ⏳ module 5 (recursive-core) not yet ported
+        return parse_object(buf);
     }
     Err(())
+}
+
+/// cJSON.c:1454 `parse_array`, line-faithful including the offset dance: after
+/// `[` it skips whitespace, handles `]` (empty), steps BACK one, then each loop
+/// iteration pre-increments past the `[`-or-`,` before parsing the element.
+fn parse_array(buf: &mut ParseBuffer) -> Result<Value, ()> {
+    if buf.depth >= NESTING_LIMIT {
+        return Err(()); // too deeply nested — the stack-overflow guard
+    }
+    buf.depth = buf.depth.saturating_add(1);
+
+    if buf.content.get(buf.offset) != Some(&b'[') {
+        return Err(());
+    }
+    buf.offset = buf.offset.saturating_add(1);
+    skip_whitespace(buf);
+    if buf.can_access(0) && buf.content[buf.offset] == b']' {
+        // empty array
+        buf.depth = buf.depth.saturating_sub(1);
+        buf.offset = buf.offset.saturating_add(1);
+        return Ok(Value::Array(Vec::new()));
+    }
+    if !buf.can_access(0) {
+        buf.offset = buf.offset.saturating_sub(1);
+        return Err(());
+    }
+
+    buf.offset = buf.offset.saturating_sub(1); // step back before first element
+    let mut items = Vec::new();
+    loop {
+        buf.offset = buf.offset.saturating_add(1); // past '[' or ','
+        skip_whitespace(buf);
+        items.push(parse_value(buf)?);
+        skip_whitespace(buf);
+        if !(buf.can_access(0) && buf.content[buf.offset] == b',') {
+            break;
+        }
+    }
+    if !buf.can_access(0) || buf.content[buf.offset] != b']' {
+        return Err(()); // expected end of array
+    }
+    buf.depth = buf.depth.saturating_sub(1);
+    buf.offset = buf.offset.saturating_add(1);
+    Ok(Value::Array(items))
+}
+
+/// cJSON.c:1614 `parse_object` — same shape as `parse_array`, plus the key
+/// (`parse_string`, the C\'s valuestring→string swap is just ownership here),
+/// the `:` requirement, and the C\'s nothing-after-the-comma lookahead.
+fn parse_object(buf: &mut ParseBuffer) -> Result<Value, ()> {
+    if buf.depth >= NESTING_LIMIT {
+        return Err(()); // too deeply nested — the stack-overflow guard
+    }
+    buf.depth = buf.depth.saturating_add(1);
+
+    if !buf.can_access(0) || buf.content[buf.offset] != b'{' {
+        return Err(());
+    }
+    buf.offset = buf.offset.saturating_add(1);
+    skip_whitespace(buf);
+    if buf.can_access(0) && buf.content[buf.offset] == b'}' {
+        // empty object
+        buf.depth = buf.depth.saturating_sub(1);
+        buf.offset = buf.offset.saturating_add(1);
+        return Ok(Value::Object(Vec::new()));
+    }
+    if !buf.can_access(0) {
+        buf.offset = buf.offset.saturating_sub(1);
+        return Err(());
+    }
+
+    buf.offset = buf.offset.saturating_sub(1); // step back before first entry
+    let mut entries = Vec::new();
+    loop {
+        // C: cannot_access_at_index(buffer, 1) → nothing comes after the comma
+        if !buf.can_access(1) {
+            return Err(());
+        }
+        buf.offset = buf.offset.saturating_add(1); // past '{' or ','
+        skip_whitespace(buf);
+        let key = parse_string(buf)?;
+        skip_whitespace(buf);
+        if !buf.can_access(0) || buf.content[buf.offset] != b':' {
+            return Err(()); // invalid object
+        }
+        buf.offset = buf.offset.saturating_add(1);
+        skip_whitespace(buf);
+        let value = parse_value(buf)?;
+        skip_whitespace(buf);
+        entries.push((key, value));
+        if !(buf.can_access(0) && buf.content[buf.offset] == b',') {
+            break;
+        }
+    }
+    if !buf.can_access(0) || buf.content[buf.offset] != b'}' {
+        return Err(()); // expected end of object
+    }
+    buf.depth = buf.depth.saturating_sub(1);
+    buf.offset = buf.offset.saturating_add(1);
+    Ok(Value::Object(entries))
 }
 
 /// cJSON.c:1104 `cJSON_ParseWithLengthOpts` (as used by the driver contract:
@@ -181,6 +287,32 @@ mod tests {
         let (v, consumed) = parse(b"123 456").unwrap();
         assert!(matches!(v, Value::Number(n) if n.d == 123.0));
         assert_eq!(consumed, 3);
+    }
+
+    #[test]
+    fn nesting_limit_spike() {
+        // THE hazard-module spike: depth-1000 balanced parses (and must not
+        // blow the stack), depth-1001 is rejected by the guard — matching the
+        // probed C boundary exactly.
+        let ok: Vec<u8> = [b"[".repeat(1000), b"]".repeat(1000)].concat();
+        assert!(parse(&ok).is_ok());
+        let too_deep: Vec<u8> = [b"[".repeat(1001), b"]".repeat(1001)].concat();
+        assert!(parse(&too_deep).is_err());
+    }
+
+    #[test]
+    fn trees_parse_like_c() {
+        assert!(matches!(parse(b"[]").unwrap().0, Value::Array(v) if v.is_empty()));
+        assert!(matches!(parse(b"{}").unwrap().0, Value::Object(v) if v.is_empty()));
+        let (v, _) = parse(br#"{"a":1,"a":2}"#).unwrap();
+        // duplicate keys preserved in order (probed: C keeps both)
+        assert!(matches!(v, Value::Object(e) if e.len() == 2));
+        assert!(parse(br#"[1 2]"#).is_err()); // missing comma
+        assert!(parse(br#"[,1]"#).is_err()); // leading comma
+        assert!(parse(br#"{"a":1,}"#).is_err()); // trailing comma
+        assert!(parse(br#"{"k" 1}"#).is_err()); // missing colon
+        assert!(parse(br#"{"a":}"#).is_err()); // missing value
+        assert!(parse(b"[[[]]]").is_ok());
     }
 
     #[test]

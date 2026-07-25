@@ -11,15 +11,17 @@
 //!   2. scalar-parse — ✅ `num` + the scalar arms of `parse`/`print`.
 //!   3. string-parse — ✅ `string`: parse/print with the C's probed quirks
 //!      (invalid-hex→NUL, print-truncates-at-NUL, verbatim non-UTF-8 bytes).
-//!   4. buffer-plumbing — ✅ the parse-side half (`ParseBuffer`, whitespace/BOM).
-//!   5. recursive-core — ⏳ `[`/`{` currently fail the parse (NESTING_LIMIT is
-//!      declared so the guard cannot be forgotten).
-//!   6. dom / 7. entry-minify — ⏳.
+//!   4. buffer-plumbing — ✅ parse side (`ParseBuffer`, whitespace/BOM); the
+//!      print side (`ensure`/`update_offset`) is subsumed by `Vec` growth,
+//!      whose bounds/overflow behavior is what the C's guards hand-built.
+//!   5. recursive-core — ✅ `parse_array`/`parse_object` + the printer, with
+//!      the NESTING_LIMIT depth guard (the one guard Rust doesn't inherit;
+//!      spiked: depth-1000 parses, depth-1001 rejects).
+//!   6. dom / 7. entry-minify — ⏳ (`Raw` printing and `minify` are the only
+//!      unreachable-from-parse arms left).
 //!
-//! Every ⏳ arm returns a parse failure — the differential matrix for the
-//! current increment (`oracle/matrix-ported.json`) only contains inputs whose
-//! behavior is fully determined by the ported modules, so the diff verdict is
-//! meaningful.
+//! The differential matrix (`oracle/matrix-ported.json`) now covers every
+//! input the parse entry points decide — everything except `minify` mode.
 #![forbid(unsafe_code)]
 
 pub mod num;

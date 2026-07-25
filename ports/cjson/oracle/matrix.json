@@ -283,7 +283,7 @@
     "stdin": "{ \"a\" : 1 ,  \"b\" : [ 2 , 3 ] }",
     "expect_rc": 0,
     "mods": [
-      "tree"
+      "minify"
     ],
     "expect_contains": "{\"a\":1,\"b\":[2,3]}"
   },
@@ -295,7 +295,7 @@
     "stdin": "{\"a\":1} // tail comment",
     "expect_rc": 0,
     "mods": [
-      "tree"
+      "minify"
     ]
   },
   {
@@ -306,7 +306,7 @@
     "stdin": "/* lead */ {\"a\":1}",
     "expect_rc": 0,
     "mods": [
-      "tree"
+      "minify"
     ]
   },
   {
@@ -317,7 +317,7 @@
     "stdin": "/* never closed",
     "expect_rc": 0,
     "mods": [
-      "tree"
+      "minify"
     ],
     "expect_absent": "never"
   },
@@ -689,6 +689,131 @@
     "expect_rc": 1,
     "mods": [
       "string"
+    ]
+  },
+  {
+    "name": "dup-keys-preserved",
+    "args": [
+      "print-unformatted"
+    ],
+    "stdin": "{\"a\":1,\"a\":2}",
+    "expect_rc": 0,
+    "mods": [
+      "tree"
+    ],
+    "expect_contains": "{\"a\":1,\"a\":2}"
+  },
+  {
+    "name": "empty-key",
+    "args": [
+      "print-unformatted"
+    ],
+    "stdin": "{\"\":1}",
+    "expect_rc": 0,
+    "mods": [
+      "tree"
+    ],
+    "expect_contains": "{\"\":1}"
+  },
+  {
+    "name": "ws-heavy-array",
+    "args": [
+      "print-unformatted"
+    ],
+    "stdin": "[  1 ,   2  ]",
+    "expect_rc": 0,
+    "mods": [
+      "tree"
+    ],
+    "expect_contains": "[1,2]"
+  },
+  {
+    "name": "nested-empty-arrays",
+    "args": [
+      "print-unformatted"
+    ],
+    "stdin": "[[[]]]",
+    "expect_rc": 0,
+    "mods": [
+      "tree"
+    ],
+    "expect_contains": "[[[]]]"
+  },
+  {
+    "name": "fmt-nested-obj-in-array",
+    "args": [
+      "print"
+    ],
+    "stdin": "[1,{\"a\":1}]",
+    "expect_rc": 0,
+    "mods": [
+      "tree"
+    ]
+  },
+  {
+    "name": "fmt-nested-empty-obj",
+    "args": [
+      "print"
+    ],
+    "stdin": "{\"a\":{}}",
+    "expect_rc": 0,
+    "mods": [
+      "tree"
+    ]
+  },
+  {
+    "name": "reject-missing-colon",
+    "args": [
+      "print-unformatted"
+    ],
+    "stdin": "{\"k\" 1}",
+    "expect_rc": 1,
+    "mods": [
+      "tree"
+    ]
+  },
+  {
+    "name": "reject-missing-comma",
+    "args": [
+      "print-unformatted"
+    ],
+    "stdin": "[1 2]",
+    "expect_rc": 1,
+    "mods": [
+      "tree"
+    ]
+  },
+  {
+    "name": "reject-leading-comma",
+    "args": [
+      "print-unformatted"
+    ],
+    "stdin": "[,1]",
+    "expect_rc": 1,
+    "mods": [
+      "tree"
+    ]
+  },
+  {
+    "name": "reject-obj-trailing-comma",
+    "args": [
+      "print-unformatted"
+    ],
+    "stdin": "{\"a\":1,}",
+    "expect_rc": 1,
+    "mods": [
+      "tree"
+    ]
+  },
+  {
+    "name": "reject-colon-no-value",
+    "args": [
+      "print-unformatted"
+    ],
+    "stdin": "{\"a\":}",
+    "expect_rc": 1,
+    "mods": [
+      "tree"
     ]
   },
   {
