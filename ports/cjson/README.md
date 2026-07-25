@@ -5,7 +5,7 @@ with a decade of CVE history. This is the keystone the retrospectives kept namin
 the moment the compounding loop stops feeding on itself and learns from code the
 kit did not write (`RETROSPECTIVE-kit-audit.md` §6, keystone item).
 
-## Status: **Phase 4 — 6/7 modules FUZZED; full CLI surface done; 79/79 diff, fuzz-clean**
+## Status: **Phase 4 — ALL 7 modules FUZZED (DOM core in pure Rust)**
 
 Phase 0 (inventory/plan) merged in #15; Phase 2 (oracle) merged in #16. The Rust
 port now exists (`rust/`: `#![forbid(unsafe_code)]` core + differential driver)
@@ -27,11 +27,26 @@ and the `minify-escape-parity-quirk` corpus vector, and re-fuzzed 6000 iters
 clean. This is the compounding loop working on foreign code: fuzz → find →
 fix-forward → pin, in one change.
 
-**Remaining: module 6 (`dom`)** — the DOM builder/query API
-(`cJSON_Create*`/`Add*`/`Get*`/`Duplicate`/`Compare`) and the C-ABI FFI
-`cdylib`. This is the port's first `unsafe` (the audited `extern "C"` shim over
-the `#![forbid(unsafe_code)]` core) and where the `cJSON_InitHooks` allocator
-decision lands. It is a large, self-contained final increment.
+**Module 6 (`dom`) core is done** — constructors, accessors, `Add` builders,
+`Compare`, and `Duplicate` (= clone) in pure safe Rust, differentially verified
+through two new driver modes: **`dup`** (parse → `Duplicate` → print; must
+byte-match a plain round-trip) and **`dup-eq`** (a value compares equal to its
+duplicate). The `dup-eq` differential immediately earned its keep — its
+C-baseline validation surfaced **two real `cJSON_Compare` quirks** the port must
+reproduce: an `inf`/`nan` number never equals itself (`compare_double(inf,inf)` =
+`nan <= inf` = false), and a value with **duplicate object keys** never compares
+equal (the O(n²) first-match can't resolve the second key). Both pinned; dup and
+dup-eq are 69/69 MATCH and fuzz-clean.
+
+**The `cJSON_InitHooks` allocator decision landed: DROPPED and ledgered** — the
+Rust port refuses to reproduce cJSON's process-global mutable allocator hooks (a
+data-race hazard, CWE-362); it uses the global allocator with no `InitHooks`
+equivalent (DIVERGENCES.md · `custom-allocator-dropped`).
+
+**Remaining: the C-ABI FFI `cdylib`** — the port's first `unsafe` (the audited
+`extern "C"` shim over the forbid-unsafe core) and the ABI-level `lib_diff`
+proving drop-in `.so` compatibility. The reference-flag DOM feature
+(`create_reference`) rides that increment.
 
 The `sanitized` gate stays honestly unset: miri/asan need toolchains this
 environment lacks; they ride the CI-with-sanitizers item in the kit backlog.

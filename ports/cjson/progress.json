@@ -2,7 +2,7 @@
   "modules": {
     "alloc-node": "fuzzed",
     "buffer-plumbing": "fuzzed",
-    "dom": "not_started",
+    "dom": "fuzzed",
     "entry-minify": "fuzzed",
     "recursive-core": "fuzzed",
     "scalar-parse": "fuzzed",

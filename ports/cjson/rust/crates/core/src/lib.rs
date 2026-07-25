@@ -19,13 +19,17 @@
 //!      spiked: depth-1000 parses, depth-1001 rejects).
 //!   7. entry-minify — ✅ `minify`: cJSON_Minify with the #338 bound made
 //!      structural (slice indices, no raw pointer walk).
-//!   6. dom — ⏳ the DOM builder/query API + the C-ABI FFI crate.
+//!   6. dom — ✅ (core) `dom`: constructors, accessors, Add builders,
+//!      Compare, Duplicate (= clone). Custom-allocator parity DROPPED (a
+//!      thread-safety hazard, ledgered). The C-ABI FFI cdylib + lib_diff is
+//!      the following increment.
 //!
 //! The differential matrix (`oracle/matrix-ported.json`) now covers the ENTIRE
 //! CLI surface — parse, print, and minify. Only the DOM builder/query API and
 //! the C-ABI FFI crate (module 6) remain.
 #![forbid(unsafe_code)]
 
+pub mod dom;
 pub mod minify;
 pub mod num;
 pub mod parse;

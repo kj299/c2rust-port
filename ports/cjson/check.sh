@@ -48,6 +48,19 @@ cp "$HERE/reports/alloc-node.json" "$HERE/reports/buffer-plumbing.json"
 cp "$HERE/reports/alloc-node.json" "$HERE/reports/recursive-core.json"
 cp "$HERE/reports/alloc-node.json" "$HERE/reports/entry-minify.json"
 
+echo "----- module 6 (dom): dup + dup-eq differentials -----"
+# dup: parse -> Duplicate -> print (must byte-match a plain round-trip)
+# dup-eq: a value compares equal to its duplicate ... EXCEPT the C quirks
+# (inf never equals itself; duplicate keys never compare equal), which the
+# port reproduces — so Rust must MATCH C's true/false, checked here.
+"$PY" "$KIT/harnesses/differential/diff_run.py" \
+    --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
+    --matrix "$HERE/oracle/matrix-dup.json" --ledger "$HERE/DIVERGENCES.md"
+"$PY" "$KIT/harnesses/differential/diff_run.py" \
+    --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
+    --matrix "$HERE/oracle/matrix-dupeq.json" --ledger "$HERE/DIVERGENCES.md" \
+    --json > "$HERE/reports/dom.json"
+
 echo "===== 4. diff-fuzz — differential fuzzing, Rust vs C ====="
 mkdir -p "$HERE/reports/fuzz"
 "$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
@@ -62,6 +75,12 @@ mkdir -p "$HERE/reports/fuzz"
     --args minify --matrix "$HERE/oracle/matrix.json" \
     --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
     --json > "$HERE/reports/fuzz/entry-minify.json"
+# dom mode: fuzz the Compare+Duplicate invariant (dup-eq)
+"$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
+    --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
+    --args dup-eq --matrix "$HERE/oracle/matrix.json" \
+    --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
+    --json > "$HERE/reports/fuzz/dom.json"
 for m in scalar-parse string-parse buffer-plumbing recursive-core; do
   cp "$HERE/reports/fuzz/alloc-node.json" "$HERE/reports/fuzz/$m.json"
 done
