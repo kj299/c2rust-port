@@ -43,5 +43,6 @@ printf '/* never closed' | check_rc minify 0 "unterminated block comment safe (#
 [ "$fail" -eq 0 ] || { echo "CVE regression spot-check FAILED"; exit 1; }
 
 echo ""
-echo "===== ORACLE LOCKED — 45 vectors validated against cJSON v1.7.18 ====="
+N=$("$PY" -c "import json;print(len(json.load(open('$HERE/matrix.json')))+len(json.load(open('$HERE/holdout.json'))))")
+echo "===== ORACLE LOCKED — $N vectors validated against cJSON v1.7.18 ====="
 echo "Next (Phase 4): port module 1 and run diff_run/lib_diff against this oracle."

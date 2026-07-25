@@ -19,8 +19,15 @@ import os
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
-def case(name, mode, stdin, expect_rc, **extra):
-    c = {"name": name, "args": [mode], "stdin": stdin, "expect_rc": expect_rc}
+def case(name, mode, stdin, expect_rc, mods=("tree",), **extra):
+    """`mods` names the port modules whose behavior fully determines this case
+    ("scalar" = alloc-node + scalar-parse + dispatch only; "tree" needs
+    string/array/object; "minify" needs entry-minify). The per-module matrices
+    below filter on it so an increment diffs ONLY inputs its ported modules
+    decide — a tree case against a scalar-only port would fail for "not ported
+    yet", which is schedule, not divergence."""
+    c = {"name": name, "args": [mode], "stdin": stdin, "expect_rc": expect_rc,
+         "mods": list(mods)}
     c.update(extra)
     return c
 
@@ -30,14 +37,14 @@ MATRIX = [
     # --- accepted round-trips (print-unformatted) ---
     case("empty-object", "print-unformatted", "{}", 0, expect_contains="{}"),
     case("empty-array", "print-unformatted", "[]", 0, expect_contains="[]"),
-    case("true", "print-unformatted", "true", 0, expect_contains="true"),
-    case("false", "print-unformatted", "false", 0, expect_contains="false"),
-    case("null", "print-unformatted", "null", 0, expect_contains="null"),
-    case("int", "print-unformatted", "42", 0, expect_contains="42"),
-    case("negative", "print-unformatted", "-17", 0, expect_contains="-17"),
-    case("zero", "print-unformatted", "0", 0),
-    case("float", "print-unformatted", "3.14159", 0),
-    case("exponent", "print-unformatted", "6.022e23", 0),
+    case("true", "print-unformatted", "true", 0, mods=("scalar",), expect_contains="true"),
+    case("false", "print-unformatted", "false", 0, mods=("scalar",), expect_contains="false"),
+    case("null", "print-unformatted", "null", 0, mods=("scalar",), expect_contains="null"),
+    case("int", "print-unformatted", "42", 0, mods=("scalar",), expect_contains="42"),
+    case("negative", "print-unformatted", "-17", 0, mods=("scalar",), expect_contains="-17"),
+    case("zero", "print-unformatted", "0", 0, mods=("scalar",)),
+    case("float", "print-unformatted", "3.14159", 0, mods=("scalar",)),
+    case("exponent", "print-unformatted", "6.022e23", 0, mods=("scalar",)),
     case("bare-string", "print-unformatted", '"hello"', 0, expect_contains='"hello"'),
     case("string-escapes", "print-unformatted", r'"tab\tnl\nquote\"backslash\\"', 0),
     case("unicode-escape", "print-unformatted", r'"éè"', 0),
@@ -45,9 +52,9 @@ MATRIX = [
     case("nested-object", "print-unformatted",
          '{"a":1,"b":{"c":[true,null,"x"],"d":{}}}', 0, expect_contains='"c"'),
     case("mixed-array", "print-unformatted", '[1,"two",3.0,true,null,{}]', 0),
-    case("big-int", "print-unformatted", "2147483647", 0),           # INT_MAX
-    case("min-int", "print-unformatted", "-2147483648", 0),          # INT_MIN
-    case("large-double", "print-unformatted", "1.7976931348623157e308", 0),
+    case("big-int", "print-unformatted", "2147483647", 0, mods=("scalar",)),           # INT_MAX
+    case("min-int", "print-unformatted", "-2147483648", 0, mods=("scalar",)),          # INT_MIN
+    case("large-double", "print-unformatted", "1.7976931348623157e308", 0, mods=("scalar",)),
     case("whitespace-around", "print-unformatted", '   {  "k" : 1 }   ', 0,
          expect_contains='"k":1'),
     # nesting AT the limit is accepted (depth 1000); 1001 is not (below)
@@ -72,14 +79,37 @@ MATRIX = [
          expect_absent="never"),
 
     # --- rejected (expect_rc 1): each pins a bug class ---
-    case("reject-empty", "print-unformatted", "", 1),
-    case("reject-garbage", "print-unformatted", "xyzzy", 1),
+    case("reject-empty", "print-unformatted", "", 1, mods=("scalar",)),
+    case("reject-garbage", "print-unformatted", "xyzzy", 1, mods=("scalar",)),
     case("reject-unterminated-string", "print-unformatted", '"abc', 1),
     case("reject-unterminated-object", "print-unformatted", '{"a":1', 1),
     case("reject-unterminated-array", "print-unformatted", "[1,2", 1),
     case("reject-trailing-comma", "print-unformatted", "[1,2,]", 1),
     case("reject-comment-in-parse", "print-unformatted", "// c\n{}", 1),
     case("reject-bad-escape", "print-unformatted", r'"\x41"', 1),
+    # --- scalar-only additions (modules 1-2 differential; all validated vs C) ---
+    case("ws-number", "print-unformatted", "   42  ", 0, mods=("scalar",),
+         expect_contains="42"),
+    case("trailing-after-number", "print-unformatted", "123 456", 0,
+         mods=("scalar",), expect_contains="123", expect_absent="456"),
+    case("neg-zero", "print-unformatted", "-0", 0, mods=("scalar",)),
+    case("num-overflow-inf", "print-unformatted", "1e999", 0, mods=("scalar",),
+         expect_contains="null"),   # strtod → HUGE_VAL, isinf → prints null
+    case("num-underflow", "print-unformatted", "1e-999", 0, mods=("scalar",)),
+    case("small-exp", "print-unformatted", "1e-05", 0, mods=("scalar",)),
+    case("exp-boundary-fixed", "print-unformatted", "0.0001", 0, mods=("scalar",)),
+    case("reject-lone-minus", "print-unformatted", "-", 1, mods=("scalar",)),
+    case("reject-incomplete-exp", "print-unformatted", "1e+", 0, mods=("scalar",),
+         expect_contains="1"),      # strtod backs off to "1"; trailing lax
+    case("bom-number", "print-unformatted", "\ufeff42", 0, mods=("scalar",),
+         expect_contains="42"),
+    # DBL_MAX print is LOSSY in C (observed; see rust num.rs test): the printed
+    # 15-digit form reparses as inf, which prints as null. Both pinned.
+    case("dbl-max-lossy-print", "print-unformatted", "1.7976931348623157e308", 0,
+         mods=("scalar",), expect_contains="1.79769313486232e+308"),
+    case("dbl-max-reparse-null", "print-unformatted", "1.79769313486232e+308", 0,
+         mods=("scalar",), expect_contains="null"),
+
     # CVE-class regressions (FLAW-SCAN.md):
     case("cve-lone-surrogate", "print-unformatted", r'"\uD800"', 1),   # a167d9e OOB-read class
     case("cve-nesting-1001", "print-unformatted", "[" * 1001 + "]" * 1001, 1),  # stack-overflow guard
@@ -105,7 +135,11 @@ def main():
         json.dump(MATRIX, f, indent=2)
     with open(os.path.join(HERE, "holdout.json"), "w") as f:
         json.dump(HOLDOUT, f, indent=2)
-    print(f"wrote matrix.json ({len(MATRIX)} cases), holdout.json ({len(HOLDOUT)} cases)")
+    scalar = [c for c in MATRIX if "scalar" in c["mods"]]
+    with open(os.path.join(HERE, "matrix-scalar.json"), "w") as f:
+        json.dump(scalar, f, indent=2)
+    print(f"wrote matrix.json ({len(MATRIX)} cases), holdout.json ({len(HOLDOUT)}), "
+          f"matrix-scalar.json ({len(scalar)})")
 
 
 if __name__ == "__main__":
