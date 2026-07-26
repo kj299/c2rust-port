@@ -1,0 +1,105 @@
+{
+  "probe_transcript": 1,
+  "module": "quirks",
+  "oracle_sha256": "112b072ceb602669a25ea45b9de4ef94da616536951de0fdf1593ac0d5cbadda",
+  "generated_by": "harnesses/probe/probe.py run",
+  "entries": [
+    {
+      "id": "dbl-max-lossy-print",
+      "args": [
+        "print-unformatted"
+      ],
+      "stdin_b64": "MS43OTc2OTMxMzQ4NjIzMTU3ZTMwOA==",
+      "note": "RETROSPECTIVE-cjson.md s2.1: %1.15g of DBL_MAX is lossy; the C accepts the failed round-trip rather than widening to 17 digits",
+      "rc": 0,
+      "stdout_b64": "MS43OTc2OTMxMzQ4NjIzMmUrMzA4",
+      "stdin_preview": "1.7976931348623157e308",
+      "stdout_preview": "1.79769313486232e+308"
+    },
+    {
+      "id": "dbl-max-reparse-null",
+      "args": [
+        "print-unformatted"
+      ],
+      "stdin_b64": "MS43OTc2OTMxMzQ4NjIzMmUzMDg=",
+      "note": "the lossy form from dbl-max-lossy-print reparses as inf, which prints as null: print->reparse->print of DBL_MAX is null",
+      "rc": 0,
+      "stdout_b64": "bnVsbA==",
+      "stdin_preview": "1.79769313486232e308",
+      "stdout_preview": "null"
+    },
+    {
+      "id": "dup-eq-inf-false",
+      "args": [
+        "dup-eq"
+      ],
+      "stdin_b64": "WzFlOTk5XQ==",
+      "note": "s2.2: compare_double on inf is nan<=inf on both sides -> the C says a value containing inf does NOT equal its own duplicate",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U=",
+      "stdin_preview": "[1e999]",
+      "stdout_preview": "false"
+    },
+    {
+      "id": "dup-eq-dup-keys-false",
+      "args": [
+        "dup-eq"
+      ],
+      "stdin_b64": "eyJhIjoxLCJhIjoyfQ==",
+      "note": "s2.2: duplicate keys never compare equal to their duplicate (first-match object lookup finds the first \"a\" twice)",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U=",
+      "stdin_preview": "{\"a\":1,\"a\":2}",
+      "stdout_preview": "false"
+    },
+    {
+      "id": "minify-escape-parity",
+      "args": [
+        "minify"
+      ],
+      "stdin_b64": "IlxcIiAi",
+      "note": "s2.3: minify treats the quote after \\\\ as escaped (no parity tracking), so the run stays 'inside a string' and keeps the space",
+      "rc": 0,
+      "stdout_b64": "IlxcIiAi",
+      "stdin_preview": "\"\\\\\" \"",
+      "stdout_preview": "\"\\\\\" \""
+    },
+    {
+      "id": "hex-invalid-nul-truncates",
+      "args": [
+        "print-unformatted"
+      ],
+      "stdin_b64": "ImFcdVpaWlpiIg==",
+      "note": "s2.4: parse_hex4 yields 0 for invalid hex; the NUL then truncates the printed string after \"a\"",
+      "rc": 0,
+      "stdout_b64": "ImEi",
+      "stdin_preview": "\"a\\uZZZZb\"",
+      "stdout_preview": "\"a\""
+    },
+    {
+      "id": "nesting-1001-rejected",
+      "args": [
+        "print-unformatted"
+      ],
+      "stdin_b64": "W1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tdXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXQ==",
+      "note": "cve-nesting-1001: the stack-overflow guard rejects depth 1001",
+      "rc": 1,
+      "stdout_b64": "",
+      "stdin_preview": "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[\u2026",
+      "stdout_preview": ""
+    },
+    {
+      "id": "lone-surrogate-rejected",
+      "args": [
+        "print-unformatted"
+      ],
+      "stdin_b64": "Ilx1RDgwMCI=",
+      "note": "utf16_literal_to_utf8 rejects a lone high surrogate (the OOB-read class the flaw scan flagged)",
+      "rc": 1,
+      "stdout_b64": "",
+      "stdin_preview": "\"\\uD800\"",
+      "stdout_preview": ""
+    }
+  ],
+  "fingerprint": "a7e2bc238ce967888e0c6050b17330cdf73082744b2c4cef2b369e3a941ed02f"
+}

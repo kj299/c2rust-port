@@ -126,6 +126,15 @@ transcript the module's tests are *generated from* — so a hand-written expecta
 that contradicts the C cannot compile, rather than merely failing later. Until
 that exists, "the C is a spec only the oracle can read" is a habit, not a gate.
 
+> **Status — 2026-07-25 (same day, follow-up change):** delivered as
+> `harnesses/probe/probe.py` (LESSONS #21). `run` pins the C's observed bytes
+> under a fingerprint, `gen` generates the Rust `#[test]` expectations from the
+> transcript, `verify` fails closed on oracle drift / transcript tamper /
+> hand-edits to the generated file. This port's eight §2 quirks are the worked
+> integration (`oracle/probes-quirks.json` → `crates/core/tests/probes_quirks.rs`,
+> verified in `check.sh` step 1b), and the gate-mutation sweep covers the new
+> verdict. The habit is now a gate.
+
 ## 7. Honest remainder
 
 - The FFI exposes parse/print/minify/compare/duplicate; the **struct-field ABI**

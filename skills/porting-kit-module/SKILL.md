@@ -16,6 +16,15 @@ commits reactively vs ~1 day up front). For a capability that might be *impossib
 (not just hard), use the research spike-and-gate ritual: rate effort/confidence,
 write the decision gate before coding, and do a pivot check before declaring it dead.
 
+## Probe the oracle before writing any Rust (step 0)
+The C is a spec only the oracle can read (LESSONS #17, mechanized by #21): pin the
+module's edge cases with `python3 porting-kit/harnesses/probe/probe.py run --probes
+<probes.json> --oracle <c-oracle> --transcript <t.json>`, then `probe.py gen` to
+**generate** the Rust test expectations from the C's observed bytes — never write
+one by hand. Wire `probe.py verify` into the port's gate script: it fails closed on
+oracle drift, transcript tampering, and hand-edits to the generated file
+(`ports/cjson/check.sh` step 1b is the worked reference).
+
 ## The six gates (each a hard requirement before merge)
 1. **Port** into `core` (pure logic) or a safe wrapper in `sys` (if it touches FFI).
    Idiom map: call-twice-for-size → growing `Vec` + length checks; pointer/struct math

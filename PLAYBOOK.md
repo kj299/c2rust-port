@@ -239,15 +239,19 @@ Then the loop — each step is a CI-enforced gate:
 6. **Review & merge.** Update the `progress` table (the module advances
    ported → differential-passing → fuzzed → sanitized → unsafe-audited).
 
-**Entry criteria:** skeleton + oracle — and, per module, a **probe transcript**:
-before writing the Rust, run the oracle on that module's edge cases and paste the
-observed bytes into the module's doc comment. Write the unit-test expectations
-from that transcript, never from reasoning about what the C "must" do (LESSONS
-#17: on the cJSON port, every first-try mistake came from reasoning — `%1.15g`
-printing of DBL_MAX is *lossy* and the C accepts it; `cJSON_Compare` says a value
-differs from its own duplicate for inf/nan and for duplicate keys; minify does not
-track escape parity. A mature C library's behavior is accreted quirks, several of
-which look like bugs; a port that silently "cleans them up" is differently wrong).
+**Entry criteria:** skeleton + oracle — and, per module, a **probe transcript**
+pinned via `harnesses/probe/probe.py` (LESSONS #17 mechanized as #21): write the
+module's edge cases as a probes file, `probe.py run` pins the C's observed bytes
+under a fingerprint, and `probe.py gen` **generates** the Rust test expectations
+from that transcript — never write one by hand (LESSONS #17: on the cJSON port,
+every first-try mistake came from reasoning — `%1.15g` printing of DBL_MAX is
+*lossy* and the C accepts it; `cJSON_Compare` says a value differs from its own
+duplicate for inf/nan and for duplicate keys; minify does not track escape
+parity. A mature C library's behavior is accreted quirks, several of which look
+like bugs; a port that silently "cleans them up" is differently wrong). Wire
+`probe.py verify` into the port's gate script so oracle drift, a tampered
+transcript, or a hand-edited generated file all fail closed
+(`ports/cjson/check.sh` step 1b is the worked reference).
 **Exit criteria (per module):** all six gates green; `progress` row fully ticked.
 **Artifacts:** the module, its fuzz target, its golden cases, divergence entries.
 **lsof failure modes this prevents:** the 7-commit hang (spike-first + sanitizer
