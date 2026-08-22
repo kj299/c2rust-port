@@ -119,6 +119,13 @@ fi
 
 MODE="${1:-all}"; DIR="${2:-.}"
 shift || true; shift || true
+# --json FILE: emit a provenance-stamped report of what ACTUALLY ran, so
+# `progress.py ingest --sanitize-json` can advance the `sanitized` rung from
+# evidence instead of a hand `set` (LESSONS #24). MODES_RAN is appended to only
+# by a checker that exited 0, so a SKIP produces an empty list and the rung
+# refuses to advance.
+JSON_OUT=""
+if [[ "${1:-}" == "--json" ]]; then JSON_OUT="${2:?--json needs a FILE}"; shift 2; fi
 # Anything after `--` is passed through to cargo, so a port can scope the run to
 # the crates that matter (`-- -p foo -p bar`). Without this a port has to
 # hand-roll its own cargo invocation — which is exactly what the cJSON port did,
@@ -126,6 +133,8 @@ shift || true; shift || true
 # (LESSONS #22): a harness nothing calls is a harness nothing tests.
 [[ "${1:-}" == "--" ]] && shift
 CARGO_ARGS=("$@")
+KIT_ROOT="$HERE/../.."
+MODES_RAN=()
 cd "$DIR"
 TRIPLE="$(rustc -vV 2>/dev/null | awk '/host:/{print $2}')"
 rc=0
@@ -133,7 +142,8 @@ rc=0
 run_miri() {
   if have cargo && rustup toolchain list 2>/dev/null | grep -q nightly; then
     echo ">> cargo +nightly miri test"
-    cargo +nightly miri test "${CARGO_ARGS[@]}" || rc=1
+    if cargo +nightly miri test "${CARGO_ARGS[@]}"; then MODES_RAN+=("miri")
+    else rc=1; fi
   else
     echo "!! miri needs nightly:  rustup toolchain install nightly && rustup +nightly component add miri" >&2
     rc=1
@@ -155,8 +165,10 @@ run_san() {
   fi
   if rustup toolchain list 2>/dev/null | grep -q nightly; then
     echo ">> cargo +nightly test with -Zsanitizer=$san"
-    RUSTFLAGS="-Zsanitizer=$san" RUSTDOCFLAGS="-Zsanitizer=$san" \
-      cargo +nightly test --target "$TRIPLE" "${CARGO_ARGS[@]}" || rc=1
+    if RUSTFLAGS="-Zsanitizer=$san" RUSTDOCFLAGS="-Zsanitizer=$san" \
+         cargo +nightly test --target "$TRIPLE" "${CARGO_ARGS[@]}"; then
+      MODES_RAN+=("$san")
+    else rc=1; fi
   else
     echo "!! $san sanitizer needs the nightly toolchain" >&2
     rc=1
@@ -179,4 +191,25 @@ case "$MODE" in
          echo "      code (the winlsof hang class) or leak hunts.";;
   *) echo "usage: $0 [miri|asan|ubsan|lsan|tsan|all] [CRATE_DIR] | --check" >&2; exit 2;;
 esac
+
+if [[ -n "$JSON_OUT" ]]; then
+  # The stamp comes from the kit's ONE implementation (diff_run.provenance_stamp),
+  # not a bash reimplementation -- shared fidelity, so a change to how the kit
+  # proves provenance upgrades every gate at once.
+  MODES_JSON="$(printf '%s\n' "${MODES_RAN[@]+"${MODES_RAN[@]}"}")"
+  MODES_JSON="$MODES_JSON" MODE="$MODE" RC="$rc" JSON_OUT="$JSON_OUT" \
+  python3 -c "
+import json, os, sys
+sys.path.insert(0, os.path.join('$KIT_ROOT', 'harnesses', 'differential'))
+from diff_run import provenance_stamp
+modes = [m for m in os.environ['MODES_JSON'].split('\n') if m]
+rep = {'provenance': provenance_stamp('run_sanitizers'),
+       'mode': os.environ['MODE'], 'modes_run': modes,
+       'rc': int(os.environ['RC'])}
+with open(os.environ['JSON_OUT'], 'w') as f:
+    json.dump(rep, f, indent=2)
+print('sanitizer report: modes_run=%s rc=%s -> %s'
+      % (modes or 'NONE (nothing ran)', os.environ['RC'], os.environ['JSON_OUT']))
+"
+fi
 exit "$rc"

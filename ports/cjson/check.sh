@@ -118,37 +118,33 @@ for m in scalar-parse string-parse buffer-plumbing recursive-core; do
   cp "$HERE/reports/fuzz/alloc-node.json" "$HERE/reports/fuzz/$m.json"
 done
 
-echo "===== 4b. miri — UB check over the FFI crate's unsafe (toolchain-optional) ====="
+echo "===== 4b. sanitizers — miri (UB) + asan (FFI memory), toolchain-optional ====="
 # The ffi crate is the port's ENTIRE memory-safety risk surface, so this is where
-# UB detection matters. Toolchain-optional like the kit's skeleton gate: SKIPs
-# cleanly without nightly+miri, runs for real when present. Verified fail-closed:
-# injecting an out-of-bounds read into the FFI tests makes miri exit nonzero
-# (LESSONS #6 — a sanitizer that can't fail proves nothing; LESSONS #18 — and a
-# gate that never RAN must not advance the rung either).
-# Runs through the KIT's sanitizer harness, not a hand-rolled cargo line. That
-# harness had never once executed against real code — the port duplicating its
-# invocation is exactly why its `ubsan` mode could ship permanently broken and
-# nobody noticed (LESSONS #22). One implementation, exercised by the port.
+# UB detection matters. Runs through the KIT's sanitizer harness, not a hand-rolled
+# cargo line: the port duplicating that invocation is exactly why the harness's
+# `ubsan` mode could ship permanently broken and nobody noticed (LESSONS #22).
+# `all` = miri + asan in ONE run, so the emitted report names every checker that
+# actually ran (LESSONS #24) instead of under-reporting a second, unrecorded pass.
+# Toolchain-optional like the kit's skeleton gate; verified fail-closed by
+# injecting an out-of-bounds read into the FFI tests (miri exits nonzero —
+# LESSONS #6; and a gate that never RAN must not advance the rung — LESSONS #18).
+mkdir -p "$HERE/reports/sanitize"
+SAN_REPORT="$HERE/reports/sanitize/alloc-node.json"
+rm -f "$SAN_REPORT"          # never let a previous run's report stand in for this one
 if cargo +nightly miri --version >/dev/null 2>&1; then
-  bash "$KIT/harnesses/sanitizers/run_sanitizers.sh" miri "$HERE/rust" \
-      -- -p cjson_ffi -p cjson_core
-  echo "miri: no UB in the unsafe FFI surface (or the safe core)"
-  MIRI_RAN=1
-else
-  echo "SKIP  miri: no nightly+miri toolchain (install: rustup toolchain install nightly --component miri)"
-  MIRI_RAN=0
-fi
-
-# ASan over the same crates. RETROSPECTIVE-cjson.md §7 listed asan as an
-# unclosed gap ("asan/ubsan were not run"); re-probing that inherited claim
-# (LESSONS #15) showed it runs here in one command and finds nothing — so it is
-# a gate now, not a remainder. Toolchain-optional like miri.
-if rustc +nightly --version >/dev/null 2>&1; then
+  bash "$KIT/harnesses/sanitizers/run_sanitizers.sh" all "$HERE/rust" \
+      --json "$SAN_REPORT" -- -p cjson_ffi -p cjson_core
+  echo "sanitizers: no UB (miri) and no memory errors (asan) in the unsafe surface"
+  SAN_RAN=1
+elif rustc +nightly --version >/dev/null 2>&1; then
   bash "$KIT/harnesses/sanitizers/run_sanitizers.sh" asan "$HERE/rust" \
-      -- -p cjson_ffi -p cjson_core
-  echo "asan: no memory errors at the FFI boundary"
+      --json "$SAN_REPORT" -- -p cjson_ffi -p cjson_core
+  echo "sanitizers: asan clean (miri absent — install: rustup component add --toolchain nightly miri)"
+  SAN_RAN=1
 else
-  echo "SKIP  asan: no nightly toolchain"
+  echo "SKIP  sanitizers: no nightly toolchain (no report written, so the"
+  echo "      sanitized rung cannot advance — an unrun gate proves nothing)"
+  SAN_RAN=0
 fi
 
 echo "===== 5. unsafe-audit over the rust workspace ====="
@@ -163,13 +159,16 @@ for m in scalar-parse string-parse buffer-plumbing recursive-core dom entry-mini
   cp "$HERE/reports/unsafe/alloc-node.json" "$HERE/reports/unsafe/$m.json"
 done
 
-if [ "$MIRI_RAN" = "1" ]; then
-  # `sanitized` has no --json harness, so it is set explicitly — and ONLY when
-  # miri actually ran (never on a SKIP: an unrun gate must not advance).
-  for m in alloc-node scalar-parse string-parse buffer-plumbing recursive-core dom entry-minify; do
-    "$PY" "$KIT/harnesses/progress/progress.py" --file "$HERE/progress.json" set "$m" sanitized >/dev/null
+if [ "$SAN_RAN" = "1" ]; then
+  # `sanitized` is no longer hand-set (LESSONS #24): it advances in step 6 from
+  # the sanitizer harness's own provenance-stamped report, exactly like the other
+  # five rungs. A SKIP writes no report — and a report where nothing ran carries
+  # an empty `modes_run`, which `progress.py` refuses. The claim can no longer
+  # outlive the run that earned it.
+  for m in scalar-parse string-parse buffer-plumbing recursive-core dom entry-minify; do
+    cp "$SAN_REPORT" "$HERE/reports/sanitize/$m.json"
   done
-  echo "progress: sanitized gate set for every module (miri ran)"
+  echo "sanitizer reports emitted for every module"
 fi
 
 echo "===== 6. progress — ingest the stamped reports (multi-rung) ====="
@@ -178,6 +177,7 @@ echo "===== 6. progress — ingest the stamped reports (multi-rung) ====="
       ingest \
       --diff-json "$HERE"/reports/*.json \
       --fuzz-json "$HERE"/reports/fuzz/*.json \
+      --sanitize-json "$HERE"/reports/sanitize/*.json \
       --unsafe-json "$HERE"/reports/unsafe/*.json
   "$PY" harnesses/progress/progress.py --file "$HERE/progress.json" show )
 

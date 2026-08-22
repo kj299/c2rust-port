@@ -800,3 +800,65 @@ the emphasized half.
 - **Section amended:** harnesses/probe/probe.py (`cmd_coverage` + self-test);
   ports/cjson/check.sh (step 1b coverage); PLAYBOOK · Phase 4 entry criteria;
   PROMPTS/10-module-port.md · step 0; RETROSPECTIVE-probe-harness.md · §3.
+
+---
+
+## 024. The one rung with no evidence is the one that outlived its proof
+
+- **Date:** 2026-08-22
+- **Codebase:** the kit itself — `harnesses/progress/progress.py`,
+  `harnesses/sanitizers/run_sanitizers.sh`, `ports/cjson/check.sh`
+- **What happened:** five of the six gate rungs advance by ingesting a harness's
+  provenance-stamped `--json` report, and `progress.py` verifies that stamp
+  against HEAD — a report from an older commit is refused as STALE. `sanitized`
+  had no such report: the port's `check.sh` set it directly with `progress.py
+  set`, carefully only when miri had actually run. That care was real but
+  insufficient, because **nothing ever un-set it** and `progress.json` is
+  committed. The claim therefore outlived the run that earned it: this session
+  opened in a fresh container with **no miri installed at all**, and the cJSON
+  port still read 7/7 fully gated, `sanitized` ticked. Every other rung would
+  have gone stale-and-refused in that container; the hand-set one could not.
+- **Kit change:** `run_sanitizers.sh --json FILE` emits a stamped report of what
+  **actually ran** (`modes_run`, `rc`), using the kit's own
+  `diff_run.provenance_stamp` rather than a bash reimplementation, so one change
+  to how the kit proves provenance upgrades every gate at once. `progress.py`
+  gains `--sanitize-json` and `_clean_sanitize`, which advances `fuzzed →
+  sanitized` only when a checker genuinely ran (`modes_run` non-empty — a SKIP is
+  not a clean run, LESSONS #18/#22) and exited 0. `ports/cjson/check.sh` no longer
+  hand-sets the rung, and its committed `progress.json` was reset to `ported` and
+  re-earned: all 7 modules climbed all four evidence rungs in one ingest. Probed
+  both ways in the live port — a report from another commit is refused as STALE,
+  and a correctly-stamped report where nothing ran advances nothing.
+- **Section amended:** harnesses/progress/progress.py (`_clean_sanitize` +
+  self-test); harnesses/sanitizers/run_sanitizers.sh (`--json`);
+  ports/cjson/check.sh (report-driven `sanitized`); RETROSPECTIVE-probe-harness.md · §6.
+
+---
+
+## 025. A hand-maintained coverage table reports on itself
+
+- **Date:** 2026-08-22
+- **Codebase:** the kit itself — `harnesses/gate-mutation/mutate_gates.py` and the
+  three bash harnesses it could not see
+- **What happened:** the gate-mutation sweep prints *"N gate(s) mutated, 0
+  survivor(s)"*, which reads as a statement about the gate set. It is a statement
+  about **the hand-written table**. Nothing required a harness to be in it, so
+  the count was silently partial — and because `_run` assumed python, the missing
+  ones were precisely the bash harnesses, one of which (LESSONS #22) was shipping
+  a mode that could never pass. Fixing the interpreter made them *sweepable*, not
+  *swept*: adding entries for the remaining three immediately produced **three
+  survivors**. All three self-tests only ever exercised the happy path — an
+  always-present template, an always-present config, an always-present skeleton
+  dir — so neutralizing each verdict changed nothing they observed. Proves
+  detection, never refusal: LESSONS #6's root cause, alive in three more places.
+- **Kit change:** `coverage_gaps()` walks `harnesses/` and `skills/` for anything
+  exposing a self-test and fails the sweep naming any harness with no mutation
+  entry; exemptions must be written down with a reason in `COVERAGE_EXEMPT` (one
+  entry: the mutator itself). The three bash gates had their crown verdict
+  extracted into a predicate (`valid_target`, `have_deny_template`,
+  `skel_present`) and their self-tests given **negative fixtures** — a missing or
+  unexpanded target, an empty config dir, an empty skeleton dir — so each now
+  goes red under mutation. Sweep: 19 gates, 0 survivors, 0 table gaps.
+- **Section amended:** harnesses/gate-mutation/mutate_gates.py (`coverage_gaps` +
+  self-test); harnesses/fuzz/gen_fuzz_target.sh; harnesses/supply-chain/run_supply_chain.sh;
+  harnesses/skeleton-check/check_skeleton.sh; RETROSPECTIVE-probe-harness.md · §6.

@@ -149,6 +149,33 @@ It has now been bitten at the verdict (LESSONS #6), the input (#14, #18, #20), t
 wiring (#23), and the tool inventory (#22). Next time, ask the scope question
 first.
 
+> **Status — 2026-08-22 (same day, follow-up change): both closed.**
+>
+> **Item 1 → LESSONS #24.** `run_sanitizers.sh --json` now emits a
+> provenance-stamped report of what actually ran (`modes_run`, `rc`), built from
+> the kit's own `provenance_stamp` rather than a bash reimplementation;
+> `progress.py --sanitize-json` advances `fuzzed → sanitized` only when a checker
+> genuinely ran and exited 0. The port stopped hand-setting the rung, and its
+> committed `progress.json` was **reset to `ported` and re-earned** — all 7
+> modules climbed all four evidence rungs in one ingest. Probed both failure
+> modes live: a report from another commit is refused as STALE, and a correctly
+> stamped report where nothing ran advances nothing. The port now runs the
+> harness's `all` mode, so one report records **both** miri and asan
+> (`modes_run=['miri','address']`) instead of under-reporting an unrecorded pass.
+>
+> **Item 2 → LESSONS #25.** `coverage_gaps()` fails a full sweep naming any
+> self-tested harness with no mutation entry; exemptions must carry a written
+> reason (one: the mutator itself). Adding entries for the three remaining bash
+> gates immediately produced **three survivors** — each self-test only ever
+> exercised the happy path, so neutralizing its verdict changed nothing it
+> observed. Each crown verdict was extracted into a predicate (`valid_target`,
+> `have_deny_template`, `skel_present`) and given a **negative fixture**. Sweep:
+> **19 gates, 0 survivors, 0 table gaps** (was 15 gates, python-only).
+>
+> The §6 thesis stands and is worth restating, because the fix for item 2
+> demonstrated it twice in one sitting: making a blind spot *reachable* is not
+> making it *covered*.
+
 ## 7. Honest remainder
 
 - asan ran over `cjson_core` + `cjson_ffi` **without `-Zbuild-std`**, so `std`

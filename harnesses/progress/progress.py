@@ -11,11 +11,12 @@ A module's status is the highest gate it has cleared. "Done" = unsafe_audited.
   set    MODULE GATE [--add]        mark MODULE as having cleared GATE
                                     (unknown modules error unless --add)
   show   [--json]                   render the table
-  ingest [--diff-json|--lib-json|--fuzz-json|--unsafe-json FILE...]
+  ingest [--diff-json|--lib-json|--fuzz-json|--sanitize-json|--unsafe-json FILE...]
                                     auto-advance a module's gate from a harness's
                                     --json report (report stem == module name);
                                     diff_run/lib_diff→differential, diff_fuzz→
-                                    fuzzed, audit_unsafe→unsafe_audited; climbs
+                                    fuzzed, run_sanitizers→sanitized,
+                                    audit_unsafe→unsafe_audited; climbs
                                     multiple gates in one call
 
 Usage: progress.py [--file progress.json] {init,set,show,ingest} ...
@@ -204,18 +205,38 @@ def _clean_fuzz(rep):
             and rep.get("findings", [None]) == [])
 
 
+def _clean_sanitize(rep):
+    # run_sanitizers.sh --json: a checker actually RAN (non-empty `modes_run`)
+    # and exited clean (`rc == 0`).
+    #
+    # Why this predicate exists at all (LESSONS #24): `sanitized` used to be the
+    # one rung with no machine-checked evidence — every other gate advances from
+    # a provenance-stamped report, but this one was set by hand from the port's
+    # own check script. Nothing ever un-set it, and progress.json is committed,
+    # so the claim outlived its proof: a port read fully-gated in a container
+    # where the sanitizer was not even installed. An empty `modes_run` is the
+    # 0-of-0 pass again (LESSONS #18/#22) — a SKIP is not a clean run.
+    if not isinstance(rep, dict) or rep.get("rc", 1) != 0:
+        return False
+    modes = rep.get("modes_run")
+    return isinstance(modes, list) and len(modes) > 0
+
+
 def cmd_ingest(path, unsafe_jsons=None, diff_jsons=None, lib_jsons=None, fuzz_jsons=None,
-               allow_unstamped=False, max_age_min=1440, repo_sha="auto"):
+               sanitize_jsons=None, allow_unstamped=False, max_age_min=1440,
+               repo_sha="auto"):
     """Auto-advance modules from the harnesses' own --json reports. Each report's
     file STEM must equal the module name (name reports per module, e.g.
     `diff_run.py ... --json > <mod>.json`); substring matching would let module
     `io` advance from `prio.json`. Reports map to the gate they attest:
         --diff-json / --lib-json (diff_run / lib_diff, all clean)  -> differential
         --fuzz-json  (diff_fuzz, 0 findings)                       -> fuzzed
+        --sanitize-json (run_sanitizers.sh, a mode ran + rc 0)      -> sanitized
         --unsafe-json (audit_unsafe, 0 undocumented)               -> unsafe_audited
     A gate advances a module only from its immediate predecessor, and the steps
     run in rung order, so a module with several clean reports climbs several gates
-    in one ingest. (`sanitized` has no --json harness — set it manually.)
+    in one ingest. Every rung now advances from a stamped report; `sanitized` was
+    the last hand-set one (LESSONS #24).
 
     Every report must also clear PROVENANCE (RETROSPECTIVE-kit-audit §6 item 8):
     its stamp's git sha must match the tree's HEAD (age is the fallback when a
@@ -242,12 +263,14 @@ def cmd_ingest(path, unsafe_jsons=None, diff_jsons=None, lib_jsons=None, fuzz_js
     diff_clean = clean(diff_jsons, _clean_verdicts) | clean(lib_jsons, _clean_verdicts)
     fuzz_clean = clean(fuzz_jsons, _clean_fuzz)
     unsafe_clean = clean(unsafe_jsons, _clean_unsafe)
+    sanitize_clean = clean(sanitize_jsons, _clean_sanitize)
 
     # (from_gate, to_gate, clean_stems), run in rung order so a module climbs as
     # far as its clean reports allow in a single ingest.
     steps = [
         ("ported", "differential", diff_clean),
         ("differential", "fuzzed", fuzz_clean),
+        ("fuzzed", "sanitized", sanitize_clean),
         ("sanitized", "unsafe_audited", unsafe_clean),
     ]
     advanced = []
@@ -369,6 +392,30 @@ def _self_test():
         cmd_ingest(p3, fuzz_jsons=[fuz("parser.json")], repo_sha=None)
         check("a diff-fuzz report with findings does not advance",
               load(p3)["modules"]["parser"] == "differential")
+
+        # LESSONS #24: `sanitized` advances from a run_sanitizers.sh report like
+        # every other rung, instead of being hand-set and immortal. Its own
+        # fixture file — these rows must not perturb the tests above or below.
+        ps = os.path.join(d, "ps.json")
+        cmd_init(ps, ["clean", "skipped", "failed"])
+        for m in ("clean", "skipped", "failed"):
+            cmd_set(ps, m, "fuzzed")
+        os.makedirs(os.path.join(d, "san"))
+        san = lambda n: os.path.join(d, "san", n)
+        wdict(san("clean.json"), {"mode": "all", "modes_run": ["miri", "address"], "rc": 0})
+        cmd_ingest(ps, sanitize_jsons=[san("clean.json")], repo_sha=None)
+        check("a clean sanitizer report advances fuzzed→sanitized",
+              load(ps)["modules"]["clean"] == "sanitized")
+        # THE fixture: a SKIP (nothing ran) must NOT advance the rung, even at
+        # rc=0 — the 0-of-0 pass this whole rung was rebuilt to refuse.
+        wdict(san("skipped.json"), {"mode": "all", "modes_run": [], "rc": 0})
+        cmd_ingest(ps, sanitize_jsons=[san("skipped.json")], repo_sha=None)
+        check("a sanitizer report where NOTHING ran does not advance (LESSONS #24)",
+              load(ps)["modules"]["skipped"] == "fuzzed")
+        wdict(san("failed.json"), {"mode": "all", "modes_run": ["miri"], "rc": 1})
+        cmd_ingest(ps, sanitize_jsons=[san("failed.json")], repo_sha=None)
+        check("a sanitizer report with rc!=0 does not advance",
+              load(ps)["modules"]["failed"] == "fuzzed")
         # a malformed report is skipped (fail-closed), never crashes the ingest
         import contextlib
         import io as _io
@@ -474,6 +521,8 @@ def main(argv=None):
     pg.add_argument("--diff-json", nargs="+", default=[], help="diff_run.py --json → differential")
     pg.add_argument("--lib-json", nargs="+", default=[], help="lib_diff.py --json → differential")
     pg.add_argument("--fuzz-json", nargs="+", default=[], help="diff_fuzz.py --json → fuzzed")
+    pg.add_argument("--sanitize-json", nargs="+", default=[],
+                    help="run_sanitizers.sh --json → sanitized")
     pg.add_argument("--allow-unstamped", action="store_true",
                     help="ingest legacy reports that carry no provenance stamp")
     pg.add_argument("--max-age-min", type=float, default=1440,
@@ -496,7 +545,8 @@ def main(argv=None):
         return cmd_show(args.file, args.json)
     if args.cmd == "ingest":
         return cmd_ingest(args.file, args.unsafe_json, args.diff_json, args.lib_json,
-                          args.fuzz_json, allow_unstamped=args.allow_unstamped,
+                          args.fuzz_json, sanitize_jsons=args.sanitize_json,
+                          allow_unstamped=args.allow_unstamped,
                           max_age_min=args.max_age_min)
     ap.print_help()
     return 2

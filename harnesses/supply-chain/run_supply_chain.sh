@@ -13,16 +13,32 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# THE verdict: does DIR hold the cargo-deny config this gate needs? Extracted so
+# `--check` can run it against a directory that does NOT (LESSONS #25) — the
+# happy path alone leaves the predicate unpinned, and the gate-mutation sweep
+# proved it: deleting the failure branch kept the self-test green.
+have_deny_template() { test -f "$1/deny.template.toml"; }
+
 if [[ "${1:-}" == "--check" ]]; then
+  ok=1
   bash -n "$0" && echo "PASS  script syntax ok"
   # Explicit failure branch: under `set -e` a bare `test -f X && echo ok`
   # exits 1 with NO message when X is missing — a silent death in check-kit.
-  if [[ -f "$HERE/deny.template.toml" ]]; then
+  if have_deny_template "$HERE"; then
     echo "PASS  deny.template.toml present"
   else
     echo "FAIL  deny.template.toml missing from $HERE" >&2
-    exit 1
+    ok=0
   fi
+  # Negative fixture — the pin: an empty directory must NOT satisfy it.
+  _empty="$(mktemp -d)"
+  if have_deny_template "$_empty"; then
+    echo "FAIL  validator finds a deny config in an empty directory" >&2; ok=0
+  else
+    echo "PASS  validator refuses a directory with no deny config"
+  fi
+  rmdir "$_empty" 2>/dev/null || true
+  [[ "$ok" == "1" ]] || { echo "self-test: FAILED"; exit 1; }
   # tomllib validate the deny config if python is around
   if have python3; then
     python3 - "$HERE/deny.template.toml" <<'PY'
