@@ -19,6 +19,14 @@
 >   the cJSON port — see `RETROSPECTIVE-cjson.md`; item 2 (gate-mutation
 >   verification) exists as `harnesses/gate-mutation/`; item 3's CI half runs and
 >   its sanitizer half now runs miri against that port.
+>   > **Correction — 2026-08-22.** That last clause was misleading, and it hid a
+>   > live defect for a month. The *port* ran miri via its own hand-rolled cargo
+>   > line; the kit's **`run_sanitizers.sh` had still never executed against real
+>   > code**, and was shipping a `ubsan` mode that could never pass (LESSONS #22).
+>   > A status note that says a gap is closed, when what closed it was a
+>   > *duplicate* of the harness rather than the harness, is worse than leaving
+>   > the gap open — it stops anyone looking. Item 3's sanitizer half is closed
+>   > **now**: the port calls the harness, and miri + asan both run against it.
 >
 > **Where to read next:** `RETROSPECTIVE-kit-audit.md` is the current-state
 > document — the six-lens audit that followed, its findings, and the live v1.x

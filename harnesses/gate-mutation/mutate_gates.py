@@ -88,6 +88,15 @@ MUTATIONS = [
      "why": "the Phase-0 scanner reports 0 flaws on any C",
      "cmd": ["harnesses/c-flaw-scan/scan_c_flaws.py", "--self-test"]},
 
+    # The kit's first BASH gate in this table (LESSONS #22). It could not be here
+    # until `_run` stopped assuming python — which is why a mode wired to a
+    # sanitizer rustc rejects survived every sweep.
+    {"gate": "sanitizers", "file": "harnesses/sanitizers/run_sanitizers.sh",
+     "old": '    *" $1 "*) return 0;;\n    *) return 1;;',
+     "new": "    *) return 0;;",
+     "why": "any string counts as a valid sanitizer: a never-runnable mode ships green",
+     "cmd": ["harnesses/sanitizers/run_sanitizers.sh", "--check"]},
+
     # (LESSONS #21: test expectations are GENERATED from the oracle transcript;
     # a verify that can't see oracle drift would bless any live behavior)
     {"gate": "probe", "file": "harnesses/probe/probe.py",
@@ -184,7 +193,14 @@ def _apply(kit_copy, m):
 
 
 def _run(kit_copy, cmd, timeout=300):
-    argv = [sys.executable, os.path.join(kit_copy, cmd[0])] + cmd[1:]
+    # Dispatch by extension. This used to hardcode `sys.executable`, which meant
+    # the sweep could only ever cover PYTHON gates — while still printing
+    # "N gate(s) mutated, 0 survivor(s)", which reads as the whole gate set
+    # (LESSONS #22). The kit's bash harnesses were structurally unreachable, and
+    # one of them (`run_sanitizers.sh`) was shipping a mode that could never run.
+    path = os.path.join(kit_copy, cmd[0])
+    argv = ([sys.executable, path] if cmd[0].endswith(".py")
+            else ["bash", path]) + cmd[1:]
     p = subprocess.run(argv, cwd=kit_copy, capture_output=True, text=True,
                        timeout=timeout)
     return p.returncode, p.stdout + p.stderr

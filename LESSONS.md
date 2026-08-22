@@ -728,3 +728,75 @@ the emphasized half.
   harnesses/gate-mutation/mutate_gates.py (probe entry); ports/cjson/check.sh
   (step 1b); PLAYBOOK · Phase 4 entry criteria; PROMPTS/10-module-port.md ·
   step 0; skills/porting-kit-module/SKILL.md · step 0.
+
+---
+
+## 022. A gate that can never pass is as broken as one that can never fail
+
+- **Date:** 2026-08-22
+- **Codebase:** the kit itself — `harnesses/sanitizers/run_sanitizers.sh`,
+  `harnesses/gate-mutation/mutate_gates.py`
+- **What happened:** `run_sanitizers.sh ubsan` ran
+  `RUSTFLAGS=-Zsanitizer=undefined`. **rustc has no `undefined` sanitizer** —
+  Rust's UB detector is miri — so the mode exited 1 on every codebase in the
+  world, and `all` (which included it) was **permanently red no matter how clean
+  the code**. The kit's whole doctrine is fail-closed, but a gate that cannot go
+  green teaches its users to skip it, and a skipped control is a broken control.
+  It survived: PR #1's 26-finding review, a whole foreign port, and **every
+  gate-mutation sweep**. Three reasons, each its own hole: (1) `--check`
+  validated bash *syntax* and printed `self-test: OK` — the identical root cause
+  as the original never-runnable sanitizer job (LESSONS #6), recurring inside the
+  very harness that lesson was about; (2) `mutate_gates._run` hardcoded
+  `sys.executable`, so **no bash harness could be in the mutation table at all**
+  while the sweep kept printing "15 gate(s) mutated, 0 survivor(s)" — a summary
+  that reads as the whole gate set and silently covered only the python half;
+  (3) the cJSON port **hand-rolled its own `cargo +nightly miri test`** instead
+  of calling the harness, so in the kit's entire life this harness had never once
+  executed against real code. Found by running it — `--check` says OK, the actual
+  mode says rc=1.
+- **Kit change:** modes now map through `is_valid_san` against the sanitizer list
+  rustc accepts, `--check` pins that validator with a **negative fixture** (it
+  must reject `undefined`, the exact value that shipped) and cross-checks the
+  list against a live nightly rustc; `ubsan` delegates to miri with an
+  explanation; `all` = miri + asan; `run_sanitizers.sh` takes `-- <cargo args>`
+  so a port can scope it instead of duplicating it. `mutate_gates._run` dispatches
+  by extension, making **bash gates sweep-able for the first time**, and the
+  sanitizer gate is in the table. `ports/cjson/check.sh` now calls the harness
+  (and adds asan, per LESSONS #15 re-probing — see below).
+- **Section amended:** harnesses/sanitizers/run_sanitizers.sh (validator +
+  negative fixture); harnesses/gate-mutation/mutate_gates.py (`_run` dispatch +
+  sanitizers entry); ports/cjson/check.sh (calls the harness, adds asan);
+  RETROSPECTIVE-probe-harness.md · §2.
+
+---
+
+## 023. Verifying the artifacts that exist says nothing about the one that is missing
+
+- **Date:** 2026-08-22
+- **Codebase:** the kit itself — `harnesses/probe/probe.py` (one day old)
+- **What happened:** `probe.py` was built to fail closed everywhere: zero probes
+  in a file is an error, a hanging oracle is an error, a tampered transcript or
+  hand-edited generated test is an error. All true — and all irrelevant to the
+  question nobody asked: *which probes files exist at all?* That was a hand-edited
+  line in the port's `check.sh` naming one file. A module could land with **no
+  probes whatsoever** and every gate stayed green, because `run`/`gen`/`verify`
+  only ever see the files they are handed. The kit's characteristic 0-of-0
+  (LESSONS #6/#14/#18/#20), displaced one level up into the *wiring* — committed
+  by me in the same change that mechanized the lesson about conventions decaying.
+  A gate hardened against everything inside its input is still trusting whoever
+  chose the input.
+- **Kit change:** `probe.py coverage` takes the module list from the port's own
+  `progress.json` (so it cannot drift from the list the gates track) and fails
+  naming any module with no probes file; an empty module list is itself a failure.
+  Probes files carry `modules: [...]` tags, reusing the corpus tagging idiom of
+  LESSONS #19. Wired into `ports/cjson/check.sh`. Writing the missing probes for
+  the two uncovered cJSON modules immediately pinned **four behaviors reasoning
+  would have gotten wrong** — cJSON accepts a leading UTF-8 BOM, accepts trailing
+  garbage after a complete value (`[1] xyz` → `[1]`), treats an **embedded NUL as
+  whitespace** (`buffer_skip_whitespace` tests `<= 32`), and prints an empty
+  object as `{\n}` while an empty array prints `[]`. The port already matched all
+  four (the differential and fuzzer had driven it there); they are now *named*, so
+  a future "cleanup" of NUL-as-whitespace breaks a test instead of drop-in parity.
+- **Section amended:** harnesses/probe/probe.py (`cmd_coverage` + self-test);
+  ports/cjson/check.sh (step 1b coverage); PLAYBOOK · Phase 4 entry criteria;
+  PROMPTS/10-module-port.md · step 0; RETROSPECTIVE-probe-harness.md · §3.

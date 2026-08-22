@@ -144,6 +144,13 @@ that exists, "the C is a spec only the oracle can read" is a habit, not a gate.
 - `cJSON_Utils` (JSON-Pointer/Patch/Merge, 1481 LOC) was out of scope throughout.
 - **asan/ubsan** were not run (miri was). The `sanitized` gate is honest about
   what it verified: miri over the FFI + core.
+  > **Superseded — 2026-08-22.** Re-probed per LESSONS #15 and both halves were
+  > wrong in opposite directions. **asan runs here in one command** and finds
+  > nothing over `cjson_core` + `cjson_ffi`; it is now part of `check.sh`, not a
+  > remainder. **ubsan does not exist for Rust at all** — `-Zsanitizer` has no
+  > `undefined` value, so the kit's `run_sanitizers.sh ubsan` had been a
+  > permanently-failing gate (LESSONS #22). Listing it here as an unclosed gap
+  > implied it was a thing that *could* have been run.
 - Custom-allocator parity (`cJSON_InitHooks`) is **deliberately dropped and
   ledgered** (CWE-362 — process-global mutable allocator hooks are a data race the
   port refuses to reproduce).

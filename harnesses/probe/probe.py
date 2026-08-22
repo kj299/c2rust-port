@@ -130,6 +130,73 @@ def load_probes(path):
     return module, probes
 
 
+def probes_modules(path):
+    """The port modules this probes file claims to cover.
+
+    `modules: [...]` (defaulting to `[module]`) mirrors the corpus module-tagging
+    of LESSONS #19: one probes file may decide several modules, and `coverage`
+    uses these tags to answer "does every ported module have probes at all?"
+    Coverage metadata, not pinned behavior — deliberately outside the transcript
+    fingerprint, which covers only the C's observed bytes."""
+    with open(path, encoding="utf-8") as f:
+        doc = json.load(f)
+    module = doc.get("module")
+    mods = doc.get("modules", [module] if module else [])
+    if (not isinstance(mods, list) or not mods
+            or not all(isinstance(m, str) and m for m in mods)):
+        raise ValueError(f"{path}: `modules` must be a non-empty list of strings")
+    return mods
+
+
+def cmd_coverage(a):
+    """Fail unless EVERY named module is covered by some probes file.
+
+    The gate above the gate (LESSONS #23). `run`/`gen`/`verify` fail closed on a
+    probes file that pins nothing — but WHICH probes files exist was, until this
+    subcommand, a hand-edited line in the port's check script. A module could land
+    with no probes at all and no gate would notice: the kit's characteristic
+    0-of-0 (LESSONS #6/#14/#18/#20) displaced one level up, into the wiring.
+    Point `--modules` at the port's real module list (or `--progress` at its
+    progress.json, so the list cannot drift from the one the gates track)."""
+    mods = []
+    if a.progress:
+        try:
+            with open(a.progress, encoding="utf-8") as f:
+                mods = list(json.load(f).get("modules", {}))
+        except (OSError, json.JSONDecodeError, AttributeError) as e:
+            return _die(f"{a.progress}: {e}")
+    mods += [m for m in (a.modules or "").split(",") if m]
+    mods = list(dict.fromkeys(mods))
+    if not mods:
+        # a coverage check over zero modules proves nothing and must not pass
+        return _die("NOTHING-TO-COVER: no modules named "
+                    "(--modules and/or --progress) — a coverage check over an "
+                    "empty module list is the 0-of-0 pass this gate exists to "
+                    "refuse (LESSONS #18)")
+    covered = {}
+    for path in a.probes:
+        try:
+            for m in probes_modules(path):
+                covered.setdefault(m, []).append(os.path.basename(path))
+        except (ValueError, OSError, json.JSONDecodeError) as e:
+            return _die(str(e))
+    missing = [m for m in mods if m not in covered]
+    for m in mods:
+        where = ", ".join(covered.get(m, [])) or "— NO PROBES"
+        print(f"  {m:<20} {where}")
+    if missing:
+        print(f"FAIL: {len(missing)} module(s) with no probes file: "
+              + ", ".join(missing))
+        print("      write probes for them (probe-then-port is a Phase 4 entry "
+              "criterion), or drop them from the module list if they are gone")
+        return 1
+    stray = [m for m in covered if m not in mods]
+    if stray:
+        print(f"note: probes tag module(s) not in the list: {', '.join(stray)}")
+    print(f"probe coverage: {len(mods)} module(s), every one has probes")
+    return 0
+
+
 def run_oracle(oracle, probe, timeout):
     """One probe against the C. The contract is the kit's shared verdict
     surface — stdout + exit code (stderr is off-contract, as in diff_run)."""
@@ -493,6 +560,29 @@ def _self_test():
         cmd_gen(G)
         check("regeneration clears it", cmd_verify(V) == 0)
 
+        # LESSONS #23: coverage — the gate above the gate. A module with NO
+        # probes file at all must fail; nothing below this subcommand notices,
+        # because `run`/`gen`/`verify` only ever see the files they are handed.
+        prog = os.path.join(d, "progress.json")
+        json.dump({"modules": {"demo": "ported", "unprobed": "ported"}},
+                  open(prog, "w"))
+        cov = ns(probes=[probes], modules="", progress=prog)
+        check("a module with no probes file is CAUGHT", cmd_coverage(cov) == 1)
+        json.dump({"modules": {"demo": "ported"}}, open(prog, "w"))
+        check("coverage passes once every module has probes",
+              cmd_coverage(ns(probes=[probes], modules="", progress=prog)) == 0)
+        # a probes file may cover several modules (LESSONS #19 tagging idiom)
+        multi = os.path.join(d, "multi.json")
+        pd = json.load(open(probes))
+        pd["modules"] = ["demo", "second"]
+        json.dump(pd, open(multi, "w"))
+        check("one probes file can cover several tagged modules",
+              cmd_coverage(ns(probes=[multi], modules="demo,second",
+                              progress=None)) == 0)
+        # and an EMPTY module list must not pass (0-of-0, one level up)
+        check("coverage over zero modules is a FAILURE (LESSONS #18)",
+              cmd_coverage(ns(probes=[probes], modules="", progress=None)) == 1)
+
         # a hanging oracle fails closed — a hang is not a pinnable expectation
         hang = os.path.join(d, "hang.json")
         json.dump({"module": "demo", "probes": [
@@ -529,8 +619,14 @@ def main(argv=None):
            gen_side=True, oracle_side=False)
     common(sub.add_parser("verify", help="fail on drift, tamper, or staleness"),
            gen_side=True, oracle_side=True)
+    pc = sub.add_parser("coverage",
+                        help="fail unless every module has a probes file")
+    pc.add_argument("--probes", nargs="+", required=True)
+    pc.add_argument("--modules", default="", help="comma-separated module names")
+    pc.add_argument("--progress", help="progress.json to read module names from")
     a = ap.parse_args(argv)
-    return {"run": cmd_run, "gen": cmd_gen, "verify": cmd_verify}[a.cmd](a)
+    return {"run": cmd_run, "gen": cmd_gen, "verify": cmd_verify,
+            "coverage": cmd_coverage}[a.cmd](a)
 
 
 if __name__ == "__main__":

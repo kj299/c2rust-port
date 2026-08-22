@@ -25,17 +25,27 @@ echo "===== 1. oracle (build + validate all vectors against C) ====="
 bash "$HERE/oracle/run.sh" > /dev/null
 echo "oracle locked"
 
-echo "===== 1b. probe-then-port — quirk transcript pinned, tests generated ====="
-# The module's quirk expectations are GENERATED from the C's observed bytes
+echo "===== 1b. probe-then-port — transcripts pinned, tests generated ====="
+# Module expectations are GENERATED from the C's observed bytes
 # (harnesses/probe/probe.py, LESSONS #17 mechanized as LESSONS #21): verify
 # fails closed on oracle drift, a tampered transcript, or a hand-edited/stale
 # generated test file. The generated tests themselves run under `cargo test`
 # in step 2.
-"$PY" "$KIT/harnesses/probe/probe.py" verify \
-    --probes "$HERE/oracle/probes-quirks.json" \
-    --oracle "$HERE/oracle/cjson_oracle" \
-    --transcript "$HERE/oracle/probes-quirks.transcript.json" \
-    --out "$HERE/rust/crates/core/tests/probes_quirks.rs"
+PROBE_SETS=(quirks plumbing)
+PROBE_FILES=()
+for set in "${PROBE_SETS[@]}"; do
+  PROBE_FILES+=("$HERE/oracle/probes-$set.json")
+  "$PY" "$KIT/harnesses/probe/probe.py" verify \
+      --probes "$HERE/oracle/probes-$set.json" \
+      --oracle "$HERE/oracle/cjson_oracle" \
+      --transcript "$HERE/oracle/probes-$set.transcript.json" \
+      --out "$HERE/rust/crates/core/tests/probes_$set.rs"
+done
+# ...and the gate ABOVE those gates (LESSONS #23): verifying the probe files that
+# EXIST says nothing about a module that has none. Coverage reads the module list
+# from progress.json itself, so a module the gates track but nobody probed is red.
+"$PY" "$KIT/harnesses/probe/probe.py" coverage \
+    --probes "${PROBE_FILES[@]}" --progress "$HERE/progress.json"
 
 echo "===== 2. rust workspace (fmt / clippy / build / test) ====="
 ( cd "$HERE/rust"
@@ -115,13 +125,30 @@ echo "===== 4b. miri — UB check over the FFI crate's unsafe (toolchain-optiona
 # injecting an out-of-bounds read into the FFI tests makes miri exit nonzero
 # (LESSONS #6 — a sanitizer that can't fail proves nothing; LESSONS #18 — and a
 # gate that never RAN must not advance the rung either).
+# Runs through the KIT's sanitizer harness, not a hand-rolled cargo line. That
+# harness had never once executed against real code — the port duplicating its
+# invocation is exactly why its `ubsan` mode could ship permanently broken and
+# nobody noticed (LESSONS #22). One implementation, exercised by the port.
 if cargo +nightly miri --version >/dev/null 2>&1; then
-  ( cd "$HERE/rust" && cargo +nightly miri test -p cjson_ffi -p cjson_core --quiet )
+  bash "$KIT/harnesses/sanitizers/run_sanitizers.sh" miri "$HERE/rust" \
+      -- -p cjson_ffi -p cjson_core
   echo "miri: no UB in the unsafe FFI surface (or the safe core)"
   MIRI_RAN=1
 else
   echo "SKIP  miri: no nightly+miri toolchain (install: rustup toolchain install nightly --component miri)"
   MIRI_RAN=0
+fi
+
+# ASan over the same crates. RETROSPECTIVE-cjson.md §7 listed asan as an
+# unclosed gap ("asan/ubsan were not run"); re-probing that inherited claim
+# (LESSONS #15) showed it runs here in one command and finds nothing — so it is
+# a gate now, not a remainder. Toolchain-optional like miri.
+if rustc +nightly --version >/dev/null 2>&1; then
+  bash "$KIT/harnesses/sanitizers/run_sanitizers.sh" asan "$HERE/rust" \
+      -- -p cjson_ffi -p cjson_core
+  echo "asan: no memory errors at the FFI boundary"
+else
+  echo "SKIP  asan: no nightly toolchain"
 fi
 
 echo "===== 5. unsafe-audit over the rust workspace ====="
