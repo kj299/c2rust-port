@@ -829,6 +829,13 @@ the emphasized half.
   re-earned: all 7 modules climbed all four evidence rungs in one ingest. Probed
   both ways in the live port — a report from another commit is refused as STALE,
   and a correctly-stamped report where nothing ran advances nothing.
+  **And the same trap one level up:** once the committed table sits at the top
+  rung, the ingest advances nothing on every later run, so a rung that quietly
+  stopped being provable looks identical to one that still is — the CI job's
+  `ingest: advanced nothing` was hiding exactly that. `check.sh` now **replays**
+  the ingest into a scratch copy seeded at `ported` and fails unless every module
+  re-earns every rung from the reports that run just produced. Probed: blanking
+  one module's sanitizer report leaves it stuck at `fuzzed` and the gate goes red.
 - **Section amended:** harnesses/progress/progress.py (`_clean_sanitize` +
   self-test); harnesses/sanitizers/run_sanitizers.sh (`--json`);
   ports/cjson/check.sh (report-driven `sanitized`); RETROSPECTIVE-probe-harness.md · §6.

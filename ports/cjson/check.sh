@@ -171,7 +171,40 @@ if [ "$SAN_RAN" = "1" ]; then
   echo "sanitizer reports emitted for every module"
 fi
 
-echo "===== 6. progress — ingest the stamped reports (multi-rung) ====="
+echo "===== 6. progress — the ladder must be EARNED from this run's reports ====="
+# The committed progress.json already sits at the top rung, so a plain ingest
+# advances nothing and proves nothing: a rung that quietly stopped being provable
+# would look identical to one that still is. So first REPLAY the ingest into a
+# scratch copy seeded at `ported` — every module must climb to unsafe_audited
+# from the reports this run just produced, or the gate fails (LESSONS #24: a
+# claim must not outlive the evidence that earned it).
+REPLAY="$(mktemp -d)/progress-replay.json"
+"$PY" -c "
+import json, sys
+src = json.load(open('$HERE/progress.json'))
+json.dump({'modules': {m: 'ported' for m in src['modules']}}, open('$REPLAY', 'w'))
+"
+( cd "$KIT"
+  "$PY" harnesses/progress/progress.py --file "$REPLAY" ingest \
+      --diff-json "$HERE"/reports/*.json \
+      --fuzz-json "$HERE"/reports/fuzz/*.json \
+      --sanitize-json "$HERE"/reports/sanitize/*.json \
+      --unsafe-json "$HERE"/reports/unsafe/*.json >/dev/null )
+"$PY" -c "
+import json, sys
+st = json.load(open('$REPLAY'))['modules']
+stuck = {m: g for m, g in st.items() if g != 'unsafe_audited'}
+if stuck:
+    print('REPLAY FAILED: these modules could not be re-earned from this run\'s '
+          'reports alone:', file=sys.stderr)
+    for m, g in sorted(stuck.items()):
+        print(f'  {m}: stuck at {g}', file=sys.stderr)
+    sys.exit(1)
+print(f'replay: all {len(st)} module(s) re-earned every rung from this run\'s reports')
+"
+rm -rf "$(dirname "$REPLAY")"
+
+echo "----- and the committed table -----"
 ( cd "$KIT"   # ingest verifies report provenance against THIS repo's HEAD
   "$PY" harnesses/progress/progress.py --file "$HERE/progress.json" \
       ingest \
