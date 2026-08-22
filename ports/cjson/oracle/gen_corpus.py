@@ -230,9 +230,28 @@ def main():
         json.dump(dup, f, indent=2)
     with open(os.path.join(HERE, "matrix-dupeq.json"), "w") as f:
         json.dump(dupeq, f, indent=2)
+
+    # ffi-builder (the Create/Add builder + Get/Is query surface). Two shapes:
+    #   build  — stdin is a VARIANT NAME, not JSON; the observable result is the
+    #            printed document the builder API produced.
+    #   query  — every parse-testable corpus document, looked up by key "a" and
+    #            described via the Is* predicates and the struct fields
+    #            (type/valueint/valuestring) a C caller reads off the pointer.
+    #            Most documents have no "a" and must both answer `missing`;
+    #            the object cases exercise the real description path.
+    builder = [{"name": f"build-{v}", "args": ["build"], "stdin": v,
+                "expect_rc": 0, "mods": ["ffi-builder"]}
+               for v in ("flat", "array", "nested", "numbers", "dupkey",
+                         "add-null", "empty", "strings")]
+    builder += [{"name": f"query-{c['name']}", "args": ["query"],
+                 "stdin": "a\n" + c["stdin"], "expect_rc": c["expect_rc"],
+                 "mods": ["ffi-builder"]}
+                for c in MATRIX if "minify" not in c["mods"]]
+    with open(os.path.join(HERE, "matrix-builder.json"), "w") as f:
+        json.dump(builder, f, indent=2)
     print(f"wrote matrix.json ({len(MATRIX)} cases), holdout.json ({len(HOLDOUT)}), "
           f"matrix-ported.json ({len(ported)}), matrix-dup.json ({len(dup)}), "
-          f"matrix-dupeq.json ({len(dupeq)})")
+          f"matrix-dupeq.json ({len(dupeq)}), matrix-builder.json ({len(builder)})")
 
 
 if __name__ == "__main__":

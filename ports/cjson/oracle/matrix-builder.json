@@ -1,0 +1,849 @@
+[
+  {
+    "name": "build-flat",
+    "args": [
+      "build"
+    ],
+    "stdin": "flat",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "build-array",
+    "args": [
+      "build"
+    ],
+    "stdin": "array",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "build-nested",
+    "args": [
+      "build"
+    ],
+    "stdin": "nested",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "build-numbers",
+    "args": [
+      "build"
+    ],
+    "stdin": "numbers",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "build-dupkey",
+    "args": [
+      "build"
+    ],
+    "stdin": "dupkey",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "build-add-null",
+    "args": [
+      "build"
+    ],
+    "stdin": "add-null",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "build-empty",
+    "args": [
+      "build"
+    ],
+    "stdin": "empty",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "build-strings",
+    "args": [
+      "build"
+    ],
+    "stdin": "strings",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-empty-object",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n{}",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-empty-array",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n[]",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-true",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\ntrue",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-false",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\nfalse",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-null",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\nnull",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-int",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n42",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-negative",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n-17",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-zero",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n0",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-float",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n3.14159",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-exponent",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n6.022e23",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-bare-string",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n\"hello\"",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-string-escapes",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n\"tab\\tnl\\nquote\\\"backslash\\\\\"",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-unicode-escape",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n\"\u00e9\u00e8\"",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-surrogate-pair",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n\"\ud834\udd1e\"",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-nested-object",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n{\"a\":1,\"b\":{\"c\":[true,null,\"x\"],\"d\":{}}}",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-mixed-array",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n[1,\"two\",3.0,true,null,{}]",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-big-int",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n2147483647",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-min-int",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n-2147483648",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-large-double",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n1.7976931348623157e308",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-whitespace-around",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n   {  \"k\" : 1 }   ",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-nesting-limit-ok",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-trailing-garbage-lax",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n{\"a\":1}trailing",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-fmt-object",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n{\"a\":1,\"b\":2}",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-fmt-array",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n[1,2,3]",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-reject-empty",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n",
+    "expect_rc": 1,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-reject-garbage",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\nxyzzy",
+    "expect_rc": 1,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-reject-unterminated-string",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n\"abc",
+    "expect_rc": 1,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-reject-unterminated-object",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n{\"a\":1",
+    "expect_rc": 1,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-reject-unterminated-array",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n[1,2",
+    "expect_rc": 1,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-reject-trailing-comma",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n[1,2,]",
+    "expect_rc": 1,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-reject-comment-in-parse",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n// c\n{}",
+    "expect_rc": 1,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-reject-bad-escape",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n\"\\x41\"",
+    "expect_rc": 1,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-ws-number",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n   42  ",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-trailing-after-number",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n123 456",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-neg-zero",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n-0",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-num-overflow-inf",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n1e999",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-num-underflow",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n1e-999",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-small-exp",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n1e-05",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-exp-boundary-fixed",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n0.0001",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-reject-lone-minus",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n-",
+    "expect_rc": 1,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-reject-incomplete-exp",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n1e+",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-bom-number",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n\ufeff42",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-dbl-max-lossy-print",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n1.7976931348623157e308",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-dbl-max-reparse-null",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n1.79769313486232e+308",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-esc-roundtrip",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n\"\\b\\f\\n\\r\\t x \\/ \\\" y\"",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-esc-slash-unescaped-out",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n\"a\\/b\"",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-ctrl-reescape",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n\"\\u0001\"",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-invalid-hex-as-nul",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n\"a\\uZZZZb\"",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-nul-escape-truncates-print",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n\"a\\u0000b\"",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-raw-nul-byte-in-string",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n\"a\u0000b\"",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-escaped-surrogate-pair",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n\"\\uD834\\uDD1E\"",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-empty-string-value",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n\"\"",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-reject-short-u-before-quote",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n\"\\u041\"",
+    "expect_rc": 1,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-reject-lone-low-surrogate",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n\"\\uDC00\"",
+    "expect_rc": 1,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-reject-surrogate-bad-second",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n\"\\uD800\\u0041\"",
+    "expect_rc": 1,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-reject-trailing-backslash",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n\"abc\\",
+    "expect_rc": 1,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-dup-keys-preserved",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n{\"a\":1,\"a\":2}",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-empty-key",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n{\"\":1}",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-ws-heavy-array",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n[  1 ,   2  ]",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-nested-empty-arrays",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n[[[]]]",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-fmt-nested-obj-in-array",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n[1,{\"a\":1}]",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-fmt-nested-empty-obj",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n{\"a\":{}}",
+    "expect_rc": 0,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-reject-missing-colon",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n{\"k\" 1}",
+    "expect_rc": 1,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-reject-missing-comma",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n[1 2]",
+    "expect_rc": 1,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-reject-leading-comma",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n[,1]",
+    "expect_rc": 1,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-reject-obj-trailing-comma",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n{\"a\":1,}",
+    "expect_rc": 1,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-reject-colon-no-value",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n{\"a\":}",
+    "expect_rc": 1,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-cve-lone-surrogate",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n\"\\uD800\"",
+    "expect_rc": 1,
+    "mods": [
+      "ffi-builder"
+    ]
+  },
+  {
+    "name": "query-cve-nesting-1001",
+    "args": [
+      "query"
+    ],
+    "stdin": "a\n[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]",
+    "expect_rc": 1,
+    "mods": [
+      "ffi-builder"
+    ]
+  }
+]

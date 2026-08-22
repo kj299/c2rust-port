@@ -1,0 +1,237 @@
+{
+  "probe_transcript": 1,
+  "module": "ffi-builder",
+  "oracle_sha256": "ffdf430cc5b9ff59651bb74393a7767912e424004db02f1a9358b3f4e7fe7554",
+  "generated_by": "harnesses/probe/probe.py run",
+  "entries": [
+    {
+      "id": "build-flat",
+      "args": [
+        "build"
+      ],
+      "stdin_b64": "ZmxhdA==",
+      "note": "builder: AddString/Number/Bool/Null to an object, in insertion order",
+      "rc": 0,
+      "stdout_b64": "eyJzIjoiaGkiLCJuIjo0MiwidCI6dHJ1ZSwiZiI6ZmFsc2UsInoiOm51bGx9",
+      "stdin_preview": "flat",
+      "stdout_preview": "{\"s\":\"hi\",\"n\":42,\"t\":true,\"f\":false,\"z\":null}"
+    },
+    {
+      "id": "build-array",
+      "args": [
+        "build"
+      ],
+      "stdin_b64": "YXJyYXk=",
+      "note": "builder: AddItemToArray with Create Number/String/True/Null",
+      "rc": 0,
+      "stdout_b64": "WzEsInR3byIsdHJ1ZSxudWxsXQ==",
+      "stdin_preview": "array",
+      "stdout_preview": "[1,\"two\",true,null]"
+    },
+    {
+      "id": "build-nested",
+      "args": [
+        "build"
+      ],
+      "stdin_b64": "bmVzdGVk",
+      "note": "builder: an object holding an array holding an object",
+      "rc": 0,
+      "stdout_b64": "eyJhcnIiOlt7ImRlZXAiOi0xfV19",
+      "stdin_preview": "nested",
+      "stdout_preview": "{\"arr\":[{\"deep\":-1}]}"
+    },
+    {
+      "id": "build-numbers",
+      "args": [
+        "build"
+      ],
+      "stdin_b64": "bnVtYmVycw==",
+      "note": "builder: CreateNumber edges -- 0, -1, 0.1, 1e308 and inf. inf prints as null, the same quirk the parse side has",
+      "rc": 0,
+      "stdout_b64": "WzAsLTEsMC4xLDFlKzMwOCxudWxsXQ==",
+      "stdin_preview": "numbers",
+      "stdout_preview": "[0,-1,0.1,1e+308,null]"
+    },
+    {
+      "id": "build-dupkey",
+      "args": [
+        "build"
+      ],
+      "stdin_b64": "ZHVwa2V5",
+      "note": "builder: adding the SAME key twice APPENDS, it does not replace -- the C silently produces a duplicate-key document (and such a doc never compares equal to its own duplicate, per LESSONS #17)",
+      "rc": 0,
+      "stdout_b64": "eyJrIjoxLCJrIjoyfQ==",
+      "stdin_preview": "dupkey",
+      "stdout_preview": "{\"k\":1,\"k\":2}"
+    },
+    {
+      "id": "build-add-null",
+      "args": [
+        "build"
+      ],
+      "stdin_b64": "YWRkLW51bGw=",
+      "note": "builder: AddItemToObject(obj, key, NULL) is SILENTLY IGNORED -- no error, no crash, the key simply does not appear",
+      "rc": 0,
+      "stdout_b64": "eyJiIjoxfQ==",
+      "stdin_preview": "add-null",
+      "stdout_preview": "{\"b\":1}"
+    },
+    {
+      "id": "build-empty",
+      "args": [
+        "build"
+      ],
+      "stdin_b64": "ZW1wdHk=",
+      "note": "builder: an object with no members",
+      "rc": 0,
+      "stdout_b64": "e30=",
+      "stdin_preview": "empty",
+      "stdout_preview": "{}"
+    },
+    {
+      "id": "build-strings",
+      "args": [
+        "build"
+      ],
+      "stdin_b64": "c3RyaW5ncw==",
+      "note": "builder: CreateString escaping must match the printer's",
+      "rc": 0,
+      "stdout_b64": "WyIiLCJhXCJiXFxjIiwidGFiXHRoZXJlIl0=",
+      "stdin_preview": "strings",
+      "stdout_preview": "[\"\",\"a\\\"b\\\\c\",\"tab\\there\"]"
+    },
+    {
+      "id": "query-string",
+      "args": [
+        "query"
+      ],
+      "stdin_b64": "YQp7ImEiOiJoaSJ9",
+      "note": "query: valuestring holds the RAW bytes; valueint is 0",
+      "rc": 0,
+      "stdout_b64": "aXM9Uzt0eXBlPTE2O2ludD0wO3N0cj1oaTtzaXplPTA7cHJpbnQ9ImhpIg==",
+      "stdin_preview": "a\n{\"a\":\"hi\"}",
+      "stdout_preview": "is=S;type=16;int=0;str=hi;size=0;print=\"hi\""
+    },
+    {
+      "id": "query-int",
+      "args": [
+        "query"
+      ],
+      "stdin_b64": "YQp7ImEiOjQyfQ==",
+      "note": "query: valueint mirrors an integral number",
+      "rc": 0,
+      "stdout_b64": "aXM9TTt0eXBlPTg7aW50PTQyO3N0cj0tO3NpemU9MDtwcmludD00Mg==",
+      "stdin_preview": "a\n{\"a\":42}",
+      "stdout_preview": "is=M;type=8;int=42;str=-;size=0;print=42"
+    },
+    {
+      "id": "query-frac",
+      "args": [
+        "query"
+      ],
+      "stdin_b64": "YQp7ImEiOi03LjV9",
+      "note": "query: valueint TRUNCATES toward zero (-7.5 -> -7) while the printed form stays exact -- a caller reading ->valueint silently loses the fraction",
+      "rc": 0,
+      "stdout_b64": "aXM9TTt0eXBlPTg7aW50PS03O3N0cj0tO3NpemU9MDtwcmludD0tNy41",
+      "stdin_preview": "a\n{\"a\":-7.5}",
+      "stdout_preview": "is=M;type=8;int=-7;str=-;size=0;print=-7.5"
+    },
+    {
+      "id": "query-true",
+      "args": [
+        "query"
+      ],
+      "stdin_b64": "YQp7ImEiOnRydWV9",
+      "note": "query: IsTrue AND IsBool both answer true; type is cJSON_True(2), valueint 1",
+      "rc": 0,
+      "stdout_b64": "aXM9VEI7dHlwZT0yO2ludD0xO3N0cj0tO3NpemU9MDtwcmludD10cnVl",
+      "stdin_preview": "a\n{\"a\":true}",
+      "stdout_preview": "is=TB;type=2;int=1;str=-;size=0;print=true"
+    },
+    {
+      "id": "query-null",
+      "args": [
+        "query"
+      ],
+      "stdin_b64": "YQp7ImEiOm51bGx9",
+      "note": "query: IsNull, type cJSON_NULL(4)",
+      "rc": 0,
+      "stdout_b64": "aXM9Tjt0eXBlPTQ7aW50PTA7c3RyPS07c2l6ZT0wO3ByaW50PW51bGw=",
+      "stdin_preview": "a\n{\"a\":null}",
+      "stdout_preview": "is=N;type=4;int=0;str=-;size=0;print=null"
+    },
+    {
+      "id": "query-array",
+      "args": [
+        "query"
+      ],
+      "stdin_b64": "YQp7ImEiOlsxLDIsM119",
+      "note": "query: IsArray, GetArraySize counts children",
+      "rc": 0,
+      "stdout_b64": "aXM9QTt0eXBlPTMyO2ludD0wO3N0cj0tO3NpemU9MztwcmludD1bMSwyLDNd",
+      "stdin_preview": "a\n{\"a\":[1,2,3]}",
+      "stdout_preview": "is=A;type=32;int=0;str=-;size=3;print=[1,2,3]"
+    },
+    {
+      "id": "query-object",
+      "args": [
+        "query"
+      ],
+      "stdin_b64": "YQp7ImEiOnsiYiI6MX19",
+      "note": "query: IsObject, GetArraySize counts members",
+      "rc": 0,
+      "stdout_b64": "aXM9Tzt0eXBlPTY0O2ludD0wO3N0cj0tO3NpemU9MTtwcmludD17ImIiOjF9",
+      "stdin_preview": "a\n{\"a\":{\"b\":1}}",
+      "stdout_preview": "is=O;type=64;int=0;str=-;size=1;print={\"b\":1}"
+    },
+    {
+      "id": "query-case",
+      "args": [
+        "query"
+      ],
+      "stdin_b64": "QQp7ImEiOjF9",
+      "note": "query: GetObjectItemCaseSensitive does NOT match a differently-cased key",
+      "rc": 0,
+      "stdout_b64": "bWlzc2luZw==",
+      "stdin_preview": "A\n{\"a\":1}",
+      "stdout_preview": "missing"
+    },
+    {
+      "id": "query-absent",
+      "args": [
+        "query"
+      ],
+      "stdin_b64": "enoKeyJhIjoxfQ==",
+      "note": "query: a missing key yields NULL, not an error",
+      "rc": 0,
+      "stdout_b64": "bWlzc2luZw==",
+      "stdin_preview": "zz\n{\"a\":1}",
+      "stdout_preview": "missing"
+    },
+    {
+      "id": "query-inf",
+      "args": [
+        "query"
+      ],
+      "stdin_b64": "YQp7ImEiOjFlOTk5fQ==",
+      "note": "query: inf saturates valueint at INT_MAX and prints as null",
+      "rc": 0,
+      "stdout_b64": "aXM9TTt0eXBlPTg7aW50PTIxNDc0ODM2NDc7c3RyPS07c2l6ZT0wO3ByaW50PW51bGw=",
+      "stdin_preview": "a\n{\"a\":1e999}",
+      "stdout_preview": "is=M;type=8;int=2147483647;str=-;size=0;print=null"
+    },
+    {
+      "id": "query-bignum",
+      "args": [
+        "query"
+      ],
+      "stdin_b64": "YQp7ImEiOjMwMDAwMDAwMDB9",
+      "note": "query: valueint SATURATES at INT_MAX(2147483647) while the printed value is exact -- the struct-field int view is lossy above 2^31-1",
+      "rc": 0,
+      "stdout_b64": "aXM9TTt0eXBlPTg7aW50PTIxNDc0ODM2NDc7c3RyPS07c2l6ZT0wO3ByaW50PTMwMDAwMDAwMDA=",
+      "stdin_preview": "a\n{\"a\":3000000000}",
+      "stdout_preview": "is=M;type=8;int=2147483647;str=-;size=0;print=3000000000"
+    }
+  ],
+  "fingerprint": "0573395a691fa8130d906f11f77e3d353842cc6575dc62cfdd996ac644411f4e"
+}

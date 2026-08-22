@@ -31,7 +31,7 @@ echo "===== 1b. probe-then-port — transcripts pinned, tests generated ====="
 # fails closed on oracle drift, a tampered transcript, or a hand-edited/stale
 # generated test file. The generated tests themselves run under `cargo test`
 # in step 2.
-PROBE_SETS=(quirks plumbing)
+PROBE_SETS=(quirks plumbing builder)
 PROBE_FILES=()
 for set in "${PROBE_SETS[@]}"; do
   PROBE_FILES+=("$HERE/oracle/probes-$set.json")
@@ -94,6 +94,17 @@ echo "----- module 6 (dom): dup + dup-eq differentials -----"
     --matrix "$HERE/oracle/matrix-dupeq.json" --ledger "$HERE/DIVERGENCES.md" \
     --json > "$HERE/reports/dom.json"
 
+echo "----- module 8 (ffi-builder): builder + query differentials -----"
+# build:  stdin is a VARIANT NAME; the observable result is the document the
+#         Create/Add API produced.
+# query:  every parse-testable corpus document looked up by key, described via
+#         the Is* predicates and the struct fields (type/valueint/valuestring)
+#         a C caller reads straight off the pointer.
+"$PY" "$KIT/harnesses/differential/diff_run.py" \
+    --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
+    --matrix "$HERE/oracle/matrix-builder.json" --ledger "$HERE/DIVERGENCES.md" \
+    --json > "$HERE/reports/ffi-builder.json"
+
 echo "===== 4. diff-fuzz — differential fuzzing, Rust vs C ====="
 mkdir -p "$HERE/reports/fuzz"
 "$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
@@ -114,6 +125,12 @@ mkdir -p "$HERE/reports/fuzz"
     --args dup-eq --matrix "$HERE/oracle/matrix.json" \
     --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
     --json > "$HERE/reports/fuzz/dom.json"
+# query mode: fuzz the accessor/predicate surface over mutated documents
+"$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
+    --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
+    --args query --matrix "$HERE/oracle/matrix-builder.json" \
+    --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
+    --json > "$HERE/reports/fuzz/ffi-builder.json"
 for m in scalar-parse string-parse buffer-plumbing recursive-core; do
   cp "$HERE/reports/fuzz/alloc-node.json" "$HERE/reports/fuzz/$m.json"
 done
@@ -155,7 +172,7 @@ echo "===== 5. unsafe-audit over the rust workspace ====="
 mkdir -p "$HERE/reports/unsafe"
 "$PY" "$KIT/harnesses/unsafe-audit/audit_unsafe.py" "$HERE/rust/crates" --json \
     > "$HERE/reports/unsafe/alloc-node.json"
-for m in scalar-parse string-parse buffer-plumbing recursive-core dom entry-minify; do
+for m in scalar-parse string-parse buffer-plumbing recursive-core dom entry-minify ffi-builder; do
   cp "$HERE/reports/unsafe/alloc-node.json" "$HERE/reports/unsafe/$m.json"
 done
 
@@ -165,7 +182,7 @@ if [ "$SAN_RAN" = "1" ]; then
   # five rungs. A SKIP writes no report — and a report where nothing ran carries
   # an empty `modes_run`, which `progress.py` refuses. The claim can no longer
   # outlive the run that earned it.
-  for m in scalar-parse string-parse buffer-plumbing recursive-core dom entry-minify; do
+  for m in scalar-parse string-parse buffer-plumbing recursive-core dom entry-minify ffi-builder; do
     cp "$SAN_REPORT" "$HERE/reports/sanitize/$m.json"
   done
   echo "sanitizer reports emitted for every module"
