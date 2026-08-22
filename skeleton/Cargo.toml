@@ -29,8 +29,8 @@ lto = true
 unsafe_op_in_unsafe_fn = "deny"
 
 [workspace.lints.clippy]
-undocumented_unsafe_blocks = "warn"   # cross-checks the audit harness
-missing_safety_doc = "warn"           # every `pub unsafe fn` needs `# Safety`
+undocumented_unsafe_blocks = "deny"   # cross-checks the audit harness
+missing_safety_doc = "deny"           # every `pub unsafe fn` needs `# Safety`
 # Reject the C-idiom footguns a safety rewrite must not carry over:
 cast_possible_truncation = "warn"     # `x as u16` on a length/offset from input
 arithmetic_side_effects = "warn"      # unchecked +/-/* that can overflow
