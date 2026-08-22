@@ -1,5 +1,12 @@
 {
   "module": "quirks",
+  "modules": [
+    "scalar-parse",
+    "string-parse",
+    "recursive-core",
+    "dom",
+    "entry-minify"
+  ],
   "probes": [
     {
       "id": "dbl-max-lossy-print",
