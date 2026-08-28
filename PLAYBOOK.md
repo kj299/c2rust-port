@@ -250,8 +250,12 @@ duplicate for inf/nan and for duplicate keys; minify does not track escape
 parity. A mature C library's behavior is accreted quirks, several of which look
 like bugs; a port that silently "cleans them up" is differently wrong). Wire
 `probe.py verify` into the port's gate script so oracle drift, a tampered
-transcript, or a hand-edited generated file all fail closed
-(`ports/cjson/check.sh` step 1b is the worked reference).
+transcript, or a hand-edited generated file all fail closed, **and
+`probe.py coverage --progress progress.json` so a module with no probes at all is
+red** (LESSONS #23 — verifying the probes that exist says nothing about the module
+nobody probed). Tag each probes file with the `modules: [...]` it decides, exactly
+as Phase 2 tags corpus vectors. `ports/cjson/check.sh` step 1b is the worked
+reference.
 **Exit criteria (per module):** all six gates green; `progress` row fully ticked.
 **Artifacts:** the module, its fuzz target, its golden cases, divergence entries.
 **lsof failure modes this prevents:** the 7-commit hang (spike-first + sanitizer

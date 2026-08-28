@@ -28,9 +28,12 @@ Then run every gate; each is a hard requirement before merge:
    (a lossy `%1.15g` the C happily accepts; `Compare` rejecting a value's own
    duplicate; minify ignoring escape parity). Wire `probe.py verify` into the
    port's gate script — it fails closed on oracle drift, transcript tampering,
-   and hand-edits to the generated file. Where a probed behavior looks like a
-   bug, that is a *decision* — reproduce it faithfully, or fix it and ledger the
-   divergence — never a silent cleanup.
+   and hand-edits to the generated file — **and `probe.py coverage --probes
+   <files> --progress progress.json`, so a module nobody probed is red rather
+   than invisible** (LESSONS #23). Tag each probes file with the `modules: [...]`
+   it decides. Where a probed behavior looks like a bug, that is a *decision* —
+   reproduce it faithfully, or fix it and ledger the divergence — never a silent
+   cleanup.
 
 1. **Port** into `core` (pure logic) or a safe wrapper in `sys` (if it touches
    FFI). Translate idioms safely: call-twice-for-size → growing `Vec` + length

@@ -1,0 +1,97 @@
+{
+  "module": "plumbing",
+  "modules": [
+    "alloc-node",
+    "buffer-plumbing"
+  ],
+  "probes": [
+    {
+      "id": "bom-utf8-leading",
+      "args": [
+        "print-unformatted"
+      ],
+      "stdin": "\ufeff{}",
+      "note": "buffer-plumbing: does the C's ParseBuffer skip a leading UTF-8 BOM?"
+    },
+    {
+      "id": "whitespace-only",
+      "args": [
+        "print-unformatted"
+      ],
+      "stdin": "   \t\r\n ",
+      "note": "buffer-plumbing: whitespace-only input \u2014 parse error, or something else?"
+    },
+    {
+      "id": "empty-input",
+      "args": [
+        "print-unformatted"
+      ],
+      "stdin": "",
+      "note": "buffer-plumbing: empty buffer at offset 0"
+    },
+    {
+      "id": "leading-trailing-ws",
+      "args": [
+        "print-unformatted"
+      ],
+      "stdin": "  \n\t [1,2]  \r\n ",
+      "note": "buffer-plumbing: whitespace either side of a valid value"
+    },
+    {
+      "id": "trailing-garbage",
+      "args": [
+        "print-unformatted"
+      ],
+      "stdin": "[1] xyz",
+      "note": "buffer-plumbing: does parse reject trailing garbage after a complete value, or stop at the value?"
+    },
+    {
+      "id": "nul-inside-buffer",
+      "args": [
+        "print-unformatted"
+      ],
+      "stdin_b64": "WzEsADJd",
+      "note": "buffer-plumbing: an embedded NUL mid-buffer (length-aware parse vs C-string assumptions)"
+    },
+    {
+      "id": "empty-array",
+      "args": [
+        "print"
+      ],
+      "stdin": "[]",
+      "note": "alloc-node: a container node with no children, FORMATTED print"
+    },
+    {
+      "id": "empty-object",
+      "args": [
+        "print"
+      ],
+      "stdin": "{}",
+      "note": "alloc-node: empty object, formatted (child-list head is NULL)"
+    },
+    {
+      "id": "nested-empties",
+      "args": [
+        "print"
+      ],
+      "stdin": "[[],{},[{}]]",
+      "note": "alloc-node: nested empty containers \u2014 node linkage without leaves"
+    },
+    {
+      "id": "bare-null",
+      "args": [
+        "print-unformatted"
+      ],
+      "stdin": "null",
+      "note": "alloc-node: a lone literal node, no allocation of children"
+    },
+    {
+      "id": "dup-nested-empties",
+      "args": [
+        "dup"
+      ],
+      "stdin": "[[],{},[{}]]",
+      "note": "alloc-node: Duplicate must reproduce empty-container linkage"
+    }
+  ]
+}

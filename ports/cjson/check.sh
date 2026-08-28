@@ -25,17 +25,27 @@ echo "===== 1. oracle (build + validate all vectors against C) ====="
 bash "$HERE/oracle/run.sh" > /dev/null
 echo "oracle locked"
 
-echo "===== 1b. probe-then-port — quirk transcript pinned, tests generated ====="
-# The module's quirk expectations are GENERATED from the C's observed bytes
+echo "===== 1b. probe-then-port — transcripts pinned, tests generated ====="
+# Module expectations are GENERATED from the C's observed bytes
 # (harnesses/probe/probe.py, LESSONS #17 mechanized as LESSONS #21): verify
 # fails closed on oracle drift, a tampered transcript, or a hand-edited/stale
 # generated test file. The generated tests themselves run under `cargo test`
 # in step 2.
-"$PY" "$KIT/harnesses/probe/probe.py" verify \
-    --probes "$HERE/oracle/probes-quirks.json" \
-    --oracle "$HERE/oracle/cjson_oracle" \
-    --transcript "$HERE/oracle/probes-quirks.transcript.json" \
-    --out "$HERE/rust/crates/core/tests/probes_quirks.rs"
+PROBE_SETS=(quirks plumbing builder)
+PROBE_FILES=()
+for set in "${PROBE_SETS[@]}"; do
+  PROBE_FILES+=("$HERE/oracle/probes-$set.json")
+  "$PY" "$KIT/harnesses/probe/probe.py" verify \
+      --probes "$HERE/oracle/probes-$set.json" \
+      --oracle "$HERE/oracle/cjson_oracle" \
+      --transcript "$HERE/oracle/probes-$set.transcript.json" \
+      --out "$HERE/rust/crates/core/tests/probes_$set.rs"
+done
+# ...and the gate ABOVE those gates (LESSONS #23): verifying the probe files that
+# EXIST says nothing about a module that has none. Coverage reads the module list
+# from progress.json itself, so a module the gates track but nobody probed is red.
+"$PY" "$KIT/harnesses/probe/probe.py" coverage \
+    --probes "${PROBE_FILES[@]}" --progress "$HERE/progress.json"
 
 echo "===== 2. rust workspace (fmt / clippy / build / test) ====="
 ( cd "$HERE/rust"
@@ -84,6 +94,17 @@ echo "----- module 6 (dom): dup + dup-eq differentials -----"
     --matrix "$HERE/oracle/matrix-dupeq.json" --ledger "$HERE/DIVERGENCES.md" \
     --json > "$HERE/reports/dom.json"
 
+echo "----- module 8 (ffi-builder): builder + query differentials -----"
+# build:  stdin is a VARIANT NAME; the observable result is the document the
+#         Create/Add API produced.
+# query:  every parse-testable corpus document looked up by key, described via
+#         the Is* predicates and the struct fields (type/valueint/valuestring)
+#         a C caller reads straight off the pointer.
+"$PY" "$KIT/harnesses/differential/diff_run.py" \
+    --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
+    --matrix "$HERE/oracle/matrix-builder.json" --ledger "$HERE/DIVERGENCES.md" \
+    --json > "$HERE/reports/ffi-builder.json"
+
 echo "===== 4. diff-fuzz — differential fuzzing, Rust vs C ====="
 mkdir -p "$HERE/reports/fuzz"
 "$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
@@ -104,24 +125,43 @@ mkdir -p "$HERE/reports/fuzz"
     --args dup-eq --matrix "$HERE/oracle/matrix.json" \
     --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
     --json > "$HERE/reports/fuzz/dom.json"
+# query mode: fuzz the accessor/predicate surface over mutated documents
+"$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
+    --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
+    --args query --matrix "$HERE/oracle/matrix-builder.json" \
+    --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
+    --json > "$HERE/reports/fuzz/ffi-builder.json"
 for m in scalar-parse string-parse buffer-plumbing recursive-core; do
   cp "$HERE/reports/fuzz/alloc-node.json" "$HERE/reports/fuzz/$m.json"
 done
 
-echo "===== 4b. miri — UB check over the FFI crate's unsafe (toolchain-optional) ====="
+echo "===== 4b. sanitizers — miri (UB) + asan (FFI memory), toolchain-optional ====="
 # The ffi crate is the port's ENTIRE memory-safety risk surface, so this is where
-# UB detection matters. Toolchain-optional like the kit's skeleton gate: SKIPs
-# cleanly without nightly+miri, runs for real when present. Verified fail-closed:
-# injecting an out-of-bounds read into the FFI tests makes miri exit nonzero
-# (LESSONS #6 — a sanitizer that can't fail proves nothing; LESSONS #18 — and a
-# gate that never RAN must not advance the rung either).
+# UB detection matters. Runs through the KIT's sanitizer harness, not a hand-rolled
+# cargo line: the port duplicating that invocation is exactly why the harness's
+# `ubsan` mode could ship permanently broken and nobody noticed (LESSONS #22).
+# `all` = miri + asan in ONE run, so the emitted report names every checker that
+# actually ran (LESSONS #24) instead of under-reporting a second, unrecorded pass.
+# Toolchain-optional like the kit's skeleton gate; verified fail-closed by
+# injecting an out-of-bounds read into the FFI tests (miri exits nonzero —
+# LESSONS #6; and a gate that never RAN must not advance the rung — LESSONS #18).
+mkdir -p "$HERE/reports/sanitize"
+SAN_REPORT="$HERE/reports/sanitize/alloc-node.json"
+rm -f "$SAN_REPORT"          # never let a previous run's report stand in for this one
 if cargo +nightly miri --version >/dev/null 2>&1; then
-  ( cd "$HERE/rust" && cargo +nightly miri test -p cjson_ffi -p cjson_core --quiet )
-  echo "miri: no UB in the unsafe FFI surface (or the safe core)"
-  MIRI_RAN=1
+  bash "$KIT/harnesses/sanitizers/run_sanitizers.sh" all "$HERE/rust" \
+      --json "$SAN_REPORT" -- -p cjson_ffi -p cjson_core
+  echo "sanitizers: no UB (miri) and no memory errors (asan) in the unsafe surface"
+  SAN_RAN=1
+elif rustc +nightly --version >/dev/null 2>&1; then
+  bash "$KIT/harnesses/sanitizers/run_sanitizers.sh" asan "$HERE/rust" \
+      --json "$SAN_REPORT" -- -p cjson_ffi -p cjson_core
+  echo "sanitizers: asan clean (miri absent — install: rustup component add --toolchain nightly miri)"
+  SAN_RAN=1
 else
-  echo "SKIP  miri: no nightly+miri toolchain (install: rustup toolchain install nightly --component miri)"
-  MIRI_RAN=0
+  echo "SKIP  sanitizers: no nightly toolchain (no report written, so the"
+  echo "      sanitized rung cannot advance — an unrun gate proves nothing)"
+  SAN_RAN=0
 fi
 
 echo "===== 5. unsafe-audit over the rust workspace ====="
@@ -132,25 +172,62 @@ echo "===== 5. unsafe-audit over the rust workspace ====="
 mkdir -p "$HERE/reports/unsafe"
 "$PY" "$KIT/harnesses/unsafe-audit/audit_unsafe.py" "$HERE/rust/crates" --json \
     > "$HERE/reports/unsafe/alloc-node.json"
-for m in scalar-parse string-parse buffer-plumbing recursive-core dom entry-minify; do
+for m in scalar-parse string-parse buffer-plumbing recursive-core dom entry-minify ffi-builder; do
   cp "$HERE/reports/unsafe/alloc-node.json" "$HERE/reports/unsafe/$m.json"
 done
 
-if [ "$MIRI_RAN" = "1" ]; then
-  # `sanitized` has no --json harness, so it is set explicitly — and ONLY when
-  # miri actually ran (never on a SKIP: an unrun gate must not advance).
-  for m in alloc-node scalar-parse string-parse buffer-plumbing recursive-core dom entry-minify; do
-    "$PY" "$KIT/harnesses/progress/progress.py" --file "$HERE/progress.json" set "$m" sanitized >/dev/null
+if [ "$SAN_RAN" = "1" ]; then
+  # `sanitized` is no longer hand-set (LESSONS #24): it advances in step 6 from
+  # the sanitizer harness's own provenance-stamped report, exactly like the other
+  # five rungs. A SKIP writes no report — and a report where nothing ran carries
+  # an empty `modes_run`, which `progress.py` refuses. The claim can no longer
+  # outlive the run that earned it.
+  for m in scalar-parse string-parse buffer-plumbing recursive-core dom entry-minify ffi-builder; do
+    cp "$SAN_REPORT" "$HERE/reports/sanitize/$m.json"
   done
-  echo "progress: sanitized gate set for every module (miri ran)"
+  echo "sanitizer reports emitted for every module"
 fi
 
-echo "===== 6. progress — ingest the stamped reports (multi-rung) ====="
+echo "===== 6. progress — the ladder must be EARNED from this run's reports ====="
+# The committed progress.json already sits at the top rung, so a plain ingest
+# advances nothing and proves nothing: a rung that quietly stopped being provable
+# would look identical to one that still is. So first REPLAY the ingest into a
+# scratch copy seeded at `ported` — every module must climb to unsafe_audited
+# from the reports this run just produced, or the gate fails (LESSONS #24: a
+# claim must not outlive the evidence that earned it).
+REPLAY="$(mktemp -d)/progress-replay.json"
+"$PY" -c "
+import json, sys
+src = json.load(open('$HERE/progress.json'))
+json.dump({'modules': {m: 'ported' for m in src['modules']}}, open('$REPLAY', 'w'))
+"
+( cd "$KIT"
+  "$PY" harnesses/progress/progress.py --file "$REPLAY" ingest \
+      --diff-json "$HERE"/reports/*.json \
+      --fuzz-json "$HERE"/reports/fuzz/*.json \
+      --sanitize-json "$HERE"/reports/sanitize/*.json \
+      --unsafe-json "$HERE"/reports/unsafe/*.json >/dev/null )
+"$PY" -c "
+import json, sys
+st = json.load(open('$REPLAY'))['modules']
+stuck = {m: g for m, g in st.items() if g != 'unsafe_audited'}
+if stuck:
+    print('REPLAY FAILED: these modules could not be re-earned from this run\'s '
+          'reports alone:', file=sys.stderr)
+    for m, g in sorted(stuck.items()):
+        print(f'  {m}: stuck at {g}', file=sys.stderr)
+    sys.exit(1)
+print(f'replay: all {len(st)} module(s) re-earned every rung from this run\'s reports')
+"
+rm -rf "$(dirname "$REPLAY")"
+
+echo "----- and the committed table -----"
 ( cd "$KIT"   # ingest verifies report provenance against THIS repo's HEAD
   "$PY" harnesses/progress/progress.py --file "$HERE/progress.json" \
       ingest \
       --diff-json "$HERE"/reports/*.json \
       --fuzz-json "$HERE"/reports/fuzz/*.json \
+      --sanitize-json "$HERE"/reports/sanitize/*.json \
       --unsafe-json "$HERE"/reports/unsafe/*.json
   "$PY" harnesses/progress/progress.py --file "$HERE/progress.json" show )
 

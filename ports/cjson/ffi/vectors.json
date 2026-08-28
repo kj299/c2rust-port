@@ -1,44 +1,508 @@
 [
-  {"name": "version", "function": "cJSON_Version", "returns": "cstr", "args": []},
-
-  {"name": "rt-object", "function": "cjson_rt", "returns": "int",
-   "args": [{"type": "cstr", "value": "{ \"a\" : 1 , \"b\" : [true, null, \"x\"] }"},
-            {"type": "outbuf", "size": 256, "id": "out"}]},
-  {"name": "rt-scalars", "function": "cjson_rt", "returns": "int",
-   "args": [{"type": "cstr", "value": "[42, -17, 3.14159, 6.022e23, true, false, null]"},
-            {"type": "outbuf", "size": 256, "id": "out"}]},
-  {"name": "rt-nested", "function": "cjson_rt", "returns": "int",
-   "args": [{"type": "cstr", "value": "{\"x\":{\"y\":{\"z\":[1,2,3]}}}"},
-            {"type": "outbuf", "size": 256, "id": "out"}]},
-  {"name": "rt-string-escapes", "function": "cjson_rt", "returns": "int",
-   "args": [{"type": "cstr", "value": "\"tab\\tnl\\nquote\\\"slash\\/\""},
-            {"type": "outbuf", "size": 256, "id": "out"}]},
-  {"name": "rt-unicode", "function": "cjson_rt", "returns": "int",
-   "args": [{"type": "cstr", "value": "\"\\uD834\\uDD1E and \\u0001\""},
-            {"type": "outbuf", "size": 256, "id": "out"}]},
-  {"name": "rt-reject", "function": "cjson_rt", "returns": "int",
-   "args": [{"type": "cstr", "value": "{bad json"},
-            {"type": "outbuf", "size": 64, "id": "out"}]},
-  {"name": "rt-empty", "function": "cjson_rt", "returns": "int",
-   "args": [{"type": "cstr", "value": ""},
-            {"type": "outbuf", "size": 64, "id": "out"}]},
-  {"name": "rt-truncation", "function": "cjson_rt", "returns": "int",
-   "args": [{"type": "cstr", "value": "[1,2,3,4,5,6,7,8,9,10]"},
-            {"type": "outbuf", "size": 8, "id": "out"}]},
-
-  {"name": "rt-fmt-object", "function": "cjson_rt_fmt", "returns": "int",
-   "args": [{"type": "cstr", "value": "{\"a\":1,\"b\":[2,3]}"},
-            {"type": "outbuf", "size": 256, "id": "out"}]},
-  {"name": "rt-fmt-nested", "function": "cjson_rt_fmt", "returns": "int",
-   "args": [{"type": "cstr", "value": "[1,{\"a\":1}]"},
-            {"type": "outbuf", "size": 256, "id": "out"}]},
-
-  {"name": "minify-ws", "function": "cJSON_Minify", "returns": "void",
-   "args": [{"type": "inoutbuf", "size": 64, "value": "{ \"a\" : 1 , \"b\" : [ 2 , 3 ] }", "id": "buf"}]},
-  {"name": "minify-comments", "function": "cJSON_Minify", "returns": "void",
-   "args": [{"type": "inoutbuf", "size": 64, "value": "[ 1, /* c */ 2, // d\n 3 ]", "id": "buf"}]},
-  {"name": "minify-lone-slash", "function": "cJSON_Minify", "returns": "void",
-   "args": [{"type": "inoutbuf", "size": 32, "value": "{\"a\":1/2}", "id": "buf"}]},
-  {"name": "minify-escape-parity", "function": "cJSON_Minify", "returns": "void",
-   "args": [{"type": "inoutbuf", "size": 32, "value": "\"\\\\\" \"", "id": "buf"}]}
+  {
+    "name": "version",
+    "function": "cJSON_Version",
+    "returns": "cstr",
+    "args": []
+  },
+  {
+    "name": "rt-object",
+    "function": "cjson_rt",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "{ \"a\" : 1 , \"b\" : [true, null, \"x\"] }"
+      },
+      {
+        "type": "outbuf",
+        "size": 256,
+        "id": "out"
+      }
+    ]
+  },
+  {
+    "name": "rt-scalars",
+    "function": "cjson_rt",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "[42, -17, 3.14159, 6.022e23, true, false, null]"
+      },
+      {
+        "type": "outbuf",
+        "size": 256,
+        "id": "out"
+      }
+    ]
+  },
+  {
+    "name": "rt-nested",
+    "function": "cjson_rt",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "{\"x\":{\"y\":{\"z\":[1,2,3]}}}"
+      },
+      {
+        "type": "outbuf",
+        "size": 256,
+        "id": "out"
+      }
+    ]
+  },
+  {
+    "name": "rt-string-escapes",
+    "function": "cjson_rt",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "\"tab\\tnl\\nquote\\\"slash\\/\""
+      },
+      {
+        "type": "outbuf",
+        "size": 256,
+        "id": "out"
+      }
+    ]
+  },
+  {
+    "name": "rt-unicode",
+    "function": "cjson_rt",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "\"\\uD834\\uDD1E and \\u0001\""
+      },
+      {
+        "type": "outbuf",
+        "size": 256,
+        "id": "out"
+      }
+    ]
+  },
+  {
+    "name": "rt-reject",
+    "function": "cjson_rt",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "{bad json"
+      },
+      {
+        "type": "outbuf",
+        "size": 64,
+        "id": "out"
+      }
+    ]
+  },
+  {
+    "name": "rt-empty",
+    "function": "cjson_rt",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": ""
+      },
+      {
+        "type": "outbuf",
+        "size": 64,
+        "id": "out"
+      }
+    ]
+  },
+  {
+    "name": "rt-truncation",
+    "function": "cjson_rt",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "[1,2,3,4,5,6,7,8,9,10]"
+      },
+      {
+        "type": "outbuf",
+        "size": 8,
+        "id": "out"
+      }
+    ]
+  },
+  {
+    "name": "rt-fmt-object",
+    "function": "cjson_rt_fmt",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "{\"a\":1,\"b\":[2,3]}"
+      },
+      {
+        "type": "outbuf",
+        "size": 256,
+        "id": "out"
+      }
+    ]
+  },
+  {
+    "name": "rt-fmt-nested",
+    "function": "cjson_rt_fmt",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "[1,{\"a\":1}]"
+      },
+      {
+        "type": "outbuf",
+        "size": 256,
+        "id": "out"
+      }
+    ]
+  },
+  {
+    "name": "minify-ws",
+    "function": "cJSON_Minify",
+    "returns": "void",
+    "args": [
+      {
+        "type": "inoutbuf",
+        "size": 64,
+        "value": "{ \"a\" : 1 , \"b\" : [ 2 , 3 ] }",
+        "id": "buf"
+      }
+    ]
+  },
+  {
+    "name": "minify-comments",
+    "function": "cJSON_Minify",
+    "returns": "void",
+    "args": [
+      {
+        "type": "inoutbuf",
+        "size": 64,
+        "value": "[ 1, /* c */ 2, // d\n 3 ]",
+        "id": "buf"
+      }
+    ]
+  },
+  {
+    "name": "minify-lone-slash",
+    "function": "cJSON_Minify",
+    "returns": "void",
+    "args": [
+      {
+        "type": "inoutbuf",
+        "size": 32,
+        "value": "{\"a\":1/2}",
+        "id": "buf"
+      }
+    ]
+  },
+  {
+    "name": "minify-escape-parity",
+    "function": "cJSON_Minify",
+    "returns": "void",
+    "args": [
+      {
+        "type": "inoutbuf",
+        "size": 32,
+        "value": "\"\\\\\" \"",
+        "id": "buf"
+      }
+    ]
+  },
+  {
+    "name": "build-flat",
+    "function": "cjson_build_variant",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "flat"
+      },
+      {
+        "type": "outbuf",
+        "size": 256,
+        "id": "out"
+      }
+    ]
+  },
+  {
+    "name": "build-array",
+    "function": "cjson_build_variant",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "array"
+      },
+      {
+        "type": "outbuf",
+        "size": 256,
+        "id": "out"
+      }
+    ]
+  },
+  {
+    "name": "build-nested",
+    "function": "cjson_build_variant",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "nested"
+      },
+      {
+        "type": "outbuf",
+        "size": 256,
+        "id": "out"
+      }
+    ]
+  },
+  {
+    "name": "build-numbers",
+    "function": "cjson_build_variant",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "numbers"
+      },
+      {
+        "type": "outbuf",
+        "size": 256,
+        "id": "out"
+      }
+    ]
+  },
+  {
+    "name": "build-dupkey",
+    "function": "cjson_build_variant",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "dupkey"
+      },
+      {
+        "type": "outbuf",
+        "size": 256,
+        "id": "out"
+      }
+    ]
+  },
+  {
+    "name": "build-add-null",
+    "function": "cjson_build_variant",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "add-null"
+      },
+      {
+        "type": "outbuf",
+        "size": 256,
+        "id": "out"
+      }
+    ]
+  },
+  {
+    "name": "build-empty",
+    "function": "cjson_build_variant",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "empty"
+      },
+      {
+        "type": "outbuf",
+        "size": 256,
+        "id": "out"
+      }
+    ]
+  },
+  {
+    "name": "build-strings",
+    "function": "cjson_build_variant",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "strings"
+      },
+      {
+        "type": "outbuf",
+        "size": 256,
+        "id": "out"
+      }
+    ]
+  },
+  {
+    "name": "query-string",
+    "function": "cjson_query_desc",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "a"
+      },
+      {
+        "type": "cstr",
+        "value": "{\"a\":\"hi\"}"
+      },
+      {
+        "type": "outbuf",
+        "size": 256,
+        "id": "out"
+      }
+    ]
+  },
+  {
+    "name": "query-frac",
+    "function": "cjson_query_desc",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "a"
+      },
+      {
+        "type": "cstr",
+        "value": "{\"a\":-7.5}"
+      },
+      {
+        "type": "outbuf",
+        "size": 256,
+        "id": "out"
+      }
+    ]
+  },
+  {
+    "name": "query-bignum",
+    "function": "cjson_query_desc",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "a"
+      },
+      {
+        "type": "cstr",
+        "value": "{\"a\":3000000000}"
+      },
+      {
+        "type": "outbuf",
+        "size": 256,
+        "id": "out"
+      }
+    ]
+  },
+  {
+    "name": "query-true",
+    "function": "cjson_query_desc",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "a"
+      },
+      {
+        "type": "cstr",
+        "value": "{\"a\":true}"
+      },
+      {
+        "type": "outbuf",
+        "size": 256,
+        "id": "out"
+      }
+    ]
+  },
+  {
+    "name": "query-array",
+    "function": "cjson_query_desc",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "a"
+      },
+      {
+        "type": "cstr",
+        "value": "{\"a\":[1,2,3]}"
+      },
+      {
+        "type": "outbuf",
+        "size": 256,
+        "id": "out"
+      }
+    ]
+  },
+  {
+    "name": "query-object",
+    "function": "cjson_query_desc",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "a"
+      },
+      {
+        "type": "cstr",
+        "value": "{\"a\":{\"b\":1}}"
+      },
+      {
+        "type": "outbuf",
+        "size": 256,
+        "id": "out"
+      }
+    ]
+  },
+  {
+    "name": "query-case",
+    "function": "cjson_query_desc",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "A"
+      },
+      {
+        "type": "cstr",
+        "value": "{\"a\":1}"
+      },
+      {
+        "type": "outbuf",
+        "size": 256,
+        "id": "out"
+      }
+    ]
+  },
+  {
+    "name": "query-absent",
+    "function": "cjson_query_desc",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "zz"
+      },
+      {
+        "type": "cstr",
+        "value": "{\"a\":1}"
+      },
+      {
+        "type": "outbuf",
+        "size": 256,
+        "id": "out"
+      }
+    ]
+  }
 ]

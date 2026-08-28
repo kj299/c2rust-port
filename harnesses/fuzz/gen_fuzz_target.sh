@@ -23,16 +23,43 @@ emit() {
   echo "wrote $out/fuzz_targets/${module}.rs"
 }
 
+# THE verdict: is FILE a properly generated, fully substituted fuzz target?
+# Extracted so `--check` can run it against a KNOWN-BAD file as well as a good
+# one (LESSONS #25). Checking only the happy path proves the scaffolder works,
+# never that this predicate would refuse anything — the gate-mutation sweep
+# neutralized it and the self-test stayed green, which is the same
+# proves-detection-never-refusal root cause as LESSONS #6.
+valid_target() {
+  local f="$1"
+  test -f "$f" || return 1
+  grep -q "fuzz_target!" "$f" || return 1
+  grep -q "mycrate" "$f" || return 1
+  return 0
+}
+
 if [[ "${1:-}" == "--check" ]]; then
+  ok=1
   tmp="$(mktemp -d)"
   trap 'rm -rf "$tmp"' EXIT
   emit "parser" "mycrate" "$tmp" >/dev/null
-  test -f "$tmp/fuzz_targets/parser.rs" || { echo "FAIL: no target generated"; exit 1; }
-  grep -q "fuzz_target!" "$tmp/fuzz_targets/parser.rs" || { echo "FAIL: template not expanded"; exit 1; }
-  grep -q "mycrate" "$tmp/fuzz_targets/parser.rs" || { echo "FAIL: crate not substituted"; exit 1; }
-  echo "PASS  fuzz scaffolder generates a valid target"
-  echo "self-test: OK"
-  exit 0
+  if valid_target "$tmp/fuzz_targets/parser.rs"; then
+    echo "PASS  fuzz scaffolder generates a valid target"
+  else
+    echo "FAIL  scaffolder did not produce a valid target"; ok=0
+  fi
+  # Negative fixtures — the pin. Each is a way generation can go wrong:
+  # a missing file, an unexpanded template, an unsubstituted crate name.
+  printf 'fn main() {}\n' > "$tmp/unexpanded.rs"          # no fuzz_target!
+  printf 'fuzz_target!(|d: &[u8]| { __CRATE__::go(d); });\n' > "$tmp/nosubst.rs"
+  if valid_target "$tmp/missing.rs" || valid_target "$tmp/unexpanded.rs" \
+     || valid_target "$tmp/nosubst.rs"; then
+    echo "FAIL  validator accepts a missing / unexpanded / unsubstituted target"
+    ok=0
+  else
+    echo "PASS  validator refuses missing, unexpanded and unsubstituted targets"
+  fi
+  if [[ "$ok" == "1" ]]; then echo "self-test: OK"; exit 0
+  else echo "self-test: FAILED"; exit 1; fi
 fi
 
 if [[ $# -lt 1 ]]; then

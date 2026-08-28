@@ -181,6 +181,30 @@ partially discharged (CI now runs; sanitizers still don't). What remains: item
 **1** (`warn`→`deny`, a kickoff policy call), the sanitizers, and the keystone:
 **port foreign C**.
 
+> **Burn-down update — 2026-08-22. This list is now empty.**
+> * Item **1** closed today (`deny`, probed — see below).
+> * Item **3** is **fully** discharged: the sentence above ("sanitizers still
+>   don't [run]") went stale and then wrong. `run_sanitizers.sh` had been shipping
+>   a `ubsan` mode wired to `-Zsanitizer=undefined`, a value rustc rejects, so that
+>   mode could **never pass** on any codebase, and the harness had never once run
+>   against real code because the cJSON port hand-rolled its own miri call
+>   (LESSONS #22). Repaired, and the port now runs **miri + asan** through the
+>   harness every gate run.
+> * The keystone (v1 §5 item 1) closed 2026-07-25 with the cJSON port; v1 §5 item
+>   2 (gate-mutation) closed the same day.
+>
+> **Stale counts corrected** (prose drifts, no gate watches it — LESSONS #15):
+> "14/14 mutations now caught" above was true when written; the sweep is now
+> **19 gates, 0 survivors, 0 table gaps**, and it audits its own table
+> (LESSONS #25). As always, `make check-kit` is the only authority on the current
+> number — prefer running it over quoting any figure in this document.
+>
+> **What remains is no longer kit-internal.** The open work is now the cJSON
+> port's own honest remainder (`RETROSPECTIVE-cjson.md` §7 — the FFI builder/query
+> surface and struct-field ABI, `cJSON_Utils`) and v1 §5 item **4**, the
+> hazardous-API pattern library, which has never been started and which the kit
+> cannot fabricate: it grows one real port at a time.
+
 **The keystone is closed:** `RETROSPECTIVE-kit-v1.md` §5 item 1 — *port a real,
 foreign, CVE-bearing C codebase* — is done. cJSON v1.7.18 is ported through all
 six gates (`ports/cjson/`, `RETROSPECTIVE-cjson.md`), and LESSONS 017–020 are the
@@ -197,13 +221,26 @@ diff-fuzz self-test that crashed rather than failed on zero findings. Both fixed
 
 **P1 — could let an unsafe port through:**
 
-1. **Workspace unsafe-doc lints are `warn`, not `deny`.** `skeleton/Cargo.toml`
-   sets `undocumented_unsafe_blocks = "warn"` and `missing_safety_doc = "warn"`.
-   The toolchain-free `audit_unsafe` gate hard-fails on undocumented *blocks*, but
-   the clippy belt-and-suspenders that also covers `unsafe fn` is advisory — a
-   real target build won't fail on it. *Not flipped unilaterally:* setting `deny`
-   can break a port whose existing code has undocumented unsafe, so whether to
-   flip is the porting team's call at kickoff. Flag, don't force.
+1. ✅ **CLOSED 2026-08-22 — workspace unsafe-doc lints were `warn`, not `deny`.**
+   `skeleton/Cargo.toml` set `undocumented_unsafe_blocks = "warn"` and
+   `missing_safety_doc = "warn"`. The toolchain-free `audit_unsafe` gate hard-fails
+   on undocumented *blocks*, but the clippy belt-and-suspenders that also covers
+   `unsafe fn` was advisory — a real target build wouldn't fail on it.
+   > **Why this was flagged rather than fixed, and why that changed.** The original
+   > note said *"not flipped unilaterally: setting `deny` can break a port whose
+   > existing code has undocumented unsafe… flag, don't force."* That reasoning
+   > held for a port mid-flight; it does not hold for the two artifacts that
+   > actually carry these lints. The **skeleton** is what a port starts from — zero
+   > unsafe, so `deny` costs it nothing — and the **cJSON port** is at 33/33
+   > documented, verified before flipping. The deeper argument is the one the kit
+   > keeps relearning: at `warn` the control lived in *how clippy was invoked*
+   > (`-D warnings` in CI), not in the artifact, which makes it a convention
+   > (LESSONS #13) and leaves any port that forgets the flag unguarded.
+   > **Probed, not assumed:** a plain `cargo clippy` with **no** `-D warnings` now
+   > errors on an injected undocumented `unsafe` block, and the skeleton still
+   > passes the gates it ships (LESSONS #9). A port that genuinely must start with
+   > undocumented unsafe can still downgrade the lint in its own `Cargo.toml` — but
+   > that is now a visible, deliberate opt-out instead of the silent default.
 2. ✅ **CLOSED 2026-07-25 — nothing enforced that the threat model gets filled.**
    `skeleton/THREAT-MODEL.md` is a 37-line template whose first line is `# Threat
    model — <project>`; a port could reach cutover with the `<project>` placeholder

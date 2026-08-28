@@ -1,0 +1,141 @@
+{
+  "probe_transcript": 1,
+  "module": "plumbing",
+  "oracle_sha256": "112b072ceb602669a25ea45b9de4ef94da616536951de0fdf1593ac0d5cbadda",
+  "generated_by": "harnesses/probe/probe.py run",
+  "entries": [
+    {
+      "id": "bom-utf8-leading",
+      "args": [
+        "print-unformatted"
+      ],
+      "stdin_b64": "77u/e30=",
+      "note": "buffer-plumbing: does the C's ParseBuffer skip a leading UTF-8 BOM?",
+      "rc": 0,
+      "stdout_b64": "e30=",
+      "stdin_preview": "\ufeff{}",
+      "stdout_preview": "{}"
+    },
+    {
+      "id": "whitespace-only",
+      "args": [
+        "print-unformatted"
+      ],
+      "stdin_b64": "ICAgCQ0KIA==",
+      "note": "buffer-plumbing: whitespace-only input \u2014 parse error, or something else?",
+      "rc": 1,
+      "stdout_b64": "",
+      "stdin_preview": "   \t\r\n ",
+      "stdout_preview": ""
+    },
+    {
+      "id": "empty-input",
+      "args": [
+        "print-unformatted"
+      ],
+      "stdin_b64": "",
+      "note": "buffer-plumbing: empty buffer at offset 0",
+      "rc": 1,
+      "stdout_b64": "",
+      "stdin_preview": "",
+      "stdout_preview": ""
+    },
+    {
+      "id": "leading-trailing-ws",
+      "args": [
+        "print-unformatted"
+      ],
+      "stdin_b64": "ICAKCSBbMSwyXSAgDQog",
+      "note": "buffer-plumbing: whitespace either side of a valid value",
+      "rc": 0,
+      "stdout_b64": "WzEsMl0=",
+      "stdin_preview": "  \n\t [1,2]  \r\n ",
+      "stdout_preview": "[1,2]"
+    },
+    {
+      "id": "trailing-garbage",
+      "args": [
+        "print-unformatted"
+      ],
+      "stdin_b64": "WzFdIHh5eg==",
+      "note": "buffer-plumbing: does parse reject trailing garbage after a complete value, or stop at the value?",
+      "rc": 0,
+      "stdout_b64": "WzFd",
+      "stdin_preview": "[1] xyz",
+      "stdout_preview": "[1]"
+    },
+    {
+      "id": "nul-inside-buffer",
+      "args": [
+        "print-unformatted"
+      ],
+      "stdin_b64": "WzEsADJd",
+      "note": "buffer-plumbing: an embedded NUL mid-buffer (length-aware parse vs C-string assumptions)",
+      "rc": 0,
+      "stdout_b64": "WzEsMl0=",
+      "stdin_preview": "[1,\u00002]",
+      "stdout_preview": "[1,2]"
+    },
+    {
+      "id": "empty-array",
+      "args": [
+        "print"
+      ],
+      "stdin_b64": "W10=",
+      "note": "alloc-node: a container node with no children, FORMATTED print",
+      "rc": 0,
+      "stdout_b64": "W10=",
+      "stdin_preview": "[]",
+      "stdout_preview": "[]"
+    },
+    {
+      "id": "empty-object",
+      "args": [
+        "print"
+      ],
+      "stdin_b64": "e30=",
+      "note": "alloc-node: empty object, formatted (child-list head is NULL)",
+      "rc": 0,
+      "stdout_b64": "ewp9",
+      "stdin_preview": "{}",
+      "stdout_preview": "{\n}"
+    },
+    {
+      "id": "nested-empties",
+      "args": [
+        "print"
+      ],
+      "stdin_b64": "W1tdLHt9LFt7fV1d",
+      "note": "alloc-node: nested empty containers \u2014 node linkage without leaves",
+      "rc": 0,
+      "stdout_b64": "W1tdLCB7Cgl9LCBbewoJCX1dXQ==",
+      "stdin_preview": "[[],{},[{}]]",
+      "stdout_preview": "[[], {\n\t}, [{\n\t\t}]]"
+    },
+    {
+      "id": "bare-null",
+      "args": [
+        "print-unformatted"
+      ],
+      "stdin_b64": "bnVsbA==",
+      "note": "alloc-node: a lone literal node, no allocation of children",
+      "rc": 0,
+      "stdout_b64": "bnVsbA==",
+      "stdin_preview": "null",
+      "stdout_preview": "null"
+    },
+    {
+      "id": "dup-nested-empties",
+      "args": [
+        "dup"
+      ],
+      "stdin_b64": "W1tdLHt9LFt7fV1d",
+      "note": "alloc-node: Duplicate must reproduce empty-container linkage",
+      "rc": 0,
+      "stdout_b64": "W1tdLHt9LFt7fV1d",
+      "stdin_preview": "[[],{},[{}]]",
+      "stdout_preview": "[[],{},[{}]]"
+    }
+  ],
+  "fingerprint": "193db0ab8ab3c2f00d30c23f061eda4874bbbce4d2b48cc11b161c1ea8532ee6"
+}

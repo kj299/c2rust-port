@@ -22,8 +22,11 @@ module's edge cases with `python3 porting-kit/harnesses/probe/probe.py run --pro
 <probes.json> --oracle <c-oracle> --transcript <t.json>`, then `probe.py gen` to
 **generate** the Rust test expectations from the C's observed bytes — never write
 one by hand. Wire `probe.py verify` into the port's gate script: it fails closed on
-oracle drift, transcript tampering, and hand-edits to the generated file
-(`ports/cjson/check.sh` step 1b is the worked reference).
+oracle drift, transcript tampering, and hand-edits to the generated file — and
+`probe.py coverage --probes <files> --progress progress.json`, which fails when a
+module has no probes file at all (LESSONS #23; tag each probes file with the
+`modules: [...]` it decides). `ports/cjson/check.sh` step 1b is the worked
+reference.
 
 ## The six gates (each a hard requirement before merge)
 1. **Port** into `core` (pure logic) or a safe wrapper in `sys` (if it touches FFI).

@@ -249,6 +249,88 @@ pub unsafe extern "C" fn cjson_rt_fmt(
     unsafe { roundtrip(json, out, out_size, true) }
 }
 
+/// Copy `bytes` into `out` (capacity `out_size`, always NUL-terminated) and
+/// return the FULL length, snprintf-style, so truncation is observable.
+///
+/// # Safety
+/// `out` is valid for writes of `out_size` bytes, or null.
+unsafe fn emit_bytes(bytes: &[u8], out: *mut c_char, out_size: c_int) -> c_int {
+    let cap = out_size.max(0) as usize;
+    if cap > 0 && !out.is_null() {
+        let copy = bytes.len().min(cap.saturating_sub(1));
+        // SAFETY: `out` is valid for `out_size` bytes (caller); `copy < cap`, so
+        // `copy` bytes plus the NUL fit inside the buffer.
+        unsafe {
+            ptr::copy_nonoverlapping(bytes.as_ptr(), out.cast::<u8>(), copy);
+            *out.add(copy) = 0;
+        }
+    }
+    c_int::try_from(bytes.len()).unwrap_or(c_int::MAX)
+}
+
+/// Build the named document with the DOM builder API and print it unformatted
+/// into `out`. Returns the printed length, or -1 for an unknown variant.
+///
+/// # Safety
+/// `variant` is a valid NUL-terminated C string; `out` is valid for writes of
+/// `out_size` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn cjson_build_variant(
+    variant: *const c_char,
+    out: *mut c_char,
+    out_size: c_int,
+) -> c_int {
+    // SAFETY: forwarded contract.
+    let Some(bytes) = (unsafe { cstr_bytes(variant) }) else {
+        return -1;
+    };
+    let Ok(name) = core::str::from_utf8(bytes) else {
+        return -1;
+    };
+    let Some(root) = cjson_core::modes::build_variant(name) else {
+        return -1;
+    };
+    let Some(printed) = print_value(&root, false) else {
+        return -1;
+    };
+    // SAFETY: forwarded contract on `out`/`out_size`.
+    unsafe { emit_bytes(&printed, out, out_size) }
+}
+
+/// Look `key` up in `json` and write the canonical description (Is* predicates
+/// plus the `type`/`valueint`/`valuestring` struct-field views) into `out`.
+/// Returns the description length, or -1 if the document does not parse.
+///
+/// # Safety
+/// `key` and `json` are valid NUL-terminated C strings; `out` is valid for
+/// writes of `out_size` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn cjson_query_desc(
+    key: *const c_char,
+    json: *const c_char,
+    out: *mut c_char,
+    out_size: c_int,
+) -> c_int {
+    // SAFETY: forwarded contract on `key`.
+    let Some(key_bytes) = (unsafe { cstr_bytes(key) }) else {
+        return -1;
+    };
+    // SAFETY: forwarded contract on `json`.
+    let Some(json_bytes) = (unsafe { cstr_bytes(json) }) else {
+        return -1;
+    };
+    // `modes::run` takes the driver's `<key>\n<json>` framing.
+    let mut input = key_bytes.to_vec();
+    input.push(b'\n');
+    input.extend_from_slice(json_bytes);
+    let (rc, desc) = cjson_core::modes::run("query", &input);
+    if rc != 0 {
+        return -1;
+    }
+    // SAFETY: forwarded contract on `out`/`out_size`.
+    unsafe { emit_bytes(&desc, out, out_size) }
+}
+
 #[cfg(test)]
 mod tests {
     //! These tests exist to give MIRI something to check. The unsafe in this

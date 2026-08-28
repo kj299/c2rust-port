@@ -83,13 +83,105 @@ pub fn get_object_item<'a>(v: &'a Value, name: &[u8], case_sensitive: bool) -> O
         .map(|(_, val)| val)
 }
 
-/// cJSON.c `cJSON_GetArraySize`.
+/// cJSON.c `cJSON_GetArraySize` — counts the node's CHILDREN, whatever the node
+/// is: the C walks `array->child` and follows `next`, so an *object* reports its
+/// member count, not 0.
+///
+/// This was written as "array length, else 0" from reasoning about the name, and
+/// the C refuted it the first time a probe called it on an object
+/// (`{"a":{"b":1}}` → `size=1`). Nothing caught it for six gates because no
+/// driver mode exercised the accessor — the differential can only compare what
+/// the driver exposes (LESSONS #17/#21: the C is a spec only the oracle reads).
 #[must_use]
 pub fn get_array_size(v: &Value) -> usize {
     match v {
         Value::Array(items) => items.len(),
+        Value::Object(entries) => entries.len(),
         _ => 0,
     }
+}
+
+// ---- type codes and the struct fields a C caller reads directly ------------
+
+/// The C `type` bitfield (cJSON.h:81–90). A caller that reads `item->type` off
+/// the struct sees exactly these numbers.
+#[must_use]
+pub fn type_code(v: &Value) -> i32 {
+    match v {
+        Value::False => 1,
+        Value::True => 2,
+        Value::Null => 4,
+        Value::Number(_) => 8,
+        Value::String(_) => 16,
+        Value::Array(_) => 32,
+        Value::Object(_) => 64,
+        Value::Raw(_) => 128,
+    }
+}
+
+/// C `valueint`. **Lossy by construction, and that is the C's behavior:** it is
+/// an `int`, so a number above `INT_MAX` saturates (`3000000000` → `2147483647`)
+/// and a fractional one truncates toward zero (`-7.5` → `-7`), while
+/// `valuedouble` and the printed form stay exact. `cJSON_True` carries
+/// `valueint = 1` (cJSON.c:1351); everything else reads 0.
+#[must_use]
+pub fn value_int(v: &Value) -> i32 {
+    match v {
+        Value::Number(n) => n.i,
+        Value::True => 1,
+        _ => 0,
+    }
+}
+
+/// C `valuestring` — set for strings and raw, NULL for every other type.
+#[must_use]
+pub fn value_string(v: &Value) -> Option<&[u8]> {
+    match v {
+        Value::String(s) | Value::Raw(s) => Some(s),
+        _ => None,
+    }
+}
+
+// ---- type predicates (cJSON_Is*) -------------------------------------------
+
+/// `cJSON_IsBool` answers true for BOTH `True` and `False`, so a `true` value
+/// satisfies `IsTrue` and `IsBool` at once (probed: flags `TB`).
+#[must_use]
+pub fn is_bool(v: &Value) -> bool {
+    matches!(v, Value::True | Value::False)
+}
+
+macro_rules! is_variant {
+    ($(#[$m:meta])* $name:ident, $pat:pat) => {
+        $(#[$m])*
+        #[must_use]
+        pub fn $name(v: &Value) -> bool { matches!(v, $pat) }
+    };
+}
+
+is_variant!(/// `cJSON_IsNull`
+            is_null, Value::Null);
+is_variant!(/// `cJSON_IsFalse`
+            is_false, Value::False);
+is_variant!(/// `cJSON_IsTrue`
+            is_true, Value::True);
+is_variant!(/// `cJSON_IsNumber`
+            is_number, Value::Number(_));
+is_variant!(/// `cJSON_IsString`
+            is_string, Value::String(_));
+is_variant!(/// `cJSON_IsRaw`
+            is_raw, Value::Raw(_));
+is_variant!(/// `cJSON_IsArray`
+            is_array, Value::Array(_));
+is_variant!(/// `cJSON_IsObject`
+            is_object, Value::Object(_));
+
+/// `cJSON_IsInvalid` — `cJSON_Invalid` is type 0, which no live `Value` can be:
+/// the enum makes the invalid state unrepresentable, so this is always false.
+/// Kept so the predicate set matches the C's one-for-one.
+#[must_use]
+pub fn is_invalid(_v: &Value) -> bool {
+    false
 }
 
 // ---- builders (Add*) -------------------------------------------------------
@@ -114,6 +206,27 @@ pub fn add_item_to_object(object: &mut Value, key: &[u8], item: Value) -> bool {
     } else {
         false
     }
+}
+
+/// cJSON.c:2263+ `cJSON_AddStringToObject`.
+pub fn add_string_to_object(object: &mut Value, key: &[u8], s: &[u8]) -> bool {
+    add_item_to_object(object, key, Value::String(s.to_vec()))
+}
+
+/// cJSON.c:2263+ `cJSON_AddNumberToObject` — saturates `valueint` like the
+/// parser does.
+pub fn add_number_to_object(object: &mut Value, key: &[u8], d: f64) -> bool {
+    add_item_to_object(object, key, number(d))
+}
+
+/// cJSON.c:2263+ `cJSON_AddBoolToObject`.
+pub fn add_bool_to_object(object: &mut Value, key: &[u8], b: bool) -> bool {
+    add_item_to_object(object, key, bool_value(b))
+}
+
+/// cJSON.c:2263+ `cJSON_AddNullToObject`.
+pub fn add_null_to_object(object: &mut Value, key: &[u8]) -> bool {
+    add_item_to_object(object, key, Value::Null)
 }
 
 // ---- cJSON_Compare (3061) --------------------------------------------------

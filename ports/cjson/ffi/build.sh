@@ -6,6 +6,6 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC="$HERE/../c"
 CC="${CC:-cc}"
 "$CC" -O2 -Wall -Wextra -fPIC -shared -I"$SRC" \
-    "$SRC/cJSON.c" "$HERE/shim.c" \
+    "$SRC/cJSON.c" "$HERE/shim.c" "$HERE/../oracle/cjson_modes.c" \
     -lm -o "$HERE/libcjson_c.so"
 echo "built $HERE/libcjson_c.so"

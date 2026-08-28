@@ -1,0 +1,160 @@
+{
+  "module": "ffi-builder",
+  "modules": [
+    "ffi-builder"
+  ],
+  "probes": [
+    {
+      "id": "build-flat",
+      "args": [
+        "build"
+      ],
+      "stdin": "flat",
+      "note": "builder: AddString/Number/Bool/Null to an object, in insertion order"
+    },
+    {
+      "id": "build-array",
+      "args": [
+        "build"
+      ],
+      "stdin": "array",
+      "note": "builder: AddItemToArray with Create Number/String/True/Null"
+    },
+    {
+      "id": "build-nested",
+      "args": [
+        "build"
+      ],
+      "stdin": "nested",
+      "note": "builder: an object holding an array holding an object"
+    },
+    {
+      "id": "build-numbers",
+      "args": [
+        "build"
+      ],
+      "stdin": "numbers",
+      "note": "builder: CreateNumber edges -- 0, -1, 0.1, 1e308 and inf. inf prints as null, the same quirk the parse side has"
+    },
+    {
+      "id": "build-dupkey",
+      "args": [
+        "build"
+      ],
+      "stdin": "dupkey",
+      "note": "builder: adding the SAME key twice APPENDS, it does not replace -- the C silently produces a duplicate-key document (and such a doc never compares equal to its own duplicate, per LESSONS #17)"
+    },
+    {
+      "id": "build-add-null",
+      "args": [
+        "build"
+      ],
+      "stdin": "add-null",
+      "note": "builder: AddItemToObject(obj, key, NULL) is SILENTLY IGNORED -- no error, no crash, the key simply does not appear"
+    },
+    {
+      "id": "build-empty",
+      "args": [
+        "build"
+      ],
+      "stdin": "empty",
+      "note": "builder: an object with no members"
+    },
+    {
+      "id": "build-strings",
+      "args": [
+        "build"
+      ],
+      "stdin": "strings",
+      "note": "builder: CreateString escaping must match the printer's"
+    },
+    {
+      "id": "query-string",
+      "args": [
+        "query"
+      ],
+      "stdin": "a\n{\"a\":\"hi\"}",
+      "note": "query: valuestring holds the RAW bytes; valueint is 0"
+    },
+    {
+      "id": "query-int",
+      "args": [
+        "query"
+      ],
+      "stdin": "a\n{\"a\":42}",
+      "note": "query: valueint mirrors an integral number"
+    },
+    {
+      "id": "query-frac",
+      "args": [
+        "query"
+      ],
+      "stdin": "a\n{\"a\":-7.5}",
+      "note": "query: valueint TRUNCATES toward zero (-7.5 -> -7) while the printed form stays exact -- a caller reading ->valueint silently loses the fraction"
+    },
+    {
+      "id": "query-true",
+      "args": [
+        "query"
+      ],
+      "stdin": "a\n{\"a\":true}",
+      "note": "query: IsTrue AND IsBool both answer true; type is cJSON_True(2), valueint 1"
+    },
+    {
+      "id": "query-null",
+      "args": [
+        "query"
+      ],
+      "stdin": "a\n{\"a\":null}",
+      "note": "query: IsNull, type cJSON_NULL(4)"
+    },
+    {
+      "id": "query-array",
+      "args": [
+        "query"
+      ],
+      "stdin": "a\n{\"a\":[1,2,3]}",
+      "note": "query: IsArray, GetArraySize counts children"
+    },
+    {
+      "id": "query-object",
+      "args": [
+        "query"
+      ],
+      "stdin": "a\n{\"a\":{\"b\":1}}",
+      "note": "query: IsObject, GetArraySize counts members"
+    },
+    {
+      "id": "query-case",
+      "args": [
+        "query"
+      ],
+      "stdin": "A\n{\"a\":1}",
+      "note": "query: GetObjectItemCaseSensitive does NOT match a differently-cased key"
+    },
+    {
+      "id": "query-absent",
+      "args": [
+        "query"
+      ],
+      "stdin": "zz\n{\"a\":1}",
+      "note": "query: a missing key yields NULL, not an error"
+    },
+    {
+      "id": "query-inf",
+      "args": [
+        "query"
+      ],
+      "stdin": "a\n{\"a\":1e999}",
+      "note": "query: inf saturates valueint at INT_MAX and prints as null"
+    },
+    {
+      "id": "query-bignum",
+      "args": [
+        "query"
+      ],
+      "stdin": "a\n{\"a\":3000000000}",
+      "note": "query: valueint SATURATES at INT_MAX(2147483647) while the printed value is exact -- the struct-field int view is lossy above 2^31-1"
+    }
+  ]
+}

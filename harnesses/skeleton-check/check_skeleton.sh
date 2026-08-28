@@ -19,9 +19,29 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 have() { command -v "$1" >/dev/null 2>&1; }
 DEFAULT_SKEL="$HERE/../../skeleton"
 
+# THE verdict: is DIR a skeleton this gate can actually run against? Extracted
+# so `--check` can exercise it against a known-BAD path too (LESSONS #25): the
+# happy path alone proves nothing about whether the check would ever refuse.
+skel_present() { test -d "$1" && test -f "$1/Cargo.toml"; }
+
 if [[ "${1:-}" == "--check" ]]; then
+  ok=1
   bash -n "$0" && echo "PASS  script syntax ok"
-  test -d "$DEFAULT_SKEL" && echo "PASS  skeleton dir present" || { echo "FAIL  skeleton dir missing: $DEFAULT_SKEL" >&2; exit 1; }
+  if skel_present "$DEFAULT_SKEL"; then
+    echo "PASS  skeleton dir present"
+  else
+    echo "FAIL  skeleton dir missing/incomplete: $DEFAULT_SKEL" >&2; ok=0
+  fi
+  # Negative fixture — the pin: an empty dir and a nonexistent one must both be
+  # refused, or "skeleton dir present" is a sentence that can never be false.
+  _empty="$(mktemp -d)"
+  if skel_present "$_empty" || skel_present "$DEFAULT_SKEL/definitely-not-here"; then
+    echo "FAIL  validator calls an empty / nonexistent directory a skeleton" >&2; ok=0
+  else
+    echo "PASS  validator refuses an empty and a nonexistent skeleton dir"
+  fi
+  rmdir "$_empty" 2>/dev/null || true
+  [[ "$ok" == "1" ]] || { echo "self-test: FAILED"; exit 1; }
   if have cargo; then echo "note: cargo present — the skeleton gate runs the real fmt/clippy/build/test"
   else echo "note: cargo absent — the skeleton gate will SKIP (install a Rust toolchain to run it)"; fi
   echo "self-test: OK"

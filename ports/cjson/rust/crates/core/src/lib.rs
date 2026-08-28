@@ -34,6 +34,7 @@
 
 pub mod dom;
 pub mod minify;
+pub mod modes;
 pub mod num;
 pub mod parse;
 pub mod print;

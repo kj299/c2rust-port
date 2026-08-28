@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "cJSON.h"
+#include "cjson_modes.h"
 
 /* Read all of stdin into a malloc'd buffer. *out_len gets the byte count; the
  * buffer is NUL-terminated (one extra byte) so minify's C-string API is safe. */
@@ -49,15 +50,52 @@ static char *read_all_stdin(size_t *out_len) {
     return buf;
 }
 
+/* The builder/query modes live in cjson_modes.c so the ABI shim
+ * (../ffi/shim.c) runs the same code this driver does — one implementation per
+ * side, as on the Rust side (see crates/core/src/modes.rs).
+ *
+ *   build     stdin is a VARIANT NAME, not JSON.
+ *   query     stdin is "<key>\n<json>".
+ */
+
 int main(int argc, char **argv) {
     if (argc < 2) {
-        fprintf(stderr, "usage: driver <print|print-unformatted|roundtrip|minify>\n");
+        fprintf(stderr, "usage: driver <print|print-unformatted|roundtrip|minify|build|query>\n");
         return 2;
     }
     const char *mode = argv[1];
     size_t len = 0;
     char *input = read_all_stdin(&len);
     if (!input) { fprintf(stderr, "oom reading stdin\n"); return 2; }
+
+    if (strcmp(mode, "build") == 0) {
+        /* stdin is a variant name; strip one trailing newline for convenience */
+        if (len > 0 && input[len - 1] == '\n') input[--len] = '\0';
+        char *out = cjson_modes_build(input);
+        free(input);
+        if (out == NULL) { fprintf(stderr, "unknown build variant\n"); return 2; }
+        fputs(out, stdout);
+        free(out);
+        return 0;
+    }
+
+    if (strcmp(mode, "query") == 0) {
+        char *nl = memchr(input, '\n', len);
+        if (nl == NULL) {
+            fprintf(stderr, "query needs <key>\\n<json>\n");
+            free(input);
+            return 2;
+        }
+        *nl = '\0';
+        char *json = nl + 1;
+        size_t json_len = len - (size_t)(json - input);
+        char *out = cjson_modes_query(input, json, json_len);
+        free(input);
+        if (out == NULL) { fprintf(stderr, "parse error\n"); return 1; }
+        fputs(out, stdout);
+        free(out);
+        return 0;
+    }
 
     if (strcmp(mode, "minify") == 0) {
         /* Minify mutates a NUL-terminated C string in place; no validation. */
