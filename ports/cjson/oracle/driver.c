@@ -27,6 +27,7 @@
 #include <string.h>
 #include "cJSON.h"
 #include "cjson_modes.h"
+#include "cjson_utils_modes.h"
 
 /* Read all of stdin into a malloc'd buffer. *out_len gets the byte count; the
  * buffer is NUL-terminated (one extra byte) so minify's C-string API is safe. */
@@ -60,7 +61,7 @@ static char *read_all_stdin(size_t *out_len) {
 
 int main(int argc, char **argv) {
     if (argc < 2) {
-        fprintf(stderr, "usage: driver <print|print-unformatted|roundtrip|minify|build|query>\n");
+        fprintf(stderr, "usage: driver <print|...|build|query|ptr|patch|merge|genmerge|genpatch|sort (+ -cs)>\n");
         return 2;
     }
     const char *mode = argv[1];
@@ -95,6 +96,62 @@ int main(int argc, char **argv) {
         fputs(out, stdout);
         free(out);
         return 0;
+    }
+
+    /* cJSON_Utils modes. The two-document modes split stdin on the first '\n':
+     * valid compact JSON never carries a raw newline, so the split is
+     * unambiguous.
+     *
+     * CRUCIAL (LESSONS #27): decide `is_utils` BEFORE touching `input`, and only
+     * split when it is actually a utils mode. An earlier version NUL-terminated
+     * at the first newline unconditionally, which silently corrupted the
+     * fall-through modes (minify/print/roundtrip/dup) for any newline-bearing
+     * input — the shared driver's new branch mutating state the OTHER branches
+     * depend on. The pre-existing modes' differential fuzz is what caught it. */
+    {
+        int cs = 0;
+        const char *base = mode;
+        size_t mlen = strlen(mode);
+        if (mlen > 3 && strcmp(mode + mlen - 3, "-cs") == 0) {
+            cs = 1;
+            /* compare only the prefix before "-cs" below via base+len checks */
+        }
+        int is_utils =
+            strcmp(base, "ptr") == 0      || strcmp(base, "ptr-cs") == 0      ||
+            strcmp(base, "patch") == 0    || strcmp(base, "patch-cs") == 0    ||
+            strcmp(base, "merge") == 0    || strcmp(base, "merge-cs") == 0    ||
+            strcmp(base, "genmerge") == 0 || strcmp(base, "genmerge-cs") == 0 ||
+            strcmp(base, "genpatch") == 0 || strcmp(base, "genpatch-cs") == 0 ||
+            strcmp(base, "sort") == 0     || strcmp(base, "sort-cs") == 0;
+        if (is_utils) {
+            char *nl = memchr(input, '\n', len);
+            char *b = nl ? nl + 1 : NULL;
+            size_t alen = nl ? (size_t)(nl - input) : len;
+            size_t blen = nl ? len - (size_t)(b - input) : 0;
+            if (nl) *nl = '\0';   /* NUL-terminate the first field for the C APIs */
+
+            char *out = NULL;
+            if (strcmp(base, "ptr") == 0 || strcmp(base, "ptr-cs") == 0) {
+                out = nl ? cjson_utils_ptr(input, b, blen, cs) : NULL;
+            } else if (strcmp(base, "patch") == 0 || strcmp(base, "patch-cs") == 0) {
+                out = nl ? cjson_utils_patch(input, alen, b, blen, cs) : NULL;
+            } else if (strcmp(base, "merge") == 0 || strcmp(base, "merge-cs") == 0) {
+                out = nl ? cjson_utils_merge(input, alen, b, blen, cs) : NULL;
+            } else if (strcmp(base, "genmerge") == 0 || strcmp(base, "genmerge-cs") == 0) {
+                out = nl ? cjson_utils_genmerge(input, alen, b, blen, cs) : NULL;
+            } else if (strcmp(base, "genpatch") == 0 || strcmp(base, "genpatch-cs") == 0) {
+                out = nl ? cjson_utils_genpatch(input, alen, b, blen, cs) : NULL;
+            } else { /* sort / sort-cs: one document, whole buffer */
+                if (nl) *nl = '\n';   /* undo split — sort takes the whole buffer */
+                if (len > 0 && input[len - 1] == '\n') input[--len] = '\0';
+                out = cjson_utils_sort(input, len, cs);
+            }
+            free(input);
+            if (out == NULL) { fprintf(stderr, "utils: parse error\n"); return 1; }
+            fputs(out, stdout);
+            free(out);
+            return 0;
+        }
     }
 
     if (strcmp(mode, "minify") == 0) {

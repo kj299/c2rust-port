@@ -157,7 +157,17 @@ pub fn run(mode: &str, input: &[u8]) -> (i32, Vec<u8>) {
         return (0, crate::minify(input));
     }
     if mode == "build" {
-        let variant = String::from_utf8_lossy(input).trim_end().to_string();
+        // Match the C driver's variant-name normalization EXACTLY: strip at most
+        // ONE trailing '\n' (the C's `if (input[len-1]=='\n') input[--len]='\0'`),
+        // then treat the name as a C string — `cjson_modes_build` compares it with
+        // strcmp, which stops at the first NUL. NOT a general `trim_end()` (that
+        // would also eat '\r'/space/tab and disagree with the C on a fuzzed name).
+        let mut name = input;
+        if name.last() == Some(&b'\n') {
+            name = &name[..name.len().saturating_sub(1)];
+        }
+        let end = name.iter().position(|&b| b == 0).unwrap_or(name.len());
+        let variant = String::from_utf8_lossy(&name[..end]);
         return match build_variant(&variant) {
             Some(root) => match crate::print_value(&root, false) {
                 Some(out) => (0, out),
@@ -168,6 +178,17 @@ pub fn run(mode: &str, input: &[u8]) -> (i32, Vec<u8>) {
     }
     if mode == "query" {
         return query(input);
+    }
+
+    // cJSON_Utils modes (JSON Pointer / Patch / Merge / Sort) — one dispatch,
+    // so the differential driver and the probe glue reach the same code
+    // (LESSONS #26). `-cs` selects the case-sensitive variant.
+    let base = mode.strip_suffix("-cs").unwrap_or(mode);
+    if matches!(
+        base,
+        "ptr" | "patch" | "merge" | "genmerge" | "genpatch" | "sort"
+    ) {
+        return crate::utils::run(mode, input);
     }
 
     let formatted = match mode {

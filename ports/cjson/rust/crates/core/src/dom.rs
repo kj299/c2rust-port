@@ -50,9 +50,16 @@ pub fn bool_value(b: bool) -> Value {
 // ---- accessors (cJSON_Get*/Has*) -------------------------------------------
 
 /// ASCII case-insensitive byte compare, cJSON.c:133 `case_insensitive_strcmp`
-/// via `tolower` — used by the case-insensitive object lookup.
+/// via `tolower` — used by the case-insensitive object lookup. Like the C, it is
+/// a C-string compare: both sides stop at the first NUL (a key `a\0b` matches
+/// `a`), consistent with the NUL-truncated string-value compare (`strcmp_eq`).
+/// LESSONS #29: key lookup once compared FULL bytes while values and printing
+/// truncated at NUL — a latent inconsistency that made `dup-eq` diverge on
+/// NUL-collapsing keys until this and `get_object_item` were made C-string too.
 fn eq_ci(a: &[u8], b: &[u8]) -> bool {
-    a.eq_ignore_ascii_case(b)
+    let ca = a.iter().position(|&x| x == 0).unwrap_or(a.len());
+    let cb = b.iter().position(|&x| x == 0).unwrap_or(b.len());
+    a[..ca].eq_ignore_ascii_case(&b[..cb])
 }
 
 /// cJSON.c:1869 `cJSON_GetArrayItem` — None if not an array or out of range.
@@ -75,7 +82,8 @@ pub fn get_object_item<'a>(v: &'a Value, name: &[u8], case_sensitive: bool) -> O
         .iter()
         .find(|(k, _)| {
             if case_sensitive {
-                k.as_slice() == name
+                // C-string compare (strcmp): both sides truncate at the first NUL.
+                strcmp_eq(k, name)
             } else {
                 eq_ci(k, name)
             }

@@ -31,7 +31,7 @@ echo "===== 1b. probe-then-port — transcripts pinned, tests generated ====="
 # fails closed on oracle drift, a tampered transcript, or a hand-edited/stale
 # generated test file. The generated tests themselves run under `cargo test`
 # in step 2.
-PROBE_SETS=(quirks plumbing builder)
+PROBE_SETS=(quirks plumbing builder utils)
 PROBE_FILES=()
 for set in "${PROBE_SETS[@]}"; do
   PROBE_FILES+=("$HERE/oracle/probes-$set.json")
@@ -105,6 +105,18 @@ echo "----- module 8 (ffi-builder): builder + query differentials -----"
     --matrix "$HERE/oracle/matrix-builder.json" --ledger "$HERE/DIVERGENCES.md" \
     --json > "$HERE/reports/ffi-builder.json"
 
+echo "----- module 9 (cJSON_Utils): pointer / patch / merge / sort differentials -----"
+# JSON Pointer (RFC 6901), Patch (6902), Merge-Patch (7396), object sort. The 3
+# utils-tilde-* rows in the matrix ASSERT the ledgered decode fix still diverges
+# from shipped cJSON; everything else matches byte-for-byte. One report, stamped
+# per utils module (the surface is shared, as with the scalar matrix above).
+"$PY" "$KIT/harnesses/differential/diff_run.py" \
+    --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
+    --matrix "$HERE/oracle/matrix-utils.json" --ledger "$HERE/DIVERGENCES.md" \
+    --json > "$HERE/reports/utils-pointer.json"
+cp "$HERE/reports/utils-pointer.json" "$HERE/reports/utils-patch.json"
+cp "$HERE/reports/utils-pointer.json" "$HERE/reports/utils-sort.json"
+
 echo "===== 4. diff-fuzz — differential fuzzing, Rust vs C ====="
 mkdir -p "$HERE/reports/fuzz"
 "$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
@@ -133,6 +145,39 @@ mkdir -p "$HERE/reports/fuzz"
     --json > "$HERE/reports/fuzz/ffi-builder.json"
 for m in scalar-parse string-parse buffer-plumbing recursive-core; do
   cp "$HERE/reports/fuzz/alloc-node.json" "$HERE/reports/fuzz/$m.json"
+done
+
+# module 9 (cJSON_Utils): fuzz all six modes. `patch` decodes a ~0/~1 escape in a
+# Patch child key CORRECTLY (the ledgered fix), so fuzzing it against the PRISTINE
+# oracle would rediscover that intentional divergence for every ~escaped key — a
+# predicate-defined divergence class is not a finite set to pin (LESSONS #28). So
+# `patch` fuzzes against a CORRECTED oracle (build_fixed.sh: pristine cJSON + the
+# one-line decode fix), where both sides decode correctly and any divergence is a
+# REAL port bug. The other five modes have no intentional divergence and fuzz
+# against the pristine oracle.
+bash "$HERE/oracle/build_fixed.sh" > /dev/null
+"$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
+    --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
+    --args ptr --matrix "$HERE/oracle/matrix-utils.json" \
+    --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
+    --json > "$HERE/reports/fuzz/utils-pointer.json"
+"$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
+    --oracle "$HERE/oracle/cjson_oracle_fixed" --rust "$RUST_DRIVER" \
+    --args patch --matrix "$HERE/oracle/matrix-utils.json" \
+    --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
+    --json > "$HERE/reports/fuzz/utils-patch.json"
+"$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
+    --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
+    --args sort --matrix "$HERE/oracle/matrix-utils.json" \
+    --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
+    --json > "$HERE/reports/fuzz/utils-sort.json"
+# merge / genmerge / genpatch share the utils-patch surface (RFC 6902/7396); run
+# them fail-closed — a finding exits nonzero and aborts under `set -e`.
+for um in merge genmerge genpatch; do
+  "$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
+      --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
+      --args "$um" --matrix "$HERE/oracle/matrix-utils.json" \
+      --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 > /dev/null
 done
 
 echo "===== 4b. sanitizers — miri (UB) + asan (FFI memory), toolchain-optional ====="
@@ -172,7 +217,7 @@ echo "===== 5. unsafe-audit over the rust workspace ====="
 mkdir -p "$HERE/reports/unsafe"
 "$PY" "$KIT/harnesses/unsafe-audit/audit_unsafe.py" "$HERE/rust/crates" --json \
     > "$HERE/reports/unsafe/alloc-node.json"
-for m in scalar-parse string-parse buffer-plumbing recursive-core dom entry-minify ffi-builder; do
+for m in scalar-parse string-parse buffer-plumbing recursive-core dom entry-minify ffi-builder utils-pointer utils-patch utils-sort; do
   cp "$HERE/reports/unsafe/alloc-node.json" "$HERE/reports/unsafe/$m.json"
 done
 
@@ -182,7 +227,7 @@ if [ "$SAN_RAN" = "1" ]; then
   # five rungs. A SKIP writes no report — and a report where nothing ran carries
   # an empty `modes_run`, which `progress.py` refuses. The claim can no longer
   # outlive the run that earned it.
-  for m in scalar-parse string-parse buffer-plumbing recursive-core dom entry-minify ffi-builder; do
+  for m in scalar-parse string-parse buffer-plumbing recursive-core dom entry-minify ffi-builder utils-pointer utils-patch utils-sort; do
     cp "$SAN_REPORT" "$HERE/reports/sanitize/$m.json"
   done
   echo "sanitizer reports emitted for every module"

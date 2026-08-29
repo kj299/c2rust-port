@@ -30,9 +30,32 @@ Format:
   assertion is architectural (no `cJSON_InitHooks` symbol will exist in the FFI
   crate).
 
-No output-level divergences yet: every ported module matches the C byte-for-byte
-(the `dom` module's Compare/Duplicate quirks — inf never equals itself, dup-keys
-never compare equal — are REPRODUCED, so they are matches, not divergences).
+- [x] `utils-tilde-add` [sha256:fc9bc27df6e4]: **JSON Patch mis-decodes a `~1` escape in a child key**
+  (CWE-707, improper neutralization → wrong-target write). `cJSON_Utils.c`'s
+  `decode_pointer_inplace` writes `decoded_string[1] = '/'` where `[0]` is meant,
+  so `add path:"/a~1b"` (RFC 6901: key `a/b`) builds the key `a~/` instead — a
+  patch silently lands on the wrong key, and the trailing byte is dropped. The
+  port decodes the child key correctly per RFC 6901 (`a/b`). JSON Pointer *get*
+  is already correct in the C — only the Patch decoder is broken. Confirmed by
+  probing v1.7.18; fixed and pinned in `utils::tests`.
+- [x] `utils-tilde-add0` [sha256:cd251cc8eac9]: same defect for the `~0` escape: `add path:"/a~0b"`
+  (key `a~b`) builds `a~0` in the C; the port builds `a~b`.
+- [x] `utils-tilde-remove` [sha256:2e225c9b006d]: the same mis-decode makes `remove`/`replace` of an
+  escaped-key path FAIL (the C returns status 13, document unchanged) because
+  the corrupted child key matches nothing; the port decodes correctly and
+  removes `a/b` (status 0). All three are one C defect
+  (`decode_pointer_inplace` writes `decoded_string[1]` where `[0]` is meant),
+  fixed once in the port's `decode_pointer_inplace`. That port function is
+  otherwise a faithful simulation of the C's in-place decoder: an INVALID escape
+  still yields the same partial/raw key, so only the `~0`/`~1` write diverges.
+  The separate GetPointer decoder (`decode_token`, mirroring `compare_pointers`)
+  was already correct in the C and is ported as-is.
+
+Beyond those three JSON-Patch escape fixes, every ported module matches the C
+byte-for-byte (the `dom` module's Compare/Duplicate quirks — inf never equals
+itself, dup-keys never compare equal — are REPRODUCED, so they are matches, not
+divergences; likewise every faithful cJSON_Utils behavior — non-recursive sort,
+NULL-key array permutation, the `test`/generate in-place sort side effect).
 
 ## Candidate divergences (anticipated in Phase 0/2 — decide when the module lands)
 

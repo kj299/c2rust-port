@@ -1,0 +1,266 @@
+{
+  "module": "utils",
+  "modules": [
+    "utils-pointer",
+    "utils-patch",
+    "utils-sort"
+  ],
+  "probes": [
+    {
+      "id": "ptr-key",
+      "args": [
+        "ptr"
+      ],
+      "stdin": "/a\n{\"a\":1,\"b\":2}",
+      "note": "pointer resolves an object key"
+    },
+    {
+      "id": "ptr-array",
+      "args": [
+        "ptr"
+      ],
+      "stdin": "/a/1\n{\"a\":[10,20,30]}",
+      "note": "array index segment"
+    },
+    {
+      "id": "ptr-empty",
+      "args": [
+        "ptr"
+      ],
+      "stdin": "\n{\"a\":1}",
+      "note": "empty pointer resolves the whole document"
+    },
+    {
+      "id": "ptr-missing",
+      "args": [
+        "ptr"
+      ],
+      "stdin": "/x\n{\"a\":1}",
+      "note": "a pointer to nothing yields `missing`"
+    },
+    {
+      "id": "ptr-esc-slash",
+      "args": [
+        "ptr"
+      ],
+      "stdin": "/a~1b\n{\"a/b\":9}",
+      "note": "GetPointer decodes ~1 as / CORRECTLY (only the Patch decoder is buggy)"
+    },
+    {
+      "id": "ptr-esc-tilde",
+      "args": [
+        "ptr"
+      ],
+      "stdin": "/a~0b\n{\"a~b\":9}",
+      "note": "GetPointer decodes ~0 as ~ correctly"
+    },
+    {
+      "id": "ptr-leading-zero",
+      "args": [
+        "ptr"
+      ],
+      "stdin": "/00\n[7,8]",
+      "note": "a leading-zero array index is rejected -> missing"
+    },
+    {
+      "id": "patch-replace",
+      "args": [
+        "patch"
+      ],
+      "stdin": "[{\"op\":\"replace\",\"path\":\"/x\",\"value\":9}]\n{\"x\":1}",
+      "note": "status=0 and the replaced document"
+    },
+    {
+      "id": "patch-remove",
+      "args": [
+        "patch"
+      ],
+      "stdin": "[{\"op\":\"remove\",\"path\":\"/x\"}]\n{\"x\":1,\"y\":2}",
+      "note": "remove drops the key"
+    },
+    {
+      "id": "patch-add",
+      "args": [
+        "patch"
+      ],
+      "stdin": "[{\"op\":\"add\",\"path\":\"/newkey\",\"value\":1}]\n{\"a\":0}",
+      "note": "add inserts a new key"
+    },
+    {
+      "id": "patch-add-append",
+      "args": [
+        "patch"
+      ],
+      "stdin": "[{\"op\":\"add\",\"path\":\"/arr/-\",\"value\":9}]\n{\"arr\":[1,2]}",
+      "note": "`-` appends to an array"
+    },
+    {
+      "id": "patch-add-index",
+      "args": [
+        "patch"
+      ],
+      "stdin": "[{\"op\":\"add\",\"path\":\"/arr/1\",\"value\":9}]\n{\"arr\":[1,2]}",
+      "note": "a numeric index inserts before that position"
+    },
+    {
+      "id": "patch-test-pass",
+      "args": [
+        "patch"
+      ],
+      "stdin": "[{\"op\":\"test\",\"path\":\"/x\",\"value\":1}]\n{\"x\":1}",
+      "note": "test succeeds -> status 0"
+    },
+    {
+      "id": "patch-test-fail",
+      "args": [
+        "patch"
+      ],
+      "stdin": "[{\"op\":\"test\",\"path\":\"/x\",\"value\":2}]\n{\"x\":1}",
+      "note": "test fails -> status 1, document unchanged"
+    },
+    {
+      "id": "patch-move",
+      "args": [
+        "patch"
+      ],
+      "stdin": "[{\"op\":\"move\",\"from\":\"/a\",\"path\":\"/b\"}]\n{\"a\":5}",
+      "note": "move detaches from `from` and adds at `path`"
+    },
+    {
+      "id": "patch-copy",
+      "args": [
+        "patch"
+      ],
+      "stdin": "[{\"op\":\"copy\",\"from\":\"/a\",\"path\":\"/b\"}]\n{\"a\":5}",
+      "note": "copy duplicates `from` to `path`"
+    },
+    {
+      "id": "patch-replace-root",
+      "args": [
+        "patch"
+      ],
+      "stdin": "[{\"op\":\"replace\",\"path\":\"\",\"value\":[1,2]}]\n{\"old\":1}",
+      "note": "an empty path replaces the whole document"
+    },
+    {
+      "id": "patch-malformed",
+      "args": [
+        "patch"
+      ],
+      "stdin": "[{\"op\":\"bogus\",\"path\":\"/x\"}]\n{\"x\":1}",
+      "note": "an unknown op -> status 3 (INVALID), document unchanged"
+    },
+    {
+      "id": "merge-null",
+      "args": [
+        "merge"
+      ],
+      "stdin": "{\"a\":null}\n{\"a\":1,\"b\":2}",
+      "note": "null removes a key"
+    },
+    {
+      "id": "merge-recursive",
+      "args": [
+        "merge"
+      ],
+      "stdin": "{\"a\":{\"c\":3}}\n{\"a\":{\"b\":2}}",
+      "note": "objects merge recursively"
+    },
+    {
+      "id": "merge-scalar",
+      "args": [
+        "merge"
+      ],
+      "stdin": "{\"a\":5}\n{\"a\":1}",
+      "note": "a scalar replaces"
+    },
+    {
+      "id": "merge-array",
+      "args": [
+        "merge"
+      ],
+      "stdin": "[1,2]\n{\"a\":1}",
+      "note": "a non-object patch replaces the whole target"
+    },
+    {
+      "id": "genmerge-diff",
+      "args": [
+        "genmerge"
+      ],
+      "stdin": "{\"a\":1,\"b\":2}\n{\"a\":1,\"c\":3}",
+      "note": "generate merge-patch: remove b (null), add c"
+    },
+    {
+      "id": "genmerge-same",
+      "args": [
+        "genmerge"
+      ],
+      "stdin": "{\"a\":1}\n{\"a\":1}",
+      "note": "identical -> null"
+    },
+    {
+      "id": "genpatch-scalar",
+      "args": [
+        "genpatch"
+      ],
+      "stdin": "{\"a\":1}\n{\"a\":2}",
+      "note": "generate patch: replace"
+    },
+    {
+      "id": "genpatch-add",
+      "args": [
+        "genpatch"
+      ],
+      "stdin": "{\"a\":1}\n{\"a\":1,\"b\":2}",
+      "note": "generate patch: add"
+    },
+    {
+      "id": "genpatch-array",
+      "args": [
+        "genpatch"
+      ],
+      "stdin": "[1,2,3]\n[1,9,3]",
+      "note": "generate patch over an array element"
+    },
+    {
+      "id": "sort-keys",
+      "args": [
+        "sort"
+      ],
+      "stdin": "{\"c\":3,\"a\":1,\"b\":2}",
+      "note": "immediate object keys sort"
+    },
+    {
+      "id": "sort-nonrecursive",
+      "args": [
+        "sort"
+      ],
+      "stdin": "{\"b\":1,\"a\":{\"z\":1,\"y\":2}}",
+      "note": "SortObject is NOT recursive: the nested object keeps z-before-y"
+    },
+    {
+      "id": "sort-array-noop",
+      "args": [
+        "sort"
+      ],
+      "stdin": "[{\"c\":1,\"a\":2}]",
+      "note": "sorting an array is a no-op (no keys to sort at the top; not recursive)"
+    },
+    {
+      "id": "sort-ci-default",
+      "args": [
+        "sort"
+      ],
+      "stdin": "{\"B\":1,\"a\":2}",
+      "note": "default sort is case-INsensitive: a sorts before B"
+    },
+    {
+      "id": "sort-cs",
+      "args": [
+        "sort-cs"
+      ],
+      "stdin": "{\"B\":1,\"a\":2}",
+      "note": "case-sensitive sort: uppercase B (0x42) sorts before a (0x61)"
+    }
+  ]
+}

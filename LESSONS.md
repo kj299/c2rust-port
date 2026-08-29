@@ -910,3 +910,101 @@ the emphasized half.
   ports/cjson/oracle/cjson_modes.c; harnesses/doc-check/check_lessons_pinned.py
   (extension list + self-test); PLAYBOOK · Phase 4 entry criteria;
   PROMPTS/10-module-port.md · step 0.
+
+---
+
+## 027. A shared driver's new branch corrupted the modes it didn't own
+
+- **Date:** 2026-08-29
+- **Codebase:** cJSON port, module 9 (`cJSON_Utils`) — found wiring the
+  pointer/patch/merge/sort driver modes
+- **What happened:** The differential driver is ONE binary dispatching every
+  mode. The new cJSON_Utils block split stdin on the first newline and wrote
+  `*nl = '\0'` to NUL-terminate the first field — but it did so *before*
+  checking whether the mode was actually a utils mode, and only the `sort`
+  branch restored the byte. So for every FALL-THROUGH mode
+  (minify/print/roundtrip/dup), any newline-bearing input reached the C library
+  truncated at the first newline: `print "a\nb"` made the *oracle* emit `"a"`
+  (the string value NUL-terminated mid-buffer) while the correct Rust emitted
+  `"a\nb"`. The oracle — the thing the port is measured against — was now wrong,
+  and the port "diverged" by being *right*. The matrix differential never caught
+  it (its vectors are newline-free compact JSON); nothing in the utils gates
+  could see it (utils modes behaved correctly). It surfaced only when the
+  PRE-EXISTING base modes were re-fuzzed after the shared driver changed: minify
+  found 25 divergences, the first at iteration 1. This is the LESSONS #26 shape
+  inverted — there a gate was blind to a NEW surface; here the newly-broken
+  surface was the OLD modes, corrupted by a new sibling mutating shared state
+  they depend on.
+- **Kit change:** `driver.c` computes `is_utils` from the mode name BEFORE
+  touching `input`, and only the utils branch splits — the fall-through modes
+  always see pristine bytes; a revert re-fails the base-mode diff-fuzz. Wired
+  into the prompt: after any change to the SHARED differential driver, re-run the
+  diff-fuzz of the PRE-EXISTING modes, not just the new one — a shared harness is
+  software whose new branch can break the old callers (the "test harness is
+  software with a hostile host" habit, extended from encoding/quoting to
+  cross-mode buffer state).
+- **Section amended:** ports/cjson/oracle/driver.c (`is_utils`-before-mutate);
+  PROMPTS/10-module-port.md · step 0 (shared-driver re-fuzz).
+
+## 028. A predicate-defined intentional divergence can't be pinned — fuzz against a corrected oracle
+
+- **Date:** 2026-08-29
+- **Codebase:** cJSON port, module 9 (`cJSON_Utils`), JSON Patch
+- **What happened:** The port intentionally FIXES a cJSON defect —
+  `decode_pointer_inplace` writes `decoded_string[1] = '/'` where `[0]` is meant,
+  so a Patch child key `a~1b` builds `a~/` instead of `a/b` (ledgered
+  `utils-tilde-*`, CWE-707). The matrix differential handles that with three
+  pinned rows. But differential FUZZING against the pristine oracle rediscovers
+  the divergence for EVERY `~`-escaped child key — an unbounded class, not a
+  finite set of fingerprints. Each witness looks like a fresh finding; the fuzzer
+  is a whack-a-mole that never goes green, because the divergence is
+  *predicate-defined* ("any input where a Patch key contains `~0`/`~1`") and a
+  predicate has infinitely many witnesses.
+- **Kit change:** the **corrected-fuzz-oracle** pattern. `make_fixed_utils.py`
+  regenerates `cJSON_Utils.c` with ONLY the one-line decode fix (the pristine
+  vendored source is never touched; the generated `.c` and its binary are
+  gitignored), and `build_fixed.sh` builds `cjson_oracle_fixed`. `check.sh`
+  fuzzes `patch` against THAT: both sides decode correctly, the intentional class
+  collapses to no-divergence, and any finding is a REAL port bug — which is
+  exactly how this port's invalid-escape decode, array-index terminator, and a
+  NUL-key bug were caught. The other five utils modes have no intentional
+  divergence and fuzz against pristine C. General rule, wired into the prompt:
+  when the port diverges from the oracle by a *predicate* (a fix-of-defect over a
+  whole input class), differential fuzzing needs a reference that shares the fix,
+  or it cannot tell the intentional class from a real bug.
+- **Section amended:** ports/cjson/oracle/make_fixed_utils.py;
+  ports/cjson/oracle/build_fixed.sh; ports/cjson/check.sh (module-9 diff-fuzz);
+  DIVERGENCES.md (`utils-tilde-*`); PROMPTS/10-module-port.md · step 2.
+
+## 029. C-string (NUL-truncation) semantics must hold at EVERY boundary, not most
+
+- **Date:** 2026-08-29
+- **Codebase:** cJSON port, modules 6 (`dom`) + 9 (`cJSON_Utils`)
+- **What happened:** cJSON stores keys and strings as C strings — every compare
+  (`strcmp`, `case_insensitive_strcmp`, `compare_pointers`, `compare_strings`)
+  and every print stops at the first NUL. The base port reproduced this for
+  string VALUES (`dom::compare` via `strcmp_eq`) and for PRINTING keys — but
+  object-KEY lookup (`get_object_item`) compared FULL bytes. So a key `a\0b` was
+  distinct from `a` for lookup/compare yet identical when printed: an internal
+  inconsistency, faithful in the visible half and divergent in the half no single
+  vector happened to probe. It stayed latent on `main` from the dom module until
+  fuzzing put NUL-bearing keys on the compared surface — `dup-eq` on
+  `{"a\0":1,"a":2}` said a value equals its duplicate (Rust `true`) while C said
+  `false`, and utils merge/genmerge/genpatch diverged wherever a NUL-collapsing
+  key appeared. The dedicated `dup-eq` mode COULD have shown it, but the base
+  fuzz never generated a NUL-collapsing dup key.
+- **Kit change:** NUL-truncation now applies at every key boundary —
+  `dom::get_object_item` (case-sensitive via `strcmp_eq`) and `dom::eq_ci`
+  (case-insensitive, truncating too), and `utils::key_matches` /
+  `utils::compare_keys` — so the port's key semantics ARE the C's C-string
+  semantics everywhere, not just at print; pinned by the `dup-eq` differential
+  and `utils::tests::keys_compare_nul_truncated`. A sibling defect fell out of
+  the same fuzzing: RFC-7396 null-merge calls `cJSON_DeleteItemFromObject`, which
+  removes only the FIRST matching key, but the port's `retain` removed ALL —
+  corrected to remove-first (`merge_null_removes_only_the_first_duplicate`).
+  Rule: when the source treats a datum as a C string, apply the NUL-truncation at
+  compare AND lookup AND print, or a single un-truncated boundary is a divergence
+  waiting for the one input that reaches it.
+- **Section amended:** ports/cjson/rust/crates/core/src/dom.rs (`get_object_item`,
+  `eq_ci`); ports/cjson/rust/crates/core/src/utils.rs (`key_matches`,
+  `compare_keys`, `merge_patch` delete-first).

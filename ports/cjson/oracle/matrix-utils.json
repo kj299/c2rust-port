@@ -1,0 +1,376 @@
+[
+  {
+    "name": "u-ptr-key",
+    "args": [
+      "ptr"
+    ],
+    "stdin": "/a\n{\"a\":1,\"b\":2}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-pointer"
+    ]
+  },
+  {
+    "name": "u-ptr-array",
+    "args": [
+      "ptr"
+    ],
+    "stdin": "/a/1\n{\"a\":[10,20,30]}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-pointer"
+    ]
+  },
+  {
+    "name": "u-ptr-empty",
+    "args": [
+      "ptr"
+    ],
+    "stdin": "\n{\"a\":1}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-pointer"
+    ]
+  },
+  {
+    "name": "u-ptr-missing",
+    "args": [
+      "ptr"
+    ],
+    "stdin": "/x\n{\"a\":1}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-pointer"
+    ]
+  },
+  {
+    "name": "u-ptr-esc-slash",
+    "args": [
+      "ptr"
+    ],
+    "stdin": "/a~1b\n{\"a/b\":9}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-pointer"
+    ]
+  },
+  {
+    "name": "u-ptr-esc-tilde",
+    "args": [
+      "ptr"
+    ],
+    "stdin": "/a~0b\n{\"a~b\":9}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-pointer"
+    ]
+  },
+  {
+    "name": "u-ptr-leadzero",
+    "args": [
+      "ptr"
+    ],
+    "stdin": "/00\n[7,8]",
+    "expect_rc": 0,
+    "mods": [
+      "utils-pointer"
+    ]
+  },
+  {
+    "name": "u-ptr-nested",
+    "args": [
+      "ptr"
+    ],
+    "stdin": "/a/b/0\n{\"a\":{\"b\":[5]}}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-pointer"
+    ]
+  },
+  {
+    "name": "u-patch-replace",
+    "args": [
+      "patch"
+    ],
+    "stdin": "[{\"op\":\"replace\",\"path\":\"/x\",\"value\":9}]\n{\"x\":1}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-patch"
+    ]
+  },
+  {
+    "name": "u-patch-remove",
+    "args": [
+      "patch"
+    ],
+    "stdin": "[{\"op\":\"remove\",\"path\":\"/x\"}]\n{\"x\":1,\"y\":2}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-patch"
+    ]
+  },
+  {
+    "name": "u-patch-add",
+    "args": [
+      "patch"
+    ],
+    "stdin": "[{\"op\":\"add\",\"path\":\"/n\",\"value\":1}]\n{\"a\":0}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-patch"
+    ]
+  },
+  {
+    "name": "u-patch-append",
+    "args": [
+      "patch"
+    ],
+    "stdin": "[{\"op\":\"add\",\"path\":\"/a/-\",\"value\":9}]\n{\"a\":[1,2]}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-patch"
+    ]
+  },
+  {
+    "name": "u-patch-index",
+    "args": [
+      "patch"
+    ],
+    "stdin": "[{\"op\":\"add\",\"path\":\"/a/1\",\"value\":9}]\n{\"a\":[1,2]}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-patch"
+    ]
+  },
+  {
+    "name": "u-patch-test-ok",
+    "args": [
+      "patch"
+    ],
+    "stdin": "[{\"op\":\"test\",\"path\":\"/x\",\"value\":1}]\n{\"x\":1}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-patch"
+    ]
+  },
+  {
+    "name": "u-patch-test-no",
+    "args": [
+      "patch"
+    ],
+    "stdin": "[{\"op\":\"test\",\"path\":\"/x\",\"value\":2}]\n{\"x\":1}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-patch"
+    ]
+  },
+  {
+    "name": "u-patch-move",
+    "args": [
+      "patch"
+    ],
+    "stdin": "[{\"op\":\"move\",\"from\":\"/a\",\"path\":\"/b\"}]\n{\"a\":5}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-patch"
+    ]
+  },
+  {
+    "name": "u-patch-copy",
+    "args": [
+      "patch"
+    ],
+    "stdin": "[{\"op\":\"copy\",\"from\":\"/a\",\"path\":\"/b\"}]\n{\"a\":5}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-patch"
+    ]
+  },
+  {
+    "name": "u-patch-root",
+    "args": [
+      "patch"
+    ],
+    "stdin": "[{\"op\":\"replace\",\"path\":\"\",\"value\":[1,2]}]\n{\"o\":1}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-patch"
+    ]
+  },
+  {
+    "name": "u-patch-bad-op",
+    "args": [
+      "patch"
+    ],
+    "stdin": "[{\"op\":\"nope\",\"path\":\"/x\"}]\n{\"x\":1}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-patch"
+    ]
+  },
+  {
+    "name": "u-patch-test-sort",
+    "args": [
+      "patch"
+    ],
+    "stdin": "[{\"op\":\"test\",\"path\":\"\",\"value\":{\"a\":1,\"b\":2}}]\n{\"b\":2,\"a\":1}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-patch"
+    ]
+  },
+  {
+    "name": "u-patch-root-remove",
+    "args": [
+      "patch"
+    ],
+    "stdin": "[{\"op\":\"remove\",\"path\":\"\"}]\n{\"x\":1}",
+    "expect_rc": 1,
+    "mods": [
+      "utils-patch"
+    ]
+  },
+  {
+    "name": "u-merge-null",
+    "args": [
+      "merge"
+    ],
+    "stdin": "{\"a\":null}\n{\"a\":1,\"b\":2}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-patch"
+    ]
+  },
+  {
+    "name": "u-merge-recur",
+    "args": [
+      "merge"
+    ],
+    "stdin": "{\"a\":{\"c\":3}}\n{\"a\":{\"b\":2}}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-patch"
+    ]
+  },
+  {
+    "name": "u-genmerge",
+    "args": [
+      "genmerge"
+    ],
+    "stdin": "{\"a\":1,\"b\":2}\n{\"a\":1,\"c\":3}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-patch"
+    ]
+  },
+  {
+    "name": "u-genpatch",
+    "args": [
+      "genpatch"
+    ],
+    "stdin": "{\"a\":1}\n{\"a\":2,\"b\":3}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-patch"
+    ]
+  },
+  {
+    "name": "u-genpatch-arr",
+    "args": [
+      "genpatch"
+    ],
+    "stdin": "[1,2,3]\n[1,9]",
+    "expect_rc": 0,
+    "mods": [
+      "utils-patch"
+    ]
+  },
+  {
+    "name": "u-sort-keys",
+    "args": [
+      "sort"
+    ],
+    "stdin": "{\"c\":3,\"a\":1,\"b\":2}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-sort"
+    ]
+  },
+  {
+    "name": "u-sort-nonrec",
+    "args": [
+      "sort"
+    ],
+    "stdin": "{\"b\":1,\"a\":{\"z\":1,\"y\":2}}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-sort"
+    ]
+  },
+  {
+    "name": "u-sort-array",
+    "args": [
+      "sort"
+    ],
+    "stdin": "[3,1,2]",
+    "expect_rc": 0,
+    "mods": [
+      "utils-sort"
+    ]
+  },
+  {
+    "name": "u-sort-dupkey",
+    "args": [
+      "sort"
+    ],
+    "stdin": "{\"a\":1,\"a\":2}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-sort"
+    ]
+  },
+  {
+    "name": "u-sort-cs",
+    "args": [
+      "sort-cs"
+    ],
+    "stdin": "{\"B\":1,\"a\":2}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-sort"
+    ]
+  },
+  {
+    "name": "utils-tilde-add",
+    "args": [
+      "patch"
+    ],
+    "stdin": "[{\"op\":\"add\",\"path\":\"/a~1b\",\"value\":42}]\n{}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-patch"
+    ]
+  },
+  {
+    "name": "utils-tilde-add0",
+    "args": [
+      "patch"
+    ],
+    "stdin": "[{\"op\":\"add\",\"path\":\"/a~0b\",\"value\":1}]\n{}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-patch"
+    ]
+  },
+  {
+    "name": "utils-tilde-remove",
+    "args": [
+      "patch"
+    ],
+    "stdin": "[{\"op\":\"remove\",\"path\":\"/a~1b\"}]\n{\"a/b\":1,\"x\":2}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-patch"
+    ]
+  }
+]

@@ -7,6 +7,9 @@
     "ffi-builder": "unsafe_audited",
     "recursive-core": "unsafe_audited",
     "scalar-parse": "unsafe_audited",
-    "string-parse": "unsafe_audited"
+    "string-parse": "unsafe_audited",
+    "utils-patch": "unsafe_audited",
+    "utils-pointer": "unsafe_audited",
+    "utils-sort": "unsafe_audited"
   }
 }

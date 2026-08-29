@@ -37,7 +37,11 @@ Then run every gate; each is a hard requirement before merge:
    entry point the module claims, adding driver modes where none can reach it.
    Where a probed behavior looks like a bug, that is a *decision* —
    reproduce it faithfully, or fix it and ledger the divergence — never a silent
-   cleanup.
+   cleanup. **The differential driver is one binary shared by every mode; a new
+   mode that mutates the input buffer (splitting, NUL-terminating) can corrupt
+   the modes it doesn't own** (LESSONS #27) — decide the dispatch BEFORE touching
+   `input`, and after any change to the shared driver re-run the diff-fuzz of the
+   PRE-EXISTING modes, not just the new one.
 
 1. **Port** into `core` (pure logic) or a safe wrapper in `sys` (if it touches
    FFI). Translate idioms safely: call-twice-for-size → growing `Vec` + length
@@ -48,7 +52,14 @@ Then run every gate; each is a hard requirement before merge:
    `python3 porting-kit/harnesses/differential/diff_run.py --oracle <c> --rust
    <rust> --matrix <m> --ledger DIVERGENCES.md`. A divergence is a TRIAGE: fix the
    Rust, OR — if the C was wrong — record the intentional fix in `DIVERGENCES.md`
-   (`- [x] <case>: <why + CWE>`). Never silently match a C bug.
+   (`- [x] <case>: <why + CWE>`). Never silently match a C bug. **If the fix
+   applies to a whole input CLASS (a predicate: "any ~-escaped Patch key"),
+   differential FUZZING against the pristine oracle rediscovers the intentional
+   divergence forever — an infinite class has no finite set of fingerprints to
+   pin** (LESSONS #28). Build a *corrected oracle* (the vendored C + only that
+   one fix, generated and gitignored — never edit the pristine source) and fuzz
+   the affected mode against it, so both sides share the fix and any finding is a
+   real port bug.
 3. **Fuzz** the input surface:
    `bash porting-kit/harnesses/fuzz/gen_fuzz_target.sh [MODULE] --crate <crate>`,
    then `cargo fuzz run [MODULE] -- -max_total_time=60`. Any panic/crash blocks.
