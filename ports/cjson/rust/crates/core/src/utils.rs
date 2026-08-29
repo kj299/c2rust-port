@@ -425,9 +425,15 @@ fn patch_op<'a>(patch: &'a Value, field: &[u8], cs: bool) -> Option<&'a Value> {
     dom::get_object_item(patch, field, cs)
 }
 
+/// A patch operation's string field (`op` / `path` / `from`) as the C sees it: a
+/// C string. cJSON stores these as `valuestring` (char*) and drives them through
+/// `strcmp`/`strrchr`/`strlen`, so they terminate at the first NUL. Truncate here
+/// so `path:"\0"` reads as the empty (root) path and `path:"/a/-\0"` as `/a/-`,
+/// matching the C — the LESSONS #29 C-string rule, on the patch-string boundary
+/// the key-compare fix didn't reach (found by high-budget diff-fuzz on `patch`).
 fn as_string(v: Option<&Value>) -> Option<&[u8]> {
     match v {
-        Some(Value::String(s)) => Some(s),
+        Some(Value::String(s)) => Some(nul_trunc(s)),
         _ => None,
     }
 }
@@ -836,11 +842,13 @@ pub fn run(mode: &str, input: &[u8]) -> (i32, Vec<u8>) {
 
     match base {
         "ptr" => {
-            // a = pointer, b = json
+            // a = pointer (a C string: `get_item_from_pointer` walks it byte by
+            // byte and stops at the first NUL, so `/a\0/b` is the pointer `/a`),
+            // b = json (parsed length-aware, NULs preserved). LESSONS #29.
             let Ok((doc, _)) = crate::parse_with_length(b) else {
                 return (1, Vec::new());
             };
-            match get_pointer(&doc, a, cs) {
+            match get_pointer(&doc, nul_trunc(a), cs) {
                 Some(v) => (0, print_or(v)),
                 None => (0, b"missing".to_vec()),
             }
@@ -992,6 +1000,36 @@ mod tests {
             (rc, String::from_utf8_lossy(&out).into_owned()),
             (0, "{\"a\":1}".into())
         );
+    }
+
+    // LESSONS #29 on the patch-string boundary: op/path/from are C strings, so a
+    // NUL truncates them. `path:"\0"` is the empty (root) path; `/a/-\0` is `/a/-`
+    // (array append). Found by high-budget diff-fuzz on `patch`.
+    #[test]
+    fn patch_path_is_nul_truncated() {
+        // path "\0" == empty path: replace with no "value" is status 7 (not 13)
+        let (rc, out) = run("patch", b"[{\"op\":\"replace\",\"path\":\"\x00\"}]\n\"\"");
+        assert_eq!(
+            (rc, String::from_utf8_lossy(&out).into_owned()),
+            (0, "status=7;\"\"".into())
+        );
+        // path "/a/-\0" == "/a/-": append to the array
+        let (rc, out) = run(
+            "patch",
+            b"[{\"op\":\"add\",\"path\":\"/a/-\x00\",\"value\":9}]\n{\"a\":[]}",
+        );
+        assert_eq!(
+            (rc, String::from_utf8_lossy(&out).into_owned()),
+            (0, "status=0;{\"a\":[9]}".into())
+        );
+    }
+
+    // LESSONS #29 on the GetPointer boundary: the pointer is a C string, so
+    // `/a\0/b` is the pointer `/a` — `get_item_from_pointer` stops at the NUL.
+    #[test]
+    fn pointer_is_nul_truncated() {
+        assert_eq!(run_ok("ptr", "/a\u{0}/b\n{\"a\":1}"), "1");
+        assert_eq!(run_ok("ptr", "/x\u{0}/y\n{\"x\":{\"y\":2}}"), "{\"y\":2}");
     }
 
     // The C's RFC-7396 null-merge calls cJSON_DeleteItemFromObject, which removes

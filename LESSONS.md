@@ -1004,7 +1004,17 @@ the emphasized half.
   corrected to remove-first (`merge_null_removes_only_the_first_duplicate`).
   Rule: when the source treats a datum as a C string, apply the NUL-truncation at
   compare AND lookup AND print, or a single un-truncated boundary is a divergence
-  waiting for the one input that reaches it.
+  waiting for the one input that reaches it. **A later HIGH-BUDGET fuzz pass
+  (25k iters × seeds, vs the gate's 2k) proved the "not most" thesis literally:
+  it found TWO more un-truncated boundaries the key fix hadn't reached — a JSON
+  Patch op's `op`/`path`/`from` (cJSON's `valuestring`, so `path:"\0"` is the
+  root path and `/a/-\0` is `/a/-`), and the GetPointer pointer itself
+  (`/a\0/b` is the pointer `/a`). Both are the same rule, one boundary at a
+  time; each was fixed at its single chokepoint (`as_string`, the `ptr` branch)
+  and pinned (`patch_path_is_nul_truncated`, `pointer_is_nul_truncated`). The
+  budget, not the technique, was the difference — a hardening pass earns its
+  keep.**
 - **Section amended:** ports/cjson/rust/crates/core/src/dom.rs (`get_object_item`,
   `eq_ci`); ports/cjson/rust/crates/core/src/utils.rs (`key_matches`,
-  `compare_keys`, `merge_patch` delete-first).
+  `compare_keys`, `merge_patch` delete-first, `as_string` op/path/from,
+  the `ptr` pointer).
