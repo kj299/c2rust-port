@@ -63,8 +63,15 @@ Then run every gate; each is a hard requirement before merge:
 3. **Fuzz** the input surface:
    `bash porting-kit/harnesses/fuzz/gen_fuzz_target.sh [MODULE] --crate <crate>`,
    then `cargo fuzz run [MODULE] -- -max_total_time=60`. Any panic/crash blocks.
+   Property tests add signal the differential can't (it only asserts Rust == C,
+   never that either is correct) — but a property is an ASSUMPTION, and when one
+   fails, first ask whether the C satisfies it: a faithful port must uphold the
+   oracle's real (quirky) invariant, not the spec's ideal, so restrict the
+   property's domain to where the C actually holds it rather than "fixing" the
+   port (LESSONS #30).
 4. **Sanitize:** `bash porting-kit/harnesses/sanitizers/run_sanitizers.sh miri .`
-   (and `asan`/`tsan` for the `sys` layer / threaded code).
+   (and `asan`/`lsan`/`tsan` for the `sys` layer / threaded code — `lsan` catches
+   FFI-boundary leaks; `tsan` only earns its cost with real threads).
 5. **Unsafe-audit:** `python3 porting-kit/harnesses/unsafe-audit/audit_unsafe.py
    crates/` — must report **0 undocumented**. Add a `// SAFETY:` to any block it
    flags.

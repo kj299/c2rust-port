@@ -1006,15 +1006,55 @@ the emphasized half.
   compare AND lookup AND print, or a single un-truncated boundary is a divergence
   waiting for the one input that reaches it. **A later HIGH-BUDGET fuzz pass
   (25k iters × seeds, vs the gate's 2k) proved the "not most" thesis literally:
-  it found TWO more un-truncated boundaries the key fix hadn't reached — a JSON
+  it found THREE more un-truncated boundaries the key fix hadn't reached — a JSON
   Patch op's `op`/`path`/`from` (cJSON's `valuestring`, so `path:"\0"` is the
-  root path and `/a/-\0` is `/a/-`), and the GetPointer pointer itself
-  (`/a\0/b` is the pointer `/a`). Both are the same rule, one boundary at a
-  time; each was fixed at its single chokepoint (`as_string`, the `ptr` branch)
-  and pinned (`patch_path_is_nul_truncated`, `pointer_is_nul_truncated`). The
-  budget, not the technique, was the difference — a hardening pass earns its
-  keep.**
+  root path and `/a/-\0` is `/a/-`), the GetPointer pointer itself (`/a\0/b` is
+  the pointer `/a`), and the GENERATED pointer path in genpatch
+  (`encode_string_as_pointer` is strlen-based, so a key `a\0` encodes to `a` and
+  a nested diff addresses `/a/`, not a NUL-bearing `/a` that drops its tail on
+  print). All the same rule, one boundary at a time; each fixed at its single
+  chokepoint (`as_string`, the `ptr` branch, `encode_pointer_segment`) and pinned
+  (`patch_path_is_nul_truncated`, `pointer_is_nul_truncated`,
+  `genpatch_encodes_nul_truncated_key_paths`). The budget, not the technique, was
+  the difference — a hardening pass earns its keep.**
 - **Section amended:** ports/cjson/rust/crates/core/src/dom.rs (`get_object_item`,
   `eq_ci`); ports/cjson/rust/crates/core/src/utils.rs (`key_matches`,
   `compare_keys`, `merge_patch` delete-first, `as_string` op/path/from,
-  the `ptr` pointer).
+  the `ptr` pointer, `encode_pointer_segment`).
+
+## 030. A property test encodes an ASSUMPTION — validate it against the oracle, not the spec
+
+- **Date:** 2026-08-29
+- **Codebase:** cJSON port, module 9 (`cJSON_Utils`), hardening pass
+- **What happened:** Property-based tests are the right tool to check what the
+  differential cannot — the differential only asserts Rust == C, never that
+  either is *correct*, so invariants like "minify is idempotent" and the RFC
+  round-trips (`patch(genpatch(a,b),a) ≈ b`, `merge(genmerge(a,b),a) ≈ b`) add
+  real signal. But each property is an ASSUMPTION, and for a *faithful* port the
+  invariant that must hold is the C's actual (quirky) behavior, not the spec's
+  ideal. Two "obviously true" properties were false:
+  (1) **sort idempotence** — `cJSONUtils_SortObject` permutes an ARRAY via a
+  NULL-key mergesort, so `sort(sort(arr)) != sort(arr)`; it is idempotent only on
+  distinct-key OBJECTS. (2) **RFC-7396 merge round-trip** — cJSON's `genmerge`
+  SORTS keys case-insensitively but DIFFS them with a hardcoded case-sensitive
+  `strcmp` (cJSON_Utils.c:1423), while `merge` applies case-insensitively, so the
+  round-trip is genuinely ill-defined for a mixed-case key set like `{"Z","aa"}`
+  — the C doesn't round-trip it either. Both failures were the TEST's bug, not
+  the port's; but chasing them is what surfaced the genmerge case quirk (and, in
+  the same pass, real port bugs — see #29). A property that bakes in the spec's
+  ideal instead of the oracle's behavior fails on the port's faithful quirks and
+  cries wolf.
+- **Kit change:** the generator restricts each property to the domain where its
+  invariant is actually well-defined — sort idempotence to top-level distinct-key
+  objects, the merge round-trip to an all-lowercase key pool whose
+  case-insensitive order equals its case-sensitive order — with a comment at each
+  restriction naming the quirk that forces it. Reconstruction is checked by
+  `dom::compare` (order-independent), not byte equality, so a legitimate
+  key reordering is not a false failure. Discipline, wired into the prompt: when
+  a property fails, first ask whether the C satisfies it — if not, the property
+  is wrong (tighten its domain or weaken its claim to the C's real invariant),
+  not the port. Faithful quirks the properties now encode are noted in
+  DIVERGENCES.md (genmerge's case-sensitive diff under a case-insensitive sort).
+- **Section amended:** ports/cjson/rust/crates/core/tests/properties.rs
+  (domain restrictions + `dom::compare` reconstruction); PROMPTS/10-module-port.md
+  (validate a failing property against the oracle before the port).

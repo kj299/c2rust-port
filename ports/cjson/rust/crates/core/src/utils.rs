@@ -631,6 +631,15 @@ fn merge_patch(target: Option<Value>, patch: &Value, cs: bool) -> Value {
 
 // ---- Generate Merge-Patch --------------------------------------------------
 
+/// Two cJSON quirks are faithful here, both found by high-budget diff-fuzz on
+/// `genmerge`:
+///   * the key DIFF is a hardcoded case-SENSITIVE `strcmp` (cJSON_Utils.c:1423),
+///     independent of `cs` — so with the default (case-insensitive) genmerge the
+///     children are SORTED case-insensitively but DIFFED case-sensitively, and
+///     `{"a":1}` vs `{"A":2}` yields `{"A":2,"a":null}`, not a value change; and
+///   * the recursion (cJSON_Utils.c:1455) calls the public *case-insensitive*
+///     `cJSONUtils_GenerateMergePatch`, so a nested diff is ALWAYS case-
+///     insensitive even under `...GenerateMergePatchCaseSensitive`.
 fn generate_merge_patch(from: &mut Value, to: &mut Value, cs: bool) -> Option<Value> {
     if !matches!(to, Value::Object(_)) || !matches!(from, Value::Object(_)) {
         return Some(to.clone());
@@ -646,7 +655,8 @@ fn generate_merge_patch(from: &mut Value, to: &mut Value, cs: bool) -> Option<Va
     while i < fe.len() || j < te.len() {
         let diff = if i < fe.len() {
             if j < te.len() {
-                compare_keys(Some(&fe[i].0), Some(&te[j].0), cs)
+                // hardcoded strcmp (case-sensitive), NOT `cs` — the C's line 1423.
+                compare_keys(Some(&fe[i].0), Some(&te[j].0), true)
             } else {
                 -1
             }
@@ -661,8 +671,9 @@ fn generate_merge_patch(from: &mut Value, to: &mut Value, cs: bool) -> Option<Va
             j = j.saturating_add(1);
         } else {
             if !compare_json(&mut fe[i].1.clone(), &mut te[j].1.clone(), cs) {
+                // the C recurses through the public case-INsensitive entry (:1455).
                 if let Some(sub) =
-                    generate_merge_patch(&mut fe[i].1.clone(), &mut te[j].1.clone(), cs)
+                    generate_merge_patch(&mut fe[i].1.clone(), &mut te[j].1.clone(), false)
                 {
                     patch.push((te[j].0.clone(), sub));
                 }
@@ -681,6 +692,11 @@ fn generate_merge_patch(from: &mut Value, to: &mut Value, cs: bool) -> Option<Va
 // ---- Generate Patches (RFC 6902) -------------------------------------------
 
 fn encode_pointer_segment(s: &[u8]) -> Vec<u8> {
+    // The C's `encode_string_as_pointer` / `pointer_encoded_length` walk the key
+    // as a C string (strlen-based), so a key `a\0b` encodes as `a` — truncate at
+    // the first NUL before escaping (LESSONS #29). Without this the raw NUL rides
+    // into the generated path and drops every following segment when it prints.
+    let s = nul_trunc(s);
     let mut out = Vec::with_capacity(s.len());
     for &c in s {
         match c {
@@ -1030,6 +1046,32 @@ mod tests {
     fn pointer_is_nul_truncated() {
         assert_eq!(run_ok("ptr", "/a\u{0}/b\n{\"a\":1}"), "1");
         assert_eq!(run_ok("ptr", "/x\u{0}/y\n{\"x\":{\"y\":2}}"), "{\"y\":2}");
+    }
+
+    // generate_merge_patch DIFFS keys with a hardcoded case-sensitive strcmp
+    // (cJSON_Utils.c:1423) even under the case-INsensitive default: `a` and `A`
+    // are distinct, so `{"a":1}` -> `{"A":2}` is delete-a + add-A, not a change.
+    #[test]
+    fn genmerge_diffs_keys_case_sensitively() {
+        assert_eq!(
+            run_ok("genmerge", "{\"a\":1}\n{\"A\":2,\"\":3}"),
+            "{\"\":3,\"A\":2,\"a\":null}"
+        );
+    }
+
+    // LESSONS #29 on the generated-path boundary: encode_string_as_pointer is
+    // strlen-based, so a key `a\0` encodes to `a` — a nested diff then addresses
+    // `/a/`, not `/a` (the raw NUL would otherwise drop the tail on print).
+    #[test]
+    fn genpatch_encodes_nul_truncated_key_paths() {
+        let (rc, out) = run("genpatch", b"{\"a\x00\":{\"\":3}}\n{\"a\":{\"\":2}}");
+        assert_eq!(
+            (rc, String::from_utf8_lossy(&out).into_owned()),
+            (
+                0,
+                "[{\"op\":\"replace\",\"path\":\"/a/\",\"value\":2}]".into()
+            )
+        );
     }
 
     // The C's RFC-7396 null-merge calls cJSON_DeleteItemFromObject, which removes

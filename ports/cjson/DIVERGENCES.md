@@ -55,7 +55,10 @@ Beyond those three JSON-Patch escape fixes, every ported module matches the C
 byte-for-byte (the `dom` module's Compare/Duplicate quirks — inf never equals
 itself, dup-keys never compare equal — are REPRODUCED, so they are matches, not
 divergences; likewise every faithful cJSON_Utils behavior — non-recursive sort,
-NULL-key array permutation, the `test`/generate in-place sort side effect).
+NULL-key array permutation, the `test`/generate in-place sort side effect, and
+`generate_merge_patch`'s case-SENSITIVE key diff under a case-INsensitive sort
+(`cJSON_Utils.c:1423` hardcodes `strcmp`, and its recursion at `:1455` is always
+case-insensitive) — all reproduced, so they are matches, not divergences).
 
 ## Candidate divergences (anticipated in Phase 0/2 — decide when the module lands)
 

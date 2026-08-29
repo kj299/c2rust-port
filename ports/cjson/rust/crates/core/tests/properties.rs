@@ -63,9 +63,18 @@ fn gen_string(rng: &mut Rng) -> Vec<u8> {
 }
 
 /// Distinct object keys (so merge/patch reconstruction is unambiguous), drawn in
-/// varied order so `sort` actually has work to do.
-fn gen_keys(rng: &mut Rng, n: usize) -> Vec<Vec<u8>> {
-    let mut pool: Vec<Vec<u8>> = [&b"a"[..], b"b", b"c", b"d", b"M", b"Z", b"aa", b"k9"]
+/// varied order so `sort` actually has work to do. `lower` picks an all-lowercase
+/// pool whose case-insensitive order equals its case-sensitive order — required
+/// wherever a property depends on genmerge/merge agreeing, because cJSON's
+/// genmerge SORTS case-insensitively but DIFFS case-sensitively (a faithful
+/// quirk), so a mixed-case key set like {"Z","aa"} makes the merge round-trip
+/// genuinely ill-defined (the C doesn't round-trip it either). LESSONS #30: a
+/// property encodes an assumption — restrict it to the domain where the ORACLE's
+/// actual behavior upholds it, not the spec's ideal.
+fn gen_keys(rng: &mut Rng, n: usize, lower: bool) -> Vec<Vec<u8>> {
+    let mixed: &[&[u8]] = &[b"a", b"b", b"c", b"d", b"M", b"Z", b"aa", b"k9"];
+    let lowr: &[&[u8]] = &[b"a", b"b", b"c", b"d", b"e", b"f", b"g", b"h"];
+    let mut pool: Vec<Vec<u8>> = if lower { lowr } else { mixed }
         .iter()
         .map(|s| s.to_vec())
         .collect();
@@ -79,7 +88,7 @@ fn gen_keys(rng: &mut Rng, n: usize) -> Vec<Vec<u8>> {
     pool
 }
 
-fn gen_value(rng: &mut Rng, depth: u32, allow_null: bool) -> Value {
+fn gen_value(rng: &mut Rng, depth: u32, allow_null: bool, lower: bool) -> Value {
     let arms = if depth == 0 { 5 } else { 7 };
     match rng.below(arms) {
         0 => {
@@ -97,16 +106,16 @@ fn gen_value(rng: &mut Rng, depth: u32, allow_null: bool) -> Value {
             let n = rng.below(4);
             Value::Array(
                 (0..n)
-                    .map(|_| gen_value(rng, depth - 1, allow_null))
+                    .map(|_| gen_value(rng, depth - 1, allow_null, lower))
                     .collect(),
             )
         }
         _ => {
             let n = rng.below(4) as usize;
-            let keys = gen_keys(rng, n);
+            let keys = gen_keys(rng, n, lower);
             Value::Object(
                 keys.into_iter()
-                    .map(|k| (k, gen_value(rng, depth - 1, allow_null)))
+                    .map(|k| (k, gen_value(rng, depth - 1, allow_null, lower)))
                     .collect(),
             )
         }
@@ -128,7 +137,7 @@ fn framed(a: &[u8], b: &[u8]) -> Vec<u8> {
 fn minify_is_idempotent() {
     let mut rng = Rng(0xDEAD_BEEF);
     for _ in 0..3000 {
-        let s = json_of(&gen_value(&mut rng, 4, true));
+        let s = json_of(&gen_value(&mut rng, 4, true, false));
         let once = run("minify", &s).1;
         let twice = run("minify", &once).1;
         assert_eq!(
@@ -144,7 +153,7 @@ fn minify_is_idempotent() {
 fn roundtrip_is_stable_and_prints_canonically() {
     let mut rng = Rng(0x0000_1234);
     for _ in 0..3000 {
-        let s = json_of(&gen_value(&mut rng, 4, true));
+        let s = json_of(&gen_value(&mut rng, 4, true, false));
         let (rc, once) = run("roundtrip", &s);
         assert_eq!(rc, 0);
         // the port's own printout already IS canonical: parsing+reprinting is a no-op.
@@ -164,11 +173,11 @@ fn sort_object_is_idempotent_and_ordered() {
     let mut rng = Rng(0x00AB_CDEF);
     for _ in 0..3000 {
         let n = rng.below(4) as usize + 1;
-        let keys = gen_keys(&mut rng, n);
+        let keys = gen_keys(&mut rng, n, false);
         let obj = Value::Object(
             keys.iter()
                 .cloned()
-                .map(|k| (k, gen_value(&mut rng, 3, true)))
+                .map(|k| (k, gen_value(&mut rng, 3, true, false)))
                 .collect(),
         );
         let s = json_of(&obj);
@@ -204,8 +213,8 @@ fn merge_patch_round_trips() {
     // (a JSON null in b is indistinguishable from a delete in a merge patch).
     let mut rng = Rng(0x9999_0001);
     for _ in 0..3000 {
-        let a = json_of(&gen_value(&mut rng, 3, false));
-        let b = json_of(&gen_value(&mut rng, 3, false));
+        let a = json_of(&gen_value(&mut rng, 3, false, true));
+        let b = json_of(&gen_value(&mut rng, 3, false, true));
         let (rc, patch) = run("genmerge", &framed(&a, &b));
         assert_eq!(rc, 0);
         // no-diff → the C emits "null" (not {}); that case can't round-trip, and
@@ -239,8 +248,8 @@ fn json_patch_round_trips() {
     // RFC 6902: applying genpatch(a,b) to a reconstructs b (any values, incl. nulls).
     let mut rng = Rng(0x5150_0007);
     for _ in 0..3000 {
-        let a = json_of(&gen_value(&mut rng, 3, true));
-        let b = json_of(&gen_value(&mut rng, 3, true));
+        let a = json_of(&gen_value(&mut rng, 3, true, false));
+        let b = json_of(&gen_value(&mut rng, 3, true, false));
         let (rc, patch) = run("genpatch", &framed(&a, &b));
         assert_eq!(rc, 0);
         let (rc2, out) = run("patch", &framed(&patch, &a));
