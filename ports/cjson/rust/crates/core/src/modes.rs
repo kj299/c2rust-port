@@ -7,6 +7,11 @@
 //! call) — so the two could drift and the tests would then be measuring
 //! something the differential does not.
 //!
+//! The `build`/`query` modes exist for LESSONS #26: a gate judges only the
+//! surface the driver exposes, and until they landed the builder/query/accessor
+//! API was off the compared contract entirely — which is how `get_array_size`
+//! shipped wrong through six green gates.
+//!
 //! The kit's own principle is that fidelity lives in exactly one place
 //! (`RETROSPECTIVE-kit-v1.md` §2, "shared fidelity as architecture": extracting
 //! `compare_one` meant four gates share one verdict). This module is that place

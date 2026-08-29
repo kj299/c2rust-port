@@ -31,7 +31,11 @@ Then run every gate; each is a hard requirement before merge:
    and hand-edits to the generated file — **and `probe.py coverage --probes
    <files> --progress progress.json`, so a module nobody probed is red rather
    than invisible** (LESSONS #23). Tag each probes file with the `modules: [...]`
-   it decides. Where a probed behavior looks like a bug, that is a *decision* —
+   it decides. **Check the driver's modes against the module's PUBLIC API, not
+   just its pipeline** (LESSONS #26): the differential judges only the surface
+   the driver exposes, and an accessor no mode calls is ungated — probe every
+   entry point the module claims, adding driver modes where none can reach it.
+   Where a probed behavior looks like a bug, that is a *decision* —
    reproduce it faithfully, or fix it and ledger the divergence — never a silent
    cleanup.
 

@@ -90,8 +90,9 @@ pub fn get_object_item<'a>(v: &'a Value, name: &[u8], case_sensitive: bool) -> O
 /// This was written as "array length, else 0" from reasoning about the name, and
 /// the C refuted it the first time a probe called it on an object
 /// (`{"a":{"b":1}}` → `size=1`). Nothing caught it for six gates because no
-/// driver mode exercised the accessor — the differential can only compare what
-/// the driver exposes (LESSONS #17/#21: the C is a spec only the oracle reads).
+/// driver mode exercised the accessor — a gate judges only the surface the
+/// driver exposes (LESSONS #26; pinned by the generated `probe_query_object`),
+/// and the C stays a spec only the oracle can read (LESSONS #17/#21).
 #[must_use]
 pub fn get_array_size(v: &Value) -> usize {
     match v {

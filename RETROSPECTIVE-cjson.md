@@ -141,6 +141,17 @@ that exists, "the C is a spec only the oracle can read" is a habit, not a gate.
   (a caller reading `item->valueint` directly) and the full `Add*`/`Get*` builder
   surface over FFI are unported. The safe-Rust implementations exist in
   `crates/core`; exposing them is mechanical, not conceptual.
+  > **Superseded — 2026-08-29.** Module 8 (`ffi-builder`) landed: the builder,
+  > query, predicate, and struct-field surface are ported and gated (8/8
+  > modules DONE — probes, differential, ABI `lib_diff`, fuzz, miri+asan,
+  > unsafe-audit). "Mechanical, not conceptual" was **wrong in an instructive
+  > way**: probing the "mechanical" surface refuted four reasoned guesses
+  > (dup-keys append; `Add*(…, NULL)` silently ignored; `valueint`
+  > truncates/saturates; `IsTrue`∧`IsBool`) and exposed a real divergence that
+  > six green gates had shipped — `GetArraySize` counts any node's children,
+  > and the port said 0 for objects because **no driver mode ever called the
+  > accessor**. A gate judges only the surface the driver exposes → LESSONS
+  > #26. The remainder below shrinks to `cJSON_Utils` alone.
 - `cJSON_Utils` (JSON-Pointer/Patch/Merge, 1481 LOC) was out of scope throughout.
 - **asan/ubsan** were not run (miri was). The `sanitized` gate is honest about
   what it verified: miri over the FFI + core.

@@ -869,3 +869,44 @@ the emphasized half.
 - **Section amended:** harnesses/gate-mutation/mutate_gates.py (`coverage_gaps` +
   self-test); harnesses/fuzz/gen_fuzz_target.sh; harnesses/supply-chain/run_supply_chain.sh;
   harnesses/skeleton-check/check_skeleton.sh; RETROSPECTIVE-probe-harness.md · §6.
+
+---
+
+## 026. A gate judges only the surface the driver exposes
+
+- **Date:** 2026-08-29
+- **Codebase:** cJSON port, module 8 (`ffi-builder`) — found while porting the
+  builder/query surface
+- **What happened:** `cJSON_GetArraySize` counts a node's CHILDREN whatever the
+  node is — the C walks `child`/`next`, so an *object* reports its member count.
+  The port's version said "array length, else 0", written from reasoning about
+  the function's name — and it shipped through **all six gates** and sat on
+  `main` at cutover, fully ticked, with the divergence live. Nothing caught it
+  because no differential driver mode ever *called* the accessor: the driver
+  exposed parse/print/minify/dup pipelines, so "the differential is 79/79 green"
+  was a statement about those pipelines, not about the API the module claims.
+  The probe harness caught it the moment module 8's `query` mode put the
+  accessor on the observable surface (`{"a":{"b":1}}` → C says `size=1`).
+  This is the kit's characteristic bug at a **sixth altitude**: after the
+  verdict (#6), the input (#14/#18/#20), the wiring (#23), the tool inventory
+  (#22), and inherited state (#24) — now the *observable surface itself*. A
+  gate hardened against everything it can see says nothing about what it was
+  never shown.
+- **Kit change:** module 8's `build`/`query` driver modes put the builder,
+  query, predicate, and struct-field surface on the compared contract, each
+  side implemented ONCE (`crates/core/src/modes.rs`, `oracle/cjson_modes.c`)
+  so the executable and ABI tests cannot drift; the fix is pinned by the
+  generated `probe_query_object` test (reverting it goes red — verified).
+  Discipline, wired into the prompts: PLAYBOOK Phase 4 and PROMPTS/10 step 0
+  now require the module's driver modes to cover **every public entry point
+  the module claims** before the module may advance — an accessor the driver
+  cannot reach is ungated, whatever the matrix says. And the lessons-pinned
+  gate itself grew with this entry: its extension list knew only `.py/.sh/.yml`,
+  so a lesson amending a port's Rust or C — like this one — was checked by
+  nothing (the extension-list twin of the `ports/` prefix gap, LESSONS #19);
+  `.rs/.c/.h` are now extracted and enforced, with negative fixtures.
+- **Section amended:** ports/cjson/rust/crates/core/src/dom.rs
+  (`get_array_size`); ports/cjson/rust/crates/core/src/modes.rs;
+  ports/cjson/oracle/cjson_modes.c; harnesses/doc-check/check_lessons_pinned.py
+  (extension list + self-test); PLAYBOOK · Phase 4 entry criteria;
+  PROMPTS/10-module-port.md · step 0.
