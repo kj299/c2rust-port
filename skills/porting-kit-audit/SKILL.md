@@ -10,6 +10,15 @@ Nothing here is optional for a "safe" verdict; a module that compiles and matche
 oracle is at gate 2 of 6, not done.
 
 ## Procedure — run each gate, collect results
+
+0. **Every declared control actually RUNS** (do this first — it decides whether
+   the rest of this list is even being executed):
+   `python3 porting-kit/harnesses/control-coverage/check_controls.py --controls
+   porting-kit/CLAUDE.md --gate <port>/check.sh` → must be 0 unwired.
+   At the cJSON cutover three of six controls below — supply-chain, c-flaw-scan
+   and threat-model, two of them "hard fail" — were in this list and in the
+   mutation sweep, yet the port's gate script never called any of them
+   (LESSONS #31). Reading a gate script cannot show you an absence; ask the tool.
 1. **Unsafe contained + documented** (toolchain-free hard gate):
    `python3 porting-kit/harnesses/unsafe-audit/audit_unsafe.py crates/`  → must be 0
    undocumented. (On a real backend this found 51/131 undocumented — exactly what a

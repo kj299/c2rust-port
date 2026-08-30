@@ -1100,10 +1100,17 @@ the emphasized half.
   supply-chain is wired toolchain-optional like the sanitizers — a missing
   `cargo-audit` prints a loud SKIP every run instead of being invisible, and no
   `|| true` softens the harness's verdict when the tools are present.
+  **And the fix is made to compound:** the kit shipped no gate template at all,
+  which is *why* each port assembled `check.sh` by hand and cJSON's came out
+  three controls short. `skeleton/check.sh` is now a fail-closed template with
+  every control already wired (its port-specific blocks `exit 2` until filled in,
+  rather than skipping quietly), and `make check-kit` runs control-coverage
+  against that template, so the thing every future port copies cannot drift out
+  of compliance.
 - **Section amended:** harnesses/control-coverage/check_controls.py (new);
   harnesses/gate-mutation/mutate_gates.py (20th entry);
-  ports/cjson/check.sh (steps 0/0b/5b); CLAUDE.md · gate table;
-  ports/cjson/FLAW-SCAN.md · scope + the 8 utils sinks.
+  ports/cjson/check.sh (steps 0/0b/5b); skeleton/check.sh (new template);
+  CLAUDE.md · gate table; ports/cjson/FLAW-SCAN.md · scope + the 8 utils sinks.
 
 ## 032. A self-scheduled check-in freezes your unverified claim into a premise
 
@@ -1143,3 +1150,38 @@ the emphasized half.
   The stale claim itself is corrected in place with a dated note (never a silent
   rewrite) on PR #26.
 - **Section amended:** PROMPTS/90-retrospective.md · step 0.
+
+## 033. A fuzz budget is a regression floor, not evidence of sufficiency
+
+- **Date:** 2026-08-30
+- **Codebase:** cJSON port, module 9 (`cJSON_Utils`) — read off this port's own
+  commit sequence, the artifact the retrospective says carries the most signal
+- **What happened:** `9b999d2` landed module 9 and declared **"11/11 DONE"** with
+  all six gates green — differential clean, diff-fuzz clean, miri/asan clean,
+  unsafe-audit clean, every rung re-earned from that run's own reports. The two
+  commits that follow it are `11f2a9a` and `4e28943`, and between them they fix
+  **four real divergences from the C**: NUL-truncation of a Patch op's
+  `op`/`path`/`from`, of the GetPointer pointer, and of a generated pointer path,
+  plus `generate_merge_patch`'s hardcoded case-sensitive key diff. Every one was
+  a genuine fidelity bug in already-"DONE" code, and **not one was reachable at
+  the gate's budget**: `check.sh` fuzzes each mode for 2000 iterations, and all
+  four needed ~25 000 across two seeds. The gate was not wrong; its *sufficiency*
+  was simply never examined. The budget is a single constant applied uniformly to
+  every mode, so `minify` (one document, no grammar) and `patch` (two documents,
+  a pointer grammar, an op grammar, six modes, a case-sensitivity axis) get
+  identical effort — and "DONE" ends up meaning "clean at whatever 2000 iterations
+  happened to reach". Worse, the four bugs surfaced only because a hardening pass
+  was requested; **no kit rule required one**, so on any other day the port ships
+  with them and the ledger says six-of-six.
+- **Kit change:** `PROMPTS/10-module-port.md` step 3 now states the rule: the
+  gate's iteration count is a **regression floor** that keeps a fixed budget cheap
+  in CI, *not* the evidence that a module is done. Before a module may be called
+  DONE it must survive at least one **high-budget sweep — ≥10× the gate budget,
+  ≥2 seeds, every mode** — with zero findings, and the budget must be argued from
+  the module's actual input space (modes × framing × grammars), not inherited from
+  the module before it. **Stated honestly: this is a discipline, not yet a gate.**
+  Nothing mechanically refuses a `DONE` that never ran the sweep — making the
+  sweep a recorded rung (like `sanitized`, which advances only from a stamped
+  report) is the next port's target, and is exactly the shape LESSONS #24 used to
+  stop `sanitized` being hand-set.
+- **Section amended:** PROMPTS/10-module-port.md · step 3 (fuzz budget).

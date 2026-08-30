@@ -69,6 +69,16 @@ Then run every gate; each is a hard requirement before merge:
    oracle's real (quirky) invariant, not the spec's ideal, so restrict the
    property's domain to where the C actually holds it rather than "fixing" the
    port (LESSONS #30).
+   **The gate's iteration count is a regression FLOOR, not proof of sufficiency**
+   (LESSONS #33). A fixed budget is what keeps CI cheap; it is not what makes a
+   module done. cJSON module 9 was declared DONE with six green gates and the next
+   two commits fixed four real divergences, none reachable at the gate's 2000
+   iterations and all found at 25 000 across two seeds. So before calling a module
+   DONE: run a **high-budget sweep — ≥10× the gate budget, ≥2 seeds, every mode —
+   with zero findings**, and argue the budget from the module's actual input space
+   (modes × framing × grammars) instead of inheriting the previous module's
+   number. A module whose surface is many times larger than its neighbour's must
+   not get the same effort by default.
 4. **Sanitize:** `bash porting-kit/harnesses/sanitizers/run_sanitizers.sh miri .`
    (and `asan`/`lsan`/`tsan` for the `sys` layer / threaded code — `lsan` catches
    FFI-boundary leaks; `tsan` only earns its cost with real threads).

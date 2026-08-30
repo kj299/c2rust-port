@@ -15,6 +15,8 @@ check-kit:
 	@echo "== golden ==";           $(PY) $(H)/golden/golden.py --self-test
 	@echo "== c-flaw-scan ==";      $(PY) $(H)/c-flaw-scan/scan_c_flaws.py --self-test
 	@echo "== control-coverage =="; $(PY) $(H)/control-coverage/check_controls.py --self-test
+	@echo "== control-coverage: the shipped gate TEMPLATE must wire every control =="; \
+	  $(PY) $(H)/control-coverage/check_controls.py --controls CLAUDE.md --gate skeleton/check.sh
 	@echo "== diff-fuzz ==";        $(PY) $(H)/diff-fuzz/diff_fuzz.py --self-test
 	@echo "== probe ==";            $(PY) $(H)/probe/probe.py --self-test
 	@echo "== perf-gate ==";        $(PY) $(H)/perf/perf_gate.py --self-test
