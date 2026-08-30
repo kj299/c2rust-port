@@ -14,6 +14,7 @@ check-kit:
 	@echo "== diff_run ==";         $(PY) $(H)/differential/diff_run.py --self-test
 	@echo "== golden ==";           $(PY) $(H)/golden/golden.py --self-test
 	@echo "== c-flaw-scan ==";      $(PY) $(H)/c-flaw-scan/scan_c_flaws.py --self-test
+	@echo "== control-coverage =="; $(PY) $(H)/control-coverage/check_controls.py --self-test
 	@echo "== diff-fuzz ==";        $(PY) $(H)/diff-fuzz/diff_fuzz.py --self-test
 	@echo "== probe ==";            $(PY) $(H)/probe/probe.py --self-test
 	@echo "== perf-gate ==";        $(PY) $(H)/perf/perf_gate.py --self-test

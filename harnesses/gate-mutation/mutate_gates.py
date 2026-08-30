@@ -94,6 +94,16 @@ MUTATIONS = [
      "why": "the Phase-0 scanner reports 0 flaws on any C",
      "cmd": ["harnesses/c-flaw-scan/scan_c_flaws.py", "--self-test"]},
 
+    # LESSONS #31: proving a gate REFUSES says nothing about whether the port
+    # ever CALLS it. Three declared controls were unwired at cutover and all
+    # three passed this sweep.
+    {"gate": "control-coverage", "file": "harnesses/control-coverage/check_controls.py",
+     "old": "    base = os.path.basename(control)\n"
+            "    return any((control in text) or (base in text) for text in gate_texts)",
+     "new": "    return True",
+     "why": "every declared control counts as wired: an unrun gate ships green",
+     "cmd": ["harnesses/control-coverage/check_controls.py", "--self-test"]},
+
     # The BASH gates (LESSONS #22/#25). None could be here until `_run` stopped
     # assuming python — which is why a mode wired to a sanitizer rustc rejects
     # survived every sweep. `coverage_gaps()` now fails a full sweep if any

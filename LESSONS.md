@@ -1058,3 +1058,88 @@ the emphasized half.
 - **Section amended:** ports/cjson/rust/crates/core/tests/properties.rs
   (domain restrictions + `dom::compare` reconstruction); PROMPTS/10-module-port.md
   (validate a failing property against the oracle before the port).
+
+## 031. A declared control nothing invokes is indistinguishable from one that always passes
+
+- **Date:** 2026-08-30
+- **Codebase:** cJSON port — found by the closing retrospective's step 0 ("run
+  every harness against the real target"), not by reading anything
+- **What happened:** The kit had two strong guarantees and a hole between them.
+  `mutate_gates.py` proves every gate **refuses** (neutralize its verdict and its
+  self-test goes red — 19 gates, 0 survivors), and `probe.py coverage` proves
+  every tracked module **is probed** (LESSONS #23). Neither asks the prior
+  question: *is this control run against the port at all?* Running the harnesses
+  by hand at cutover showed **three of the six script-backed controls in
+  `CLAUDE.md`'s own gate table were never invoked by `ports/cjson/check.sh`** —
+  `supply-chain`, `c-flaw-scan`, and `threat-model`, **two of them marked "hard
+  fail"**. All three passed the mutation sweep, because a sweep measures a
+  harness's *self-test*, not its *use*. The control table was prose; no gate read
+  it. Two real consequences had been sitting there through a green cutover:
+  (1) `cJSON_Utils.c` entered scope at **module 9** and the Phase-0 flaw scan was
+  never re-run, so its **8 copy-sink sites were un-triaged** — the scanner said
+  25, `FLAW-SCAN.md` said 17, and nothing compared the two; (2) the port's
+  dependency tree had **never been audited** (`cargo-audit`/`cargo-deny` are not
+  even installed). This is the kit's characteristic bug at a **seventh altitude**:
+  after the verdict (#6), the input (#14/#18/#20), the wiring (#23), the tool
+  inventory (#22), inherited state (#24), and the observable surface (#26) — now
+  the *invocation itself*. Absence is the one thing reading a gate script cannot
+  show you, and green CI actively hides it.
+- **Kit change:** new harness `control-coverage/check_controls.py` — it parses the
+  gate table in `CLAUDE.md` (table ROWS only, so prose can't smuggle a control in)
+  and fails if a port's gate script never calls one, with written-down exemptions
+  (`# control-coverage: exempt <path> -- <why>`), a 0-of-0 guard (LESSONS #18), a
+  fail-closed error on a missing gate file, and negative fixtures in its
+  self-test; its verdict lives in one predicate (`control_is_wired`) so the
+  mutation sweep can neutralize it, and it is now the sweep's 20th entry (0
+  survivors). **The table in `CLAUDE.md` is now executable**: adding a row obliges
+  every port's gate to call it. All three missing controls are wired into
+  `ports/cjson/check.sh`; the flaw scan now re-runs over **all** of `c/` every gate
+  run (not once at Phase 0) so a newly-ported source cannot arrive un-triaged; and
+  the 8 `cJSON_Utils.c` sinks are triaged in `FLAW-SCAN.md` (all exact-fit manual
+  sizing, none a live bug, the class structurally absent from the Rust).
+  supply-chain is wired toolchain-optional like the sanitizers — a missing
+  `cargo-audit` prints a loud SKIP every run instead of being invisible, and no
+  `|| true` softens the harness's verdict when the tools are present.
+- **Section amended:** harnesses/control-coverage/check_controls.py (new);
+  harnesses/gate-mutation/mutate_gates.py (20th entry);
+  ports/cjson/check.sh (steps 0/0b/5b); CLAUDE.md · gate table;
+  ports/cjson/FLAW-SCAN.md · scope + the 8 utils sinks.
+
+## 032. A self-scheduled check-in freezes your unverified claim into a premise
+
+- **Date:** 2026-08-30
+- **Codebase:** cJSON port, the PR #26 CI watch
+- **What happened:** PR CI went red. I diagnosed it from real evidence — all four
+  jobs dying in 2–4s, logs 404, unrelated jobs (`adler32`, `skeleton`) failing
+  identically, and base `main` reproducing it — and concluded "**account-level
+  GitHub Actions is disabled/blocked**". Then I did the damaging thing: I wrote
+  that conclusion into the **prompt of my own scheduled check-in** ("Established
+  blocker: … owner must re-enable Actions in Settings") and instructed future-me
+  to compare new observations against it. Over ~6 check-ins across two days I
+  re-read my own conclusion as an established premise, confirmed "nothing
+  changed", and re-armed — never re-testing. I even declined the one permitted
+  CI re-run on the explicit reasoning that it "would just re-confirm a block
+  already established". That reasoning was the failure: the re-run is precisely
+  the experiment that separates the hypotheses. The retrospective's step 0 forced
+  it, and the claim was **wrong in its mechanism**: `rerun_failed_jobs` returned
+  **201 Created**, the jobs re-ran as `run_attempt: 2`, and were scheduled onto
+  `ubuntu-latest` runners — the Actions API accepts writes and runs are created,
+  so Actions is *not* "disabled". The jobs fail at **startup** (~2s, logs 404) on
+  every commit including base `main`: a startup-time policy/entitlement rejection
+  (an allowed-actions policy refusing even first-party `actions/checkout`, or a
+  billing/spending block). Same remedy, different fact — and the wrong fact was
+  what I reported to the user, repeatedly.
+  **LESSONS #15 already covers this** ("re-verify every inherited 'this doesn't
+  work here' claim before you repeat it") and it did **not** fire. Why: #15 is
+  addressed to someone *reading LESSONS.md at retrospective time*, while the
+  claim lived in an automated loop that never reads it. A lesson wired only to a
+  human's reading habit is not wired to anything.
+- **Kit change:** `PROMPTS/90-retrospective.md` step 0 now states the rule the
+  check-in loop broke: **a scheduled or handed-off prompt must carry the
+  re-test command, never the conclusion** — write "run X and report the result",
+  not "X is broken, confirm nothing changed" — and an environment claim repeated
+  across sessions must carry the date it was last *executed*, not last asserted.
+  A conclusion in a recurring prompt is a premise you will never re-derive.
+  The stale claim itself is corrected in place with a dated note (never a silent
+  rewrite) on PR #26.
+- **Section amended:** PROMPTS/90-retrospective.md · step 0.
