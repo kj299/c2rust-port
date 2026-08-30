@@ -17,6 +17,13 @@
 //! overflow/cast lints guard PRODUCTION code, so they are allowed here.
 #![allow(clippy::arithmetic_side_effects, clippy::cast_possible_truncation)]
 
+/// Iterations per property. Miri interprets every instruction (~100x slower), so
+/// the full sweep there would turn the port gate into an effective hang — a
+/// control that slow is a control that gets skipped. Miri's job here is to prove
+/// the code path is UB-free, which a few dozen cases establish; the statistical
+/// search is the native run's job (and the high-budget diff-fuzz's, LESSONS #33).
+const ITERS: usize = if cfg!(miri) { 24 } else { 3000 };
+
 use cjson_core::modes::run;
 use cjson_core::value::Value;
 use cjson_core::{dom, parse_with_length, print_value};
@@ -136,7 +143,7 @@ fn framed(a: &[u8], b: &[u8]) -> Vec<u8> {
 #[test]
 fn minify_is_idempotent() {
     let mut rng = Rng(0xDEAD_BEEF);
-    for _ in 0..3000 {
+    for _ in 0..ITERS {
         let s = json_of(&gen_value(&mut rng, 4, true, false));
         let once = run("minify", &s).1;
         let twice = run("minify", &once).1;
@@ -152,7 +159,7 @@ fn minify_is_idempotent() {
 #[test]
 fn roundtrip_is_stable_and_prints_canonically() {
     let mut rng = Rng(0x0000_1234);
-    for _ in 0..3000 {
+    for _ in 0..ITERS {
         let s = json_of(&gen_value(&mut rng, 4, true, false));
         let (rc, once) = run("roundtrip", &s);
         assert_eq!(rc, 0);
@@ -171,7 +178,7 @@ fn sort_object_is_idempotent_and_ordered() {
     // permutes them each pass; that faithful quirk is pinned elsewhere, so the
     // top-level value here is always a distinct-key object.)
     let mut rng = Rng(0x00AB_CDEF);
-    for _ in 0..3000 {
+    for _ in 0..ITERS {
         let n = rng.below(4) as usize + 1;
         let keys = gen_keys(&mut rng, n, false);
         let obj = Value::Object(
@@ -212,7 +219,7 @@ fn merge_patch_round_trips() {
     // RFC 7396: applying genmerge(a,b) to a reconstructs b, for null-free values
     // (a JSON null in b is indistinguishable from a delete in a merge patch).
     let mut rng = Rng(0x9999_0001);
-    for _ in 0..3000 {
+    for _ in 0..ITERS {
         let a = json_of(&gen_value(&mut rng, 3, false, true));
         let b = json_of(&gen_value(&mut rng, 3, false, true));
         let (rc, patch) = run("genmerge", &framed(&a, &b));
@@ -247,7 +254,7 @@ fn merge_patch_round_trips() {
 fn json_patch_round_trips() {
     // RFC 6902: applying genpatch(a,b) to a reconstructs b (any values, incl. nulls).
     let mut rng = Rng(0x5150_0007);
-    for _ in 0..3000 {
+    for _ in 0..ITERS {
         let a = json_of(&gen_value(&mut rng, 3, true, false));
         let b = json_of(&gen_value(&mut rng, 3, true, false));
         let (rc, patch) = run("genpatch", &framed(&a, &b));

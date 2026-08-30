@@ -1,4 +1,10 @@
-# Phase 0 — C-flaw inventory (cJSON v1.7.18 core)
+# Phase 0 — C-flaw inventory (cJSON v1.7.18)
+
+> **Scope grows with the port.** Phase 0 covered `cJSON.c`/`cJSON.h` (17 sinks).
+> `cJSON_Utils.c` joined at module 9, taking the scan to **25**; its 8 sinks are
+> triaged in their own section below. Any future C file added to `c/` must be
+> triaged here — `check.sh` re-runs the scan over all of `c/` every run so a new
+> source cannot arrive un-triaged (LESSONS #31).
 
 Two inputs feed this: the kit's `scan_c_flaws.py` (grep-able sinks) **and** the
 upstream `CHANGELOG.md` (the historical CVE/security record). They cover different
@@ -65,6 +71,42 @@ slice copies with checked lengths). Grouped by why the C is (or isn't) currently
 on a manual invariant; the port's value is making that invariant structural.
 Every one that produces byte-identical output needs **no** `DIVERGENCES.md` entry;
 any that changes output (e.g. number formatting) gets one.
+
+## The 8 `cJSON_Utils.c` copy-sink hits — triage (added 2026-08-30, module 9)
+
+**Why these arrived late, and the gap that let them:** this document was written at
+Phase 0 over `cJSON.c`/`cJSON.h` only. `cJSON_Utils.c` entered the port's scope at
+**module 9**, and the scan was never re-run, so its 8 sinks sat un-triaged while
+the module cleared all six gates — the scanner said 25, this file said 17, and no
+gate compared the two. Fixed structurally: `check.sh` now re-runs the flaw scan
+over **all** of `c/` on every gate run, and `control-coverage` fails if it doesn't
+(LESSONS #31).
+
+- **`cJSONUtils_strdup` `memcpy` (:77)** — `length = strlen(s) + 1`, `malloc(length)`,
+  `memcpy(…, length)`. Exact fit; benign. Rust: `Vec<u8>` clone.
+- **Pointer-building `sprintf`/`strcat` (:234, :245)** —
+  `cJSONUtils_FindPointerFromObjectTo`. `malloc(strlen(target) + 20 + sizeof("/"))`
+  against a write of `/` + ≤20 digits + target + NUL; and
+  `malloc(strlen(target) + pointer_encoded_length(key) + 2)` against
+  `/` + encoded key + target + NUL. Both are **exact-fit** manual sizing (the `20`
+  is `log10(2^64)`), correct but with zero slack — one more byte in the format
+  string would be an overflow. Not reached by the port's surface anyway
+  (`FindPointerFromObjectTo` is not ported).
+- **Patch-path `sprintf` (:1122, :1188, :1203, :1248)** — `create_patches` /
+  `compose_patch`, the code module 9 **does** port. Same exact-fit pattern:
+  `malloc(path_len + suffix_len + sizeof("/"))` for `"%s/"` + encoded suffix, and
+  `malloc(strlen(path) + 20 + sizeof("/"))` for `"%s/%lu"`. The `index > ULONG_MAX`
+  guards beside them are dead on LP64 (the source says so) — the real bound is the
+  hand-computed `20`.
+- **`replace_item_in_object` struct `memcpy` (:804)** — `sizeof(cJSON)` fixed-size
+  copy; benign.
+
+**None of the 8 is a live bug either**, but four of them sit in ported code and all
+rely on hand-computed exact-fit lengths. The Rust port builds every pointer path by
+appending to a `Vec<u8>` (`encode_pointer_segment`, `create_patches`), so the
+sizing arithmetic — and the CWE-120 class with it — does not exist there. No
+`DIVERGENCES.md` entry: the generated paths are byte-identical (the differential
+and the 25k-iteration `genpatch` fuzz both confirm).
 
 ## Net Phase-0 security posture
 

@@ -21,6 +21,24 @@ KIT="$HERE/../.."
 PY="${PYTHON:-python3}"
 RUST_DRIVER="$HERE/rust/target/release/rjson_driver"
 
+echo "===== 0. declared controls — every one in CLAUDE.md's table must RUN here ====="
+# LESSONS #31: the mutation sweep proves each gate REFUSES, and probe-coverage
+# proves each module is PROBED, but nothing asked whether a declared control is
+# invoked at all. Three of six were not (supply-chain, c-flaw-scan, threat-model
+# — two of them "hard fail"), and every one still passed the sweep, because a
+# sweep measures a harness's self-test, not its use. This check reads the control
+# table and fails if the gate below never calls one.
+"$PY" "$KIT/harnesses/control-coverage/check_controls.py" \
+    --controls "$KIT/CLAUDE.md" --gate "$HERE/check.sh"
+
+echo "===== 0b. Phase-0 controls — re-run against the C actually ported ====="
+# The flaw scan is a Phase-0 artifact, but the C in scope GROWS as modules land:
+# module 9 pulled cJSON_Utils.c in, and its 8 copy-sink sites were never triaged
+# because nobody re-ran the scan (LESSONS #31). Re-run it every gate, over every
+# vendored C file, so a newly-ported source cannot arrive un-triaged.
+"$PY" "$KIT/harnesses/c-flaw-scan/scan_c_flaws.py" "$HERE/c" | tail -4
+"$PY" "$KIT/harnesses/threat-model/check_threat_model.py" "$HERE/THREAT-MODEL.md"
+
 echo "===== 1. oracle (build + validate all vectors against C) ====="
 bash "$HERE/oracle/run.sh" > /dev/null
 echo "oracle locked"
@@ -220,6 +238,21 @@ mkdir -p "$HERE/reports/unsafe"
 for m in scalar-parse string-parse buffer-plumbing recursive-core dom entry-minify ffi-builder utils-pointer utils-patch utils-sort; do
   cp "$HERE/reports/unsafe/alloc-node.json" "$HERE/reports/unsafe/$m.json"
 done
+
+echo "===== 5b. supply-chain — the dependency surface ====="
+# LESSONS #31: this control was in CLAUDE.md's table and in the mutation sweep,
+# yet the port's gate never called it, so the port's dependency tree had never
+# been audited at all. Toolchain-optional like the sanitizers, and for the same
+# reason: absence of the tool must be LOUD, never silently green. When the tools
+# ARE present the harness's own fail-closed verdict stands (no `|| true` here).
+if command -v cargo-audit >/dev/null 2>&1 && command -v cargo-deny >/dev/null 2>&1; then
+  bash "$KIT/harnesses/supply-chain/run_supply_chain.sh" "$HERE/rust"
+  echo "supply-chain: dependency audit clean"
+else
+  echo "SKIP  supply-chain: cargo-audit/cargo-deny absent — the dependency audit"
+  echo "      did NOT run (install: cargo install cargo-audit cargo-deny)."
+  echo "      Reported every run so an unaudited dep tree cannot look green."
+fi
 
 if [ "$SAN_RAN" = "1" ]; then
   # `sanitized` is no longer hand-set (LESSONS #24): it advances in step 6 from
