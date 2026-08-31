@@ -1,7 +1,7 @@
 {
   "probe_transcript": 1,
   "module": "utils",
-  "oracle_sha256": "f49b53e9228bc97b5e5bc5920b3f516cf8256fa5d1965396562a5d83af70e9f3",
+  "oracle_sha256": "8454f5eed48675596dfa3890bc84894ce0984ad3c19a25e63e8134b9e05ce3f3",
   "generated_by": "harnesses/probe/probe.py run",
   "entries": [
     {
@@ -387,7 +387,151 @@
       "stdout_b64": "eyJCIjoxLCJhIjoyfQ==",
       "stdin_preview": "{\"B\":1,\"a\":2}",
       "stdout_preview": "{\"B\":1,\"a\":2}"
+    },
+    {
+      "id": "findptr-array",
+      "args": [
+        "findptr"
+      ],
+      "stdin_b64": "L2EvMQp7ImEiOlsxMCwyMF0sImIiOjF9",
+      "note": "reverse lookup round-trips an array path",
+      "rc": 0,
+      "stdout_b64": "L2EvMQ==",
+      "stdin_preview": "/a/1\n{\"a\":[10,20],\"b\":1}",
+      "stdout_preview": "/a/1"
+    },
+    {
+      "id": "findptr-key",
+      "args": [
+        "findptr"
+      ],
+      "stdin_b64": "L2EKeyJhIjpbMTAsMjBdfQ==",
+      "note": "reverse lookup of an object key",
+      "rc": 0,
+      "stdout_b64": "L2E=",
+      "stdin_preview": "/a\n{\"a\":[10,20]}",
+      "stdout_preview": "/a"
+    },
+    {
+      "id": "findptr-root",
+      "args": [
+        "findptr"
+      ],
+      "stdin_b64": "CnsiYSI6MX0=",
+      "note": "the root maps to the EMPTY pointer",
+      "rc": 0,
+      "stdout_b64": "",
+      "stdin_preview": "\n{\"a\":1}",
+      "stdout_preview": ""
+    },
+    {
+      "id": "findptr-escaped",
+      "args": [
+        "findptr"
+      ],
+      "stdin_b64": "L2F+MWIKeyJhL2IiOjd9",
+      "note": "an escaped key is re-encoded on the way back",
+      "rc": 0,
+      "stdout_b64": "L2F+MWI=",
+      "stdin_preview": "/a~1b\n{\"a/b\":7}",
+      "stdout_preview": "/a~1b"
+    },
+    {
+      "id": "findptr-tilde",
+      "args": [
+        "findptr"
+      ],
+      "stdin_b64": "L2F+MGIKeyJhfmIiOjd9",
+      "note": "~0 escape re-encoded",
+      "rc": 0,
+      "stdout_b64": "L2F+MGI=",
+      "stdin_preview": "/a~0b\n{\"a~b\":7}",
+      "stdout_preview": "/a~0b"
+    },
+    {
+      "id": "findptr-missing",
+      "args": [
+        "findptr"
+      ],
+      "stdin_b64": "L3p6CnsiYSI6MX0=",
+      "note": "pointer to nothing yields `missing`",
+      "rc": 0,
+      "stdout_b64": "bWlzc2luZw==",
+      "stdin_preview": "/zz\n{\"a\":1}",
+      "stdout_preview": "missing"
+    },
+    {
+      "id": "findptr-deep",
+      "args": [
+        "findptr"
+      ],
+      "stdin_b64": "L2EvMC9iCnsiYSI6W3siYiI6NX1dfQ==",
+      "note": "mixed array/object descent",
+      "rc": 0,
+      "stdout_b64": "L2EvMC9i",
+      "stdin_preview": "/a/0/b\n{\"a\":[{\"b\":5}]}",
+      "stdout_preview": "/a/0/b"
+    },
+    {
+      "id": "findptr-dupkey",
+      "args": [
+        "findptr"
+      ],
+      "stdin_b64": "L2sKeyJrIjoxLCJrIjoyfQ==",
+      "note": "duplicate keys: first match wins",
+      "rc": 0,
+      "stdout_b64": "L2s=",
+      "stdin_preview": "/k\n{\"k\":1,\"k\":2}",
+      "stdout_preview": "/k"
+    },
+    {
+      "id": "addpatch-value",
+      "args": [
+        "addpatch"
+      ],
+      "stdin_b64": "YWRkCS94CjQy",
+      "note": "compose an op with a value",
+      "rc": 0,
+      "stdout_b64": "W3sib3AiOiJhZGQiLCJwYXRoIjoiL3giLCJ2YWx1ZSI6NDJ9XQ==",
+      "stdin_preview": "add\t/x\n42",
+      "stdout_preview": "[{\"op\":\"add\",\"path\":\"/x\",\"value\":42}]"
+    },
+    {
+      "id": "addpatch-novalue",
+      "args": [
+        "addpatch"
+      ],
+      "stdin_b64": "cmVtb3ZlCS95Cg==",
+      "note": "no value member when value is absent",
+      "rc": 0,
+      "stdout_b64": "W3sib3AiOiJyZW1vdmUiLCJwYXRoIjoiL3kifV0=",
+      "stdin_preview": "remove\t/y\n",
+      "stdout_preview": "[{\"op\":\"remove\",\"path\":\"/y\"}]"
+    },
+    {
+      "id": "addpatch-obj",
+      "args": [
+        "addpatch"
+      ],
+      "stdin_b64": "cmVwbGFjZQkvYX4xYgp7ImsiOjF9",
+      "note": "path stored VERBATIM, not re-encoded",
+      "rc": 0,
+      "stdout_b64": "W3sib3AiOiJyZXBsYWNlIiwicGF0aCI6Ii9hfjFiIiwidmFsdWUiOnsiayI6MX19XQ==",
+      "stdin_preview": "replace\t/a~1b\n{\"k\":1}",
+      "stdout_preview": "[{\"op\":\"replace\",\"path\":\"/a~1b\",\"value\":{\"k\":1}}]"
+    },
+    {
+      "id": "addpatch-emptypath",
+      "args": [
+        "addpatch"
+      ],
+      "stdin_b64": "YWRkCQox",
+      "note": "empty path is kept as an empty string",
+      "rc": 0,
+      "stdout_b64": "W3sib3AiOiJhZGQiLCJwYXRoIjoiIiwidmFsdWUiOjF9XQ==",
+      "stdin_preview": "add\t\n1",
+      "stdout_preview": "[{\"op\":\"add\",\"path\":\"\",\"value\":1}]"
     }
   ],
-  "fingerprint": "62f04b1592fafab15be3a3f5d942bd2a1f95738cc115634c0a6fa98450d6ff59"
+  "fingerprint": "2190622b0da2719e52f1b0a22cd73a1a1309e4be3ef44f4fde70d89ff62e7c4e"
 }

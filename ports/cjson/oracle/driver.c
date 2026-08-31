@@ -61,7 +61,7 @@ static char *read_all_stdin(size_t *out_len) {
 
 int main(int argc, char **argv) {
     if (argc < 2) {
-        fprintf(stderr, "usage: driver <print|...|build|query|ptr|patch|merge|genmerge|genpatch|sort (+ -cs)>\n");
+        fprintf(stderr, "usage: driver <print|...|build|query|ptr|patch|merge|genmerge|genpatch|findptr|addpatch|sort (+ -cs)>\n");
         return 2;
     }
     const char *mode = argv[1];
@@ -122,6 +122,8 @@ int main(int argc, char **argv) {
             strcmp(base, "merge") == 0    || strcmp(base, "merge-cs") == 0    ||
             strcmp(base, "genmerge") == 0 || strcmp(base, "genmerge-cs") == 0 ||
             strcmp(base, "genpatch") == 0 || strcmp(base, "genpatch-cs") == 0 ||
+            strcmp(base, "findptr") == 0  || strcmp(base, "findptr-cs") == 0  ||
+            strcmp(base, "addpatch") == 0 ||
             strcmp(base, "sort") == 0     || strcmp(base, "sort-cs") == 0;
         if (is_utils) {
             char *nl = memchr(input, '\n', len);
@@ -141,6 +143,18 @@ int main(int argc, char **argv) {
                 out = nl ? cjson_utils_genmerge(input, alen, b, blen, cs) : NULL;
             } else if (strcmp(base, "genpatch") == 0 || strcmp(base, "genpatch-cs") == 0) {
                 out = nl ? cjson_utils_genpatch(input, alen, b, blen, cs) : NULL;
+            } else if (strcmp(base, "findptr") == 0 || strcmp(base, "findptr-cs") == 0) {
+                /* a = pointer to the target, b = json */
+                out = nl ? cjson_utils_findptr(input, b, blen, cs) : NULL;
+            } else if (strcmp(base, "addpatch") == 0) {
+                /* a = "<op>\t<path>", b = optional value JSON */
+                char *tab = strchr(input, '\t');
+                if (nl && tab != NULL) {
+                    *tab = '\0';
+                    out = cjson_utils_addpatch(input, tab + 1, b, blen);
+                } else {
+                    out = NULL;
+                }
             } else { /* sort / sort-cs: one document, whole buffer */
                 if (nl) *nl = '\n';   /* undo split — sort takes the whole buffer */
                 if (len > 0 && input[len - 1] == '\n') input[--len] = '\0';

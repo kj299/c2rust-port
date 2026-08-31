@@ -186,7 +186,7 @@ pub fn run(mode: &str, input: &[u8]) -> (i32, Vec<u8>) {
     let base = mode.strip_suffix("-cs").unwrap_or(mode);
     if matches!(
         base,
-        "ptr" | "patch" | "merge" | "genmerge" | "genpatch" | "sort"
+        "ptr" | "patch" | "merge" | "genmerge" | "genpatch" | "findptr" | "addpatch" | "sort"
     ) {
         return crate::utils::run(mode, input);
     }

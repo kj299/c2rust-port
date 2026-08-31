@@ -88,6 +88,127 @@
     ]
   },
   {
+    "name": "u-findptr-array",
+    "args": [
+      "findptr"
+    ],
+    "stdin": "/a/1\n{\"a\":[10,20],\"b\":1}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-pointer"
+    ]
+  },
+  {
+    "name": "u-findptr-key",
+    "args": [
+      "findptr"
+    ],
+    "stdin": "/a\n{\"a\":[10,20]}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-pointer"
+    ]
+  },
+  {
+    "name": "u-findptr-root",
+    "args": [
+      "findptr"
+    ],
+    "stdin": "\n{\"a\":1}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-pointer"
+    ]
+  },
+  {
+    "name": "u-findptr-escaped",
+    "args": [
+      "findptr"
+    ],
+    "stdin": "/a~1b\n{\"a/b\":7}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-pointer"
+    ]
+  },
+  {
+    "name": "u-findptr-tilde",
+    "args": [
+      "findptr"
+    ],
+    "stdin": "/a~0b\n{\"a~b\":7}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-pointer"
+    ]
+  },
+  {
+    "name": "u-findptr-missing",
+    "args": [
+      "findptr"
+    ],
+    "stdin": "/zz\n{\"a\":1}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-pointer"
+    ]
+  },
+  {
+    "name": "u-findptr-deep",
+    "args": [
+      "findptr"
+    ],
+    "stdin": "/a/0/b\n{\"a\":[{\"b\":5}]}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-pointer"
+    ]
+  },
+  {
+    "name": "u-addpatch-value",
+    "args": [
+      "addpatch"
+    ],
+    "stdin": "add\t/x\n42",
+    "expect_rc": 0,
+    "mods": [
+      "utils-patch"
+    ]
+  },
+  {
+    "name": "u-addpatch-novalue",
+    "args": [
+      "addpatch"
+    ],
+    "stdin": "remove\t/y\n",
+    "expect_rc": 0,
+    "mods": [
+      "utils-patch"
+    ]
+  },
+  {
+    "name": "u-addpatch-obj",
+    "args": [
+      "addpatch"
+    ],
+    "stdin": "replace\t/a~1b\n{\"k\":1}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-patch"
+    ]
+  },
+  {
+    "name": "u-addpatch-emptypath",
+    "args": [
+      "addpatch"
+    ],
+    "stdin": "add\t\n1",
+    "expect_rc": 0,
+    "mods": [
+      "utils-patch"
+    ]
+  },
+  {
     "name": "u-patch-replace",
     "args": [
       "patch"

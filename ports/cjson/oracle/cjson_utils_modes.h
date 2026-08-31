@@ -36,4 +36,16 @@ char *cjson_utils_genpatch(const char *from_json, size_t from_len,
 /* SortObject: the document with every object's members sorted by key. */
 char *cjson_utils_sort(const char *json, size_t json_len, int case_sensitive);
 
+/* FindPointerFromObjectTo: resolve `pointer` to a node, then ask the C to build
+ * the pointer path BACK to it from the root. Prints that path (possibly ""),
+ * "missing" when `pointer` resolves to nothing, or "null" when the reverse
+ * lookup fails. Added with the module-9 API-coverage sweep (LESSONS #34). */
+char *cjson_utils_findptr(const char *pointer, const char *json, size_t json_len,
+                          int case_sensitive);
+
+/* AddPatchToArray: compose one patch op into a fresh array and print it.
+ * `value_json` may be NULL/empty for the no-value form. (LESSONS #34) */
+char *cjson_utils_addpatch(const char *op, const char *path,
+                           const char *value_json, size_t value_len);
+
 #endif /* CJSON_UTILS_MODES_H */

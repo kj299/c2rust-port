@@ -824,6 +824,46 @@ fn create_patches(
     }
 }
 
+// ---- the rest of the public API (LESSONS #34) ------------------------------
+
+/// `cJSONUtils_FindPointerFromObjectTo` — the pointer path from `root` down to
+/// the node at `target_path`. The C walks the tree comparing NODE IDENTITY
+/// (`object == target`) and returns `""` when the root *is* the target; since a
+/// parsed document is a tree, each node has exactly one position, so walking the
+/// located index-path yields the identical string. Array steps are the decimal
+/// index (`%lu`), object steps the pointer-encoded key — the same encoder the C
+/// uses, so `/a~1b` round-trips to `/a~1b`.
+#[must_use]
+pub fn find_pointer_from_object_to(root: &Value, target_path: &[usize]) -> Option<Vec<u8>> {
+    let mut out = Vec::new();
+    let mut cur = root;
+    for &i in target_path {
+        match cur {
+            Value::Array(items) => {
+                out.push(b'/');
+                out.extend_from_slice(i.to_string().as_bytes());
+                cur = items.get(i)?;
+            }
+            Value::Object(entries) => {
+                let (k, v) = entries.get(i)?;
+                out.push(b'/');
+                out.extend_from_slice(&encode_pointer_segment(k));
+                cur = v;
+            }
+            _ => return None,
+        }
+    }
+    Some(out)
+}
+
+/// `cJSONUtils_AddPatchToArray` — compose one `{op, path[, value]}` object onto
+/// `patches`. The C is a one-line wrapper over the same `compose_patch` the
+/// generate side uses, and so is this: `path` is stored verbatim (NOT re-encoded
+/// — encoding is the caller's job), and `value` is deep-copied when present.
+pub fn add_patch_to_array(patches: &mut Vec<Value>, op: &[u8], path: &[u8], value: Option<&Value>) {
+    compose_patch(patches, op, path, value);
+}
+
 // ---- driver mode dispatch (the compared surface, LESSONS #26) --------------
 
 fn print_or(v: &Value) -> Vec<u8> {
@@ -868,6 +908,40 @@ pub fn run(mode: &str, input: &[u8]) -> (i32, Vec<u8>) {
                 Some(v) => (0, print_or(v)),
                 None => (0, b"missing".to_vec()),
             }
+        }
+        "findptr" => {
+            // a = pointer to the target (a C string), b = json. Resolve it the
+            // way GetPointer does, then ask for the path back to that node.
+            let Ok((doc, _)) = crate::parse_with_length(b) else {
+                return (1, Vec::new());
+            };
+            match locate(&doc, nul_trunc(a), cs) {
+                None => (0, b"missing".to_vec()),
+                Some(path) => match find_pointer_from_object_to(&doc, &path) {
+                    Some(p) => (0, p),
+                    None => (0, b"null".to_vec()),
+                },
+            }
+        }
+        "addpatch" => {
+            // a = "<op>\t<path>" (both C strings), b = optional value JSON.
+            let a = nul_trunc(a);
+            let Some(tab) = a.iter().position(|&c| c == b'\t') else {
+                return (1, Vec::new()); // the C shim returns NULL -> exit 1
+            };
+            let (op, rest) = a.split_at(tab);
+            let path = rest.get(1..).unwrap_or(&[]);
+            let value = if b.is_empty() {
+                None
+            } else {
+                match crate::parse_with_length(b) {
+                    Ok((v, _)) => Some(v),
+                    Err(_) => return (1, Vec::new()),
+                }
+            };
+            let mut patches = Vec::new();
+            add_patch_to_array(&mut patches, op, path, value.as_ref());
+            (0, print_or(&Value::Array(patches)))
         }
         "patch" => {
             let (Ok((patches, _)), Ok((doc, _))) =

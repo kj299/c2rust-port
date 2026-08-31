@@ -146,3 +146,53 @@ char *cjson_utils_sort(const char *json, size_t json_len, int case_sensitive) {
     cJSON_Delete(doc);
     return out;
 }
+
+/* --- API-coverage additions (LESSONS #34): the two public entry points module 9
+ * shipped without a driver mode, so all six gates were green over an unported
+ * surface. Exposed here so the differential can actually judge them. --- */
+
+char *cjson_utils_findptr(const char *pointer, const char *json, size_t json_len,
+                          int case_sensitive) {
+    cJSON *doc = cJSON_ParseWithLength(json, json_len);
+    if (doc == NULL) {
+        return NULL;
+    }
+    cJSON *target = case_sensitive
+        ? cJSONUtils_GetPointerCaseSensitive(doc, pointer)
+        : cJSONUtils_GetPointer(doc, pointer);
+    char *out;
+    if (target == NULL) {
+        out = strdup("missing");
+    } else {
+        char *found = cJSONUtils_FindPointerFromObjectTo(doc, target);
+        if (found == NULL) {
+            out = strdup("null");
+        } else {
+            out = strdup(found);
+            cJSON_free(found);
+        }
+    }
+    cJSON_Delete(doc);
+    return out;
+}
+
+char *cjson_utils_addpatch(const char *op, const char *path,
+                           const char *value_json, size_t value_len) {
+    cJSON *array = cJSON_CreateArray();
+    if (array == NULL) {
+        return NULL;
+    }
+    cJSON *value = NULL;
+    if (value_json != NULL && value_len > 0) {
+        value = cJSON_ParseWithLength(value_json, value_len);
+        if (value == NULL) {
+            cJSON_Delete(array);
+            return NULL;
+        }
+    }
+    cJSONUtils_AddPatchToArray(array, op, path, value);
+    cJSON_Delete(value);          /* AddPatchToArray duplicates it */
+    char *out = dup_print(array);
+    cJSON_Delete(array);
+    return out;
+}

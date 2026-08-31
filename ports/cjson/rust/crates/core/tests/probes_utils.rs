@@ -5,7 +5,7 @@
 // byte-compares this file against a fresh regeneration, so a hand
 // edit here FAILS the gate instead of silently redefining the spec.
 // module: utils
-// transcript fingerprint: sha256:62f04b1592fafab15be3a3f5d942bd2a1f95738cc115634c0a6fa98450d6ff59
+// transcript fingerprint: sha256:2190622b0da2719e52f1b0a22cd73a1a1309e4be3ef44f4fde70d89ff62e7c4e
 
 mod probe_glue;
 
@@ -241,4 +241,88 @@ fn probe_sort_ci_default() {
 #[rustfmt::skip]
 fn probe_sort_cs() {
     check("sort-cs", &["sort-cs"], b"{\"B\":1,\"a\":2}", 0, b"{\"B\":1,\"a\":2}");
+}
+
+// reverse lookup round-trips an array path
+#[test]
+#[rustfmt::skip]
+fn probe_findptr_array() {
+    check("findptr-array", &["findptr"], b"/a/1\x0a{\"a\":[10,20],\"b\":1}", 0, b"/a/1");
+}
+
+// reverse lookup of an object key
+#[test]
+#[rustfmt::skip]
+fn probe_findptr_key() {
+    check("findptr-key", &["findptr"], b"/a\x0a{\"a\":[10,20]}", 0, b"/a");
+}
+
+// the root maps to the EMPTY pointer
+#[test]
+#[rustfmt::skip]
+fn probe_findptr_root() {
+    check("findptr-root", &["findptr"], b"\x0a{\"a\":1}", 0, b"");
+}
+
+// an escaped key is re-encoded on the way back
+#[test]
+#[rustfmt::skip]
+fn probe_findptr_escaped() {
+    check("findptr-escaped", &["findptr"], b"/a~1b\x0a{\"a/b\":7}", 0, b"/a~1b");
+}
+
+// ~0 escape re-encoded
+#[test]
+#[rustfmt::skip]
+fn probe_findptr_tilde() {
+    check("findptr-tilde", &["findptr"], b"/a~0b\x0a{\"a~b\":7}", 0, b"/a~0b");
+}
+
+// pointer to nothing yields `missing`
+#[test]
+#[rustfmt::skip]
+fn probe_findptr_missing() {
+    check("findptr-missing", &["findptr"], b"/zz\x0a{\"a\":1}", 0, b"missing");
+}
+
+// mixed array/object descent
+#[test]
+#[rustfmt::skip]
+fn probe_findptr_deep() {
+    check("findptr-deep", &["findptr"], b"/a/0/b\x0a{\"a\":[{\"b\":5}]}", 0, b"/a/0/b");
+}
+
+// duplicate keys: first match wins
+#[test]
+#[rustfmt::skip]
+fn probe_findptr_dupkey() {
+    check("findptr-dupkey", &["findptr"], b"/k\x0a{\"k\":1,\"k\":2}", 0, b"/k");
+}
+
+// compose an op with a value
+#[test]
+#[rustfmt::skip]
+fn probe_addpatch_value() {
+    check("addpatch-value", &["addpatch"], b"add\x09/x\x0a42", 0, b"[{\"op\":\"add\",\"path\":\"/x\",\"value\":42}]");
+}
+
+// no value member when value is absent
+#[test]
+#[rustfmt::skip]
+fn probe_addpatch_novalue() {
+    check("addpatch-novalue", &["addpatch"], b"remove\x09/y\x0a", 0, b"[{\"op\":\"remove\",\"path\":\"/y\"}]");
+}
+
+// path stored VERBATIM, not re-encoded
+#[test]
+#[rustfmt::skip]
+fn probe_addpatch_obj() {
+    check("addpatch-obj", &["addpatch"], b"replace\x09/a~1b\x0a{\"k\":1}", 0, b"[{\"op\":\"replace\",\"path\":\"/a~1b\",\"value\":{\"k\":1}}]");
+}
+
+// empty path is kept as an empty string
+#[test]
+#[rustfmt::skip]
+fn probe_addpatch_emptypath() {
+    check("addpatch-emptypath", &["addpatch"], b"add\x09\x0a1", 0, b"[{\"op\":\"add\",\"path\":\"\",\"value\":1}]");
 }

@@ -268,6 +268,20 @@ def main():
         ucase("u-ptr-esc-tilde", "ptr", "/a~0b", '{"a~b":9}', ["utils-pointer"]),
         ucase("u-ptr-leadzero", "ptr", "/00", "[7,8]", ["utils-pointer"]),
         ucase("u-ptr-nested", "ptr", "/a/b/0", '{"a":{"b":[5]}}', ["utils-pointer"]),
+        # -- FindPointerFromObjectTo / AddPatchToArray: the two public entry
+        # points module 9 shipped with NO driver mode, so six gates were green
+        # over an unported surface (LESSONS #34). --
+        ucase("u-findptr-array", "findptr", "/a/1", '{"a":[10,20],"b":1}', ["utils-pointer"]),
+        ucase("u-findptr-key", "findptr", "/a", '{"a":[10,20]}', ["utils-pointer"]),
+        ucase("u-findptr-root", "findptr", "", '{"a":1}', ["utils-pointer"]),
+        ucase("u-findptr-escaped", "findptr", "/a~1b", '{"a/b":7}', ["utils-pointer"]),
+        ucase("u-findptr-tilde", "findptr", "/a~0b", '{"a~b":7}', ["utils-pointer"]),
+        ucase("u-findptr-missing", "findptr", "/zz", '{"a":1}', ["utils-pointer"]),
+        ucase("u-findptr-deep", "findptr", "/a/0/b", '{"a":[{"b":5}]}', ["utils-pointer"]),
+        ucase("u-addpatch-value", "addpatch", "add\t/x", "42", ["utils-patch"]),
+        ucase("u-addpatch-novalue", "addpatch", "remove\t/y", "", ["utils-patch"]),
+        ucase("u-addpatch-obj", "addpatch", "replace\t/a~1b", '{"k":1}', ["utils-patch"]),
+        ucase("u-addpatch-emptypath", "addpatch", "add\t", "1", ["utils-patch"]),
         # -- JSON Patch (faithful surface) --
         ucase("u-patch-replace", "patch", '[{"op":"replace","path":"/x","value":9}]', '{"x":1}', ["utils-patch"]),
         ucase("u-patch-remove", "patch", '[{"op":"remove","path":"/x"}]', '{"x":1,"y":2}', ["utils-patch"]),
