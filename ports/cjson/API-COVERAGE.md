@@ -39,6 +39,26 @@ requires the export macro, and pins that case in its self-test.
 | `cJSONUtils_FindPointerFromObjectTo` | ported | `utils::find_pointer_from_object_to` — driver mode `findptr` |
 | `cJSONUtils_AddPatchToArray` | ported | `utils::add_patch_to_array` — driver mode `addpatch` |
 
+### High-budget sweep on the two new modes (LESSONS #33)
+
+The gate's 2000-iteration diff-fuzz is a regression *floor*, not evidence of
+sufficiency — module 9's first "DONE" hid four real divergences that only a
+25k-iteration sweep reached. So before calling these two entry points done, the
+same sweep was run against the C oracle:
+
+| Mode | Seed | Iterations | Findings |
+|---|---|---|---|
+| `findptr` | 0 | 25 000 | 0 |
+| `findptr` | 12345 | 25 000 | 0 |
+| `addpatch` | 0 | 25 000 | 0 |
+| `addpatch` | 12345 | 25 000 | 0 |
+
+100 000 generated inputs, zero divergences (executed 2026-08-31). Their input
+spaces are small — `findptr` is one pointer plus a document, `addpatch` a fixed
+`op`/`path`/`value` triple with no grammar of its own — so 10× the gate budget
+across two seeds is a defensible argument here, unlike `patch`, whose two-document
+op grammar is what made 2000 insufficient.
+
 ## Not yet covered by this gate — stated plainly
 
 `c/cJSON.h` (the base library, ~80 exported symbols) is **not** yet wired into
