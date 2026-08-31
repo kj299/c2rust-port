@@ -14,6 +14,7 @@ check-kit:
 	@echo "== diff_run ==";         $(PY) $(H)/differential/diff_run.py --self-test
 	@echo "== golden ==";           $(PY) $(H)/golden/golden.py --self-test
 	@echo "== c-flaw-scan ==";      $(PY) $(H)/c-flaw-scan/scan_c_flaws.py --self-test
+	@echo "== api-coverage ==";     $(PY) $(H)/api-coverage/check_api.py --self-test
 	@echo "== control-coverage =="; $(PY) $(H)/control-coverage/check_controls.py --self-test
 	@echo "== control-coverage: the shipped gate TEMPLATE must wire every control =="; \
 	  $(PY) $(H)/control-coverage/check_controls.py --controls CLAUDE.md --gate skeleton/check.sh

@@ -41,6 +41,7 @@ A module that compiles and matches the oracle is at step 2 of 6, not done.
 | no silent drift | `harnesses/differential/diff_run.py` + `DIVERGENCES.md` |
 | don't re-port a vuln | `harnesses/c-flaw-scan/scan_c_flaws.py` — **re-run every gate**, not once at Phase 0 |
 | threat model filled in | `harnesses/threat-model/check_threat_model.py THREAT-MODEL.md` — **hard fail** |
+| every public API entry point gated | `harnesses/api-coverage/check_api.py --header <h> --manifest API-COVERAGE.md` — **hard fail** |
 | every control above actually RUNS | `harnesses/control-coverage/check_controls.py --gate <port>/check.sh` — **hard fail** |
 
 **This table is executable, not prose.** `control-coverage` parses these rows and

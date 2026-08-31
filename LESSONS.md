@@ -1185,3 +1185,50 @@ the emphasized half.
   report) is the next port's target, and is exactly the shape LESSONS #24 used to
   stop `sanitized` being hand-set.
 - **Section amended:** PROMPTS/10-module-port.md · step 3 (fuzz budget).
+
+## 034. A rule that lives only in a playbook is not wired to anything
+
+- **Date:** 2026-08-31
+- **Codebase:** cJSON port, module 9 (`cJSON_Utils`) — found by asking the
+  question LESSONS #26 already told me to ask, one increment too late
+- **What happened:** LESSONS #26 ("a gate judges only the surface the driver
+  exposes") ended by amending `PLAYBOOK` Phase 4 and `PROMPTS/10` step 0 to
+  require that *"the module's driver modes cover **every public entry point the
+  module claims**"*. That was written **while porting module 8**. Module 9 was
+  then built, gated, hardened over two further passes, declared **11/11 DONE**,
+  and retrospected — and it shipped with **two of `cJSON_Utils.h`'s 14 exported
+  symbols never ported and never gated**: `cJSONUtils_FindPointerFromObjectTo`
+  and `cJSONUtils_AddPatchToArray`. Six green gates, a 25k-iteration fuzz sweep,
+  property tests and a full retrospective all ran over a surface that was ~14%
+  absent, because *no check ever compared the header to the driver*. This is the
+  exact shape of LESSONS #32 (a claim wired only to a reading habit): #26 was
+  real, correct, recently written, written **by me**, and it still did not fire.
+  Prose in a playbook is a hope, not a control.
+  A second, smaller trap sits in measuring it: a bare identifier grep of the
+  header also reported `cJSONUtils_AtomicApplyPatches` missing — it is a
+  **commented-out suggestion** in a `/* */` block with no implementation and no
+  `CJSON_PUBLIC`. A gate that invents work is as corrosive as one that hides it,
+  so the checker strips C comments and requires the export macro.
+- **Kit change:** new harness `api-coverage/check_api.py` — extracts exported
+  symbols from the C header (comments stripped, export macro required, or
+  `extern` fallback) and fails unless every one is **accounted for** in the
+  port's `API-COVERAGE.md`: either `ported` (naming the mode/fn that gates it) or
+  `out-of-scope` **with a written reason**; an unexplained exclusion, a stale row
+  for a symbol the header no longer exports, and a 0-of-0 header all fail
+  (LESSONS #18). Added to `CLAUDE.md`'s executable control table — so
+  `control-coverage` now obliges every port's gate to call it — plus the port
+  gate, the shipped `skeleton/check.sh`, `make check-kit`, and the mutation sweep
+  (21 gates, 0 survivors). **The sweep immediately earned its place**: mutating
+  the verdict made the reporting path raise `KeyError` instead of going cleanly
+  red, which the sweep treats as a hard error — so the harness's own reporting
+  bug was caught by the harness that exists to catch exactly that.
+  Both missing entry points are now ported (`utils::find_pointer_from_object_to`,
+  `utils::add_patch_to_array`), exposed as `findptr`/`addpatch` driver modes on
+  both sides, and gated by 12 probes and 11 matrix cases — all matching the C
+  first try.
+- **Section amended:** harnesses/api-coverage/check_api.py (new);
+  harnesses/gate-mutation/mutate_gates.py (21st entry);
+  ports/cjson/check.sh · step 0b; skeleton/check.sh · step 0b;
+  ports/cjson/oracle/cjson_utils_modes.c (findptr/addpatch shims);
+  ports/cjson/rust/crates/core/src/utils.rs (the two ported entry points);
+  CLAUDE.md · gate table; ports/cjson/API-COVERAGE.md (new manifest).

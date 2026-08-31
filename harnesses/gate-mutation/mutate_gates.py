@@ -97,6 +97,14 @@ MUTATIONS = [
     # LESSONS #31: proving a gate REFUSES says nothing about whether the port
     # ever CALLS it. Three declared controls were unwired at cutover and all
     # three passed this sweep.
+    # LESSONS #34: mechanizing #26 — an entry point no driver mode reaches is
+    # ungated whatever the matrix says.
+    {"gate": "api-coverage", "file": "harnesses/api-coverage/check_api.py",
+     "old": "    if sym not in rows:\n        return False",
+     "new": "    if sym not in rows:\n        return True",
+     "why": "an unported, unlisted public symbol counts as accounted for",
+     "cmd": ["harnesses/api-coverage/check_api.py", "--self-test"]},
+
     {"gate": "control-coverage", "file": "harnesses/control-coverage/check_controls.py",
      "old": "    base = os.path.basename(control)\n"
             "    return any((control in text) or (base in text) for text in gate_texts)",

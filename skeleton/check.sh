@@ -31,6 +31,11 @@ echo "===== 0b. Phase-0 controls — re-run against the C actually ported ====="
 # and a source added later would otherwise arrive un-triaged (LESSONS #31).
 "$PY" "$KIT/harnesses/c-flaw-scan/scan_c_flaws.py" "$HERE/c" | tail -4
 "$PY" "$KIT/harnesses/threat-model/check_threat_model.py" "$HERE/THREAT-MODEL.md"
+# Every exported symbol must be accounted for (ported, or out-of-scope WITH a
+# written reason). PORT-SPECIFIC: point --header at your library's header and
+# set --export-macro to its export marker (LESSONS #34).
+"$PY" "$KIT/harnesses/api-coverage/check_api.py" \
+    --header "$HERE/c/lib.h" --manifest "$HERE/API-COVERAGE.md"
 
 echo "===== 1. rust workspace (fmt / clippy / build / test) ====="
 ( cd "$HERE/rust"

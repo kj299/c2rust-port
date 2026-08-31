@@ -19,6 +19,11 @@ oracle is at gate 2 of 6, not done.
    and threat-model, two of them "hard fail" — were in this list and in the
    mutation sweep, yet the port's gate script never called any of them
    (LESSONS #31). Reading a gate script cannot show you an absence; ask the tool.
+   Then: `python3 porting-kit/harnesses/api-coverage/check_api.py --header <c.h>
+   --manifest API-COVERAGE.md` → every exported symbol ported, or out-of-scope
+   with a written reason. cJSON module 9 passed six gates, a 25k fuzz sweep and a
+   retrospective with 2 of 14 public symbols unported, because LESSONS #26 said to
+   check this in prose and nothing enforced it (LESSONS #34).
 1. **Unsafe contained + documented** (toolchain-free hard gate):
    `python3 porting-kit/harnesses/unsafe-audit/audit_unsafe.py crates/`  → must be 0
    undocumented. (On a real backend this found 51/131 undocumented — exactly what a
