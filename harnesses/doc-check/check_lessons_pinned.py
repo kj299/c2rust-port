@@ -46,8 +46,13 @@ AMENDED_RE = re.compile(r"- \*\*Section amended:\*\*(.*?)(?=^-\s\*\*|^##\s|\Z)",
 # ignoring it, because the prefix list predated the existence of `ports/`. A
 # path this regex doesn't recognize is checked by nothing and reports nothing:
 # the same not-looking-at-it failure as a 0-of-0 audit (LESSONS #18).
+# `.rs`/`.c`/`.h` joined the extension list with LESSONS #26: a lesson can amend
+# a port's Rust or its C driver directly (module 8's fix lives in dom.rs), and
+# until then those links were silently unenforced — the extension-list twin of
+# the prefix-list gap above.
 CODE_PATH_RE = re.compile(
-    r"(?:harnesses|skills|skeleton|examples|ports|\.github)/[A-Za-z0-9_./-]+\.(?:py|sh|yml)")
+    r"(?:harnesses|skills|skeleton|examples|ports|\.github)/[A-Za-z0-9_./-]+"
+    r"\.(?:py|sh|yml|rs|c|h)\b")
 
 
 def parse_lessons(text):
@@ -172,6 +177,25 @@ def _self_test():
         check("a line-wrapped amended path is still checked (not skipped)", run(root) == 1)
         open(wrapped, "w").write("#!/usr/bin/env python3\n# pinned (LESSONS #11)\n")
         check("citing it clears the wrapped-path link", run(root) == 0)
+
+        # LESSONS #26: a lesson can amend a port's RUST or C source directly —
+        # an extension the regex doesn't know is the extension-list twin of the
+        # ports/ prefix gap: named, checked by nothing, reported as nothing.
+        rs = os.path.join(root, "ports", "p", "dom.rs")
+        open(rs, "w").write("// no citation yet\n")
+        with open(os.path.join(root, "LESSONS.md"), "a") as f:
+            f.write("\n## 013. rust path\n- **Section amended:** ports/p/dom.rs.\n")
+        check("a .rs amended path is checked like any other kit code",
+              run(root) == 1)
+        open(rs, "w").write("// pinned (LESSONS #13)\n")
+        check("citing it clears the .rs link", run(root) == 0)
+        cfile = os.path.join(root, "ports", "p", "driver.c")
+        open(cfile, "w").write("/* no citation */\n")
+        with open(os.path.join(root, "LESSONS.md"), "a") as f:
+            f.write("\n## 014. c path\n- **Section amended:** ports/p/driver.c.\n")
+        check("a .c amended path is checked too", run(root) == 1)
+        open(cfile, "w").write("/* pinned (LESSONS #14) */\n")
+        check("citing it clears the .c link", run(root) == 0)
     print("\nself-test:", "OK" if ok else "FAILED")
     return 0 if ok else 1
 

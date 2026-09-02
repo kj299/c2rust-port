@@ -21,6 +21,36 @@ KIT="$HERE/../.."
 PY="${PYTHON:-python3}"
 RUST_DRIVER="$HERE/rust/target/release/rjson_driver"
 
+echo "===== 0. declared controls — every one in CLAUDE.md's table must RUN here ====="
+# LESSONS #31: the mutation sweep proves each gate REFUSES, and probe-coverage
+# proves each module is PROBED, but nothing asked whether a declared control is
+# invoked at all. Three of six were not (supply-chain, c-flaw-scan, threat-model
+# — two of them "hard fail"), and every one still passed the sweep, because a
+# sweep measures a harness's self-test, not its use. This check reads the control
+# table and fails if the gate below never calls one.
+"$PY" "$KIT/harnesses/control-coverage/check_controls.py" \
+    --controls "$KIT/CLAUDE.md" --gate "$HERE/check.sh"
+
+echo "===== 0b. Phase-0 controls — re-run against the C actually ported ====="
+# The flaw scan is a Phase-0 artifact, but the C in scope GROWS as modules land:
+# module 9 pulled cJSON_Utils.c in, and its 8 copy-sink sites were never triaged
+# because nobody re-ran the scan (LESSONS #31). Re-run it every gate, over every
+# vendored C file, so a newly-ported source cannot arrive un-triaged.
+"$PY" "$KIT/harnesses/c-flaw-scan/scan_c_flaws.py" "$HERE/c" | tail -4
+"$PY" "$KIT/harnesses/threat-model/check_threat_model.py" "$HERE/THREAT-MODEL.md"
+# LESSONS #34 (mechanizing #26): every exported symbol must be accounted for in
+# API-COVERAGE.md — module 9 shipped DONE with two of cJSON_Utils.h's 14 public
+# symbols never ported and never gated, because #26 was prose in a playbook.
+#
+# BOTH headers, one manifest, one ratchet (LESSONS #35). This ran over
+# cJSON_Utils.h alone at first, which made it green while 35 of the BASE
+# library's entry points sat ungated — the gate's own scope was the next place
+# the hole moved to. `unported` rows and the declared ceiling in the manifest
+# keep that number honest and stop it growing.
+"$PY" "$KIT/harnesses/api-coverage/check_api.py" \
+    --header "$HERE/c/cJSON.h" --header "$HERE/c/cJSON_Utils.h" \
+    --manifest "$HERE/API-COVERAGE.md"
+
 echo "===== 1. oracle (build + validate all vectors against C) ====="
 bash "$HERE/oracle/run.sh" > /dev/null
 echo "oracle locked"
@@ -31,7 +61,7 @@ echo "===== 1b. probe-then-port — transcripts pinned, tests generated ====="
 # fails closed on oracle drift, a tampered transcript, or a hand-edited/stale
 # generated test file. The generated tests themselves run under `cargo test`
 # in step 2.
-PROBE_SETS=(quirks plumbing builder)
+PROBE_SETS=(quirks plumbing builder utils)
 PROBE_FILES=()
 for set in "${PROBE_SETS[@]}"; do
   PROBE_FILES+=("$HERE/oracle/probes-$set.json")
@@ -105,6 +135,18 @@ echo "----- module 8 (ffi-builder): builder + query differentials -----"
     --matrix "$HERE/oracle/matrix-builder.json" --ledger "$HERE/DIVERGENCES.md" \
     --json > "$HERE/reports/ffi-builder.json"
 
+echo "----- module 9 (cJSON_Utils): pointer / patch / merge / sort differentials -----"
+# JSON Pointer (RFC 6901), Patch (6902), Merge-Patch (7396), object sort. The 3
+# utils-tilde-* rows in the matrix ASSERT the ledgered decode fix still diverges
+# from shipped cJSON; everything else matches byte-for-byte. One report, stamped
+# per utils module (the surface is shared, as with the scalar matrix above).
+"$PY" "$KIT/harnesses/differential/diff_run.py" \
+    --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
+    --matrix "$HERE/oracle/matrix-utils.json" --ledger "$HERE/DIVERGENCES.md" \
+    --json > "$HERE/reports/utils-pointer.json"
+cp "$HERE/reports/utils-pointer.json" "$HERE/reports/utils-patch.json"
+cp "$HERE/reports/utils-pointer.json" "$HERE/reports/utils-sort.json"
+
 echo "===== 4. diff-fuzz — differential fuzzing, Rust vs C ====="
 mkdir -p "$HERE/reports/fuzz"
 "$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
@@ -133,6 +175,39 @@ mkdir -p "$HERE/reports/fuzz"
     --json > "$HERE/reports/fuzz/ffi-builder.json"
 for m in scalar-parse string-parse buffer-plumbing recursive-core; do
   cp "$HERE/reports/fuzz/alloc-node.json" "$HERE/reports/fuzz/$m.json"
+done
+
+# module 9 (cJSON_Utils): fuzz all six modes. `patch` decodes a ~0/~1 escape in a
+# Patch child key CORRECTLY (the ledgered fix), so fuzzing it against the PRISTINE
+# oracle would rediscover that intentional divergence for every ~escaped key — a
+# predicate-defined divergence class is not a finite set to pin (LESSONS #28). So
+# `patch` fuzzes against a CORRECTED oracle (build_fixed.sh: pristine cJSON + the
+# one-line decode fix), where both sides decode correctly and any divergence is a
+# REAL port bug. The other five modes have no intentional divergence and fuzz
+# against the pristine oracle.
+bash "$HERE/oracle/build_fixed.sh" > /dev/null
+"$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
+    --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
+    --args ptr --matrix "$HERE/oracle/matrix-utils.json" \
+    --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
+    --json > "$HERE/reports/fuzz/utils-pointer.json"
+"$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
+    --oracle "$HERE/oracle/cjson_oracle_fixed" --rust "$RUST_DRIVER" \
+    --args patch --matrix "$HERE/oracle/matrix-utils.json" \
+    --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
+    --json > "$HERE/reports/fuzz/utils-patch.json"
+"$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
+    --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
+    --args sort --matrix "$HERE/oracle/matrix-utils.json" \
+    --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
+    --json > "$HERE/reports/fuzz/utils-sort.json"
+# merge / genmerge / genpatch share the utils-patch surface (RFC 6902/7396); run
+# them fail-closed — a finding exits nonzero and aborts under `set -e`.
+for um in merge genmerge genpatch; do
+  "$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
+      --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
+      --args "$um" --matrix "$HERE/oracle/matrix-utils.json" \
+      --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 > /dev/null
 done
 
 echo "===== 4b. sanitizers — miri (UB) + asan (FFI memory), toolchain-optional ====="
@@ -172,9 +247,24 @@ echo "===== 5. unsafe-audit over the rust workspace ====="
 mkdir -p "$HERE/reports/unsafe"
 "$PY" "$KIT/harnesses/unsafe-audit/audit_unsafe.py" "$HERE/rust/crates" --json \
     > "$HERE/reports/unsafe/alloc-node.json"
-for m in scalar-parse string-parse buffer-plumbing recursive-core dom entry-minify ffi-builder; do
+for m in scalar-parse string-parse buffer-plumbing recursive-core dom entry-minify ffi-builder utils-pointer utils-patch utils-sort; do
   cp "$HERE/reports/unsafe/alloc-node.json" "$HERE/reports/unsafe/$m.json"
 done
+
+echo "===== 5b. supply-chain — the dependency surface ====="
+# LESSONS #31: this control was in CLAUDE.md's table and in the mutation sweep,
+# yet the port's gate never called it, so the port's dependency tree had never
+# been audited at all. Toolchain-optional like the sanitizers, and for the same
+# reason: absence of the tool must be LOUD, never silently green. When the tools
+# ARE present the harness's own fail-closed verdict stands (no `|| true` here).
+if command -v cargo-audit >/dev/null 2>&1 && command -v cargo-deny >/dev/null 2>&1; then
+  bash "$KIT/harnesses/supply-chain/run_supply_chain.sh" "$HERE/rust"
+  echo "supply-chain: dependency audit clean"
+else
+  echo "SKIP  supply-chain: cargo-audit/cargo-deny absent — the dependency audit"
+  echo "      did NOT run (install: cargo install cargo-audit cargo-deny)."
+  echo "      Reported every run so an unaudited dep tree cannot look green."
+fi
 
 if [ "$SAN_RAN" = "1" ]; then
   # `sanitized` is no longer hand-set (LESSONS #24): it advances in step 6 from
@@ -182,7 +272,7 @@ if [ "$SAN_RAN" = "1" ]; then
   # five rungs. A SKIP writes no report — and a report where nothing ran carries
   # an empty `modes_run`, which `progress.py` refuses. The claim can no longer
   # outlive the run that earned it.
-  for m in scalar-parse string-parse buffer-plumbing recursive-core dom entry-minify ffi-builder; do
+  for m in scalar-parse string-parse buffer-plumbing recursive-core dom entry-minify ffi-builder utils-pointer utils-patch utils-sort; do
     cp "$SAN_REPORT" "$HERE/reports/sanitize/$m.json"
   done
   echo "sanitizer reports emitted for every module"

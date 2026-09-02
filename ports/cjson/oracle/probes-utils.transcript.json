@@ -1,0 +1,537 @@
+{
+  "probe_transcript": 1,
+  "module": "utils",
+  "oracle_sha256": "8454f5eed48675596dfa3890bc84894ce0984ad3c19a25e63e8134b9e05ce3f3",
+  "generated_by": "harnesses/probe/probe.py run",
+  "entries": [
+    {
+      "id": "ptr-key",
+      "args": [
+        "ptr"
+      ],
+      "stdin_b64": "L2EKeyJhIjoxLCJiIjoyfQ==",
+      "note": "pointer resolves an object key",
+      "rc": 0,
+      "stdout_b64": "MQ==",
+      "stdin_preview": "/a\n{\"a\":1,\"b\":2}",
+      "stdout_preview": "1"
+    },
+    {
+      "id": "ptr-array",
+      "args": [
+        "ptr"
+      ],
+      "stdin_b64": "L2EvMQp7ImEiOlsxMCwyMCwzMF19",
+      "note": "array index segment",
+      "rc": 0,
+      "stdout_b64": "MjA=",
+      "stdin_preview": "/a/1\n{\"a\":[10,20,30]}",
+      "stdout_preview": "20"
+    },
+    {
+      "id": "ptr-empty",
+      "args": [
+        "ptr"
+      ],
+      "stdin_b64": "CnsiYSI6MX0=",
+      "note": "empty pointer resolves the whole document",
+      "rc": 0,
+      "stdout_b64": "eyJhIjoxfQ==",
+      "stdin_preview": "\n{\"a\":1}",
+      "stdout_preview": "{\"a\":1}"
+    },
+    {
+      "id": "ptr-missing",
+      "args": [
+        "ptr"
+      ],
+      "stdin_b64": "L3gKeyJhIjoxfQ==",
+      "note": "a pointer to nothing yields `missing`",
+      "rc": 0,
+      "stdout_b64": "bWlzc2luZw==",
+      "stdin_preview": "/x\n{\"a\":1}",
+      "stdout_preview": "missing"
+    },
+    {
+      "id": "ptr-esc-slash",
+      "args": [
+        "ptr"
+      ],
+      "stdin_b64": "L2F+MWIKeyJhL2IiOjl9",
+      "note": "GetPointer decodes ~1 as / CORRECTLY (only the Patch decoder is buggy)",
+      "rc": 0,
+      "stdout_b64": "OQ==",
+      "stdin_preview": "/a~1b\n{\"a/b\":9}",
+      "stdout_preview": "9"
+    },
+    {
+      "id": "ptr-esc-tilde",
+      "args": [
+        "ptr"
+      ],
+      "stdin_b64": "L2F+MGIKeyJhfmIiOjl9",
+      "note": "GetPointer decodes ~0 as ~ correctly",
+      "rc": 0,
+      "stdout_b64": "OQ==",
+      "stdin_preview": "/a~0b\n{\"a~b\":9}",
+      "stdout_preview": "9"
+    },
+    {
+      "id": "ptr-leading-zero",
+      "args": [
+        "ptr"
+      ],
+      "stdin_b64": "LzAwCls3LDhd",
+      "note": "a leading-zero array index is rejected -> missing",
+      "rc": 0,
+      "stdout_b64": "bWlzc2luZw==",
+      "stdin_preview": "/00\n[7,8]",
+      "stdout_preview": "missing"
+    },
+    {
+      "id": "patch-replace",
+      "args": [
+        "patch"
+      ],
+      "stdin_b64": "W3sib3AiOiJyZXBsYWNlIiwicGF0aCI6Ii94IiwidmFsdWUiOjl9XQp7IngiOjF9",
+      "note": "status=0 and the replaced document",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTA7eyJ4Ijo5fQ==",
+      "stdin_preview": "[{\"op\":\"replace\",\"path\":\"/x\",\"value\":9}]\n{\"x\":1}",
+      "stdout_preview": "status=0;{\"x\":9}"
+    },
+    {
+      "id": "patch-remove",
+      "args": [
+        "patch"
+      ],
+      "stdin_b64": "W3sib3AiOiJyZW1vdmUiLCJwYXRoIjoiL3gifV0KeyJ4IjoxLCJ5IjoyfQ==",
+      "note": "remove drops the key",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTA7eyJ5IjoyfQ==",
+      "stdin_preview": "[{\"op\":\"remove\",\"path\":\"/x\"}]\n{\"x\":1,\"y\":2}",
+      "stdout_preview": "status=0;{\"y\":2}"
+    },
+    {
+      "id": "patch-add",
+      "args": [
+        "patch"
+      ],
+      "stdin_b64": "W3sib3AiOiJhZGQiLCJwYXRoIjoiL25ld2tleSIsInZhbHVlIjoxfV0KeyJhIjowfQ==",
+      "note": "add inserts a new key",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTA7eyJhIjowLCJuZXdrZXkiOjF9",
+      "stdin_preview": "[{\"op\":\"add\",\"path\":\"/newkey\",\"value\":1}]\n{\"a\":0}",
+      "stdout_preview": "status=0;{\"a\":0,\"newkey\":1}"
+    },
+    {
+      "id": "patch-add-append",
+      "args": [
+        "patch"
+      ],
+      "stdin_b64": "W3sib3AiOiJhZGQiLCJwYXRoIjoiL2Fyci8tIiwidmFsdWUiOjl9XQp7ImFyciI6WzEsMl19",
+      "note": "`-` appends to an array",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTA7eyJhcnIiOlsxLDIsOV19",
+      "stdin_preview": "[{\"op\":\"add\",\"path\":\"/arr/-\",\"value\":9}]\n{\"arr\":[1,2]}",
+      "stdout_preview": "status=0;{\"arr\":[1,2,9]}"
+    },
+    {
+      "id": "patch-add-index",
+      "args": [
+        "patch"
+      ],
+      "stdin_b64": "W3sib3AiOiJhZGQiLCJwYXRoIjoiL2Fyci8xIiwidmFsdWUiOjl9XQp7ImFyciI6WzEsMl19",
+      "note": "a numeric index inserts before that position",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTA7eyJhcnIiOlsxLDksMl19",
+      "stdin_preview": "[{\"op\":\"add\",\"path\":\"/arr/1\",\"value\":9}]\n{\"arr\":[1,2]}",
+      "stdout_preview": "status=0;{\"arr\":[1,9,2]}"
+    },
+    {
+      "id": "patch-test-pass",
+      "args": [
+        "patch"
+      ],
+      "stdin_b64": "W3sib3AiOiJ0ZXN0IiwicGF0aCI6Ii94IiwidmFsdWUiOjF9XQp7IngiOjF9",
+      "note": "test succeeds -> status 0",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTA7eyJ4IjoxfQ==",
+      "stdin_preview": "[{\"op\":\"test\",\"path\":\"/x\",\"value\":1}]\n{\"x\":1}",
+      "stdout_preview": "status=0;{\"x\":1}"
+    },
+    {
+      "id": "patch-test-fail",
+      "args": [
+        "patch"
+      ],
+      "stdin_b64": "W3sib3AiOiJ0ZXN0IiwicGF0aCI6Ii94IiwidmFsdWUiOjJ9XQp7IngiOjF9",
+      "note": "test fails -> status 1, document unchanged",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTE7eyJ4IjoxfQ==",
+      "stdin_preview": "[{\"op\":\"test\",\"path\":\"/x\",\"value\":2}]\n{\"x\":1}",
+      "stdout_preview": "status=1;{\"x\":1}"
+    },
+    {
+      "id": "patch-move",
+      "args": [
+        "patch"
+      ],
+      "stdin_b64": "W3sib3AiOiJtb3ZlIiwiZnJvbSI6Ii9hIiwicGF0aCI6Ii9iIn1dCnsiYSI6NX0=",
+      "note": "move detaches from `from` and adds at `path`",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTA7eyJiIjo1fQ==",
+      "stdin_preview": "[{\"op\":\"move\",\"from\":\"/a\",\"path\":\"/b\"}]\n{\"a\":5}",
+      "stdout_preview": "status=0;{\"b\":5}"
+    },
+    {
+      "id": "patch-copy",
+      "args": [
+        "patch"
+      ],
+      "stdin_b64": "W3sib3AiOiJjb3B5IiwiZnJvbSI6Ii9hIiwicGF0aCI6Ii9iIn1dCnsiYSI6NX0=",
+      "note": "copy duplicates `from` to `path`",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTA7eyJhIjo1LCJiIjo1fQ==",
+      "stdin_preview": "[{\"op\":\"copy\",\"from\":\"/a\",\"path\":\"/b\"}]\n{\"a\":5}",
+      "stdout_preview": "status=0;{\"a\":5,\"b\":5}"
+    },
+    {
+      "id": "patch-replace-root",
+      "args": [
+        "patch"
+      ],
+      "stdin_b64": "W3sib3AiOiJyZXBsYWNlIiwicGF0aCI6IiIsInZhbHVlIjpbMSwyXX1dCnsib2xkIjoxfQ==",
+      "note": "an empty path replaces the whole document",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTA7WzEsMl0=",
+      "stdin_preview": "[{\"op\":\"replace\",\"path\":\"\",\"value\":[1,2]}]\n{\"old\":1}",
+      "stdout_preview": "status=0;[1,2]"
+    },
+    {
+      "id": "patch-malformed",
+      "args": [
+        "patch"
+      ],
+      "stdin_b64": "W3sib3AiOiJib2d1cyIsInBhdGgiOiIveCJ9XQp7IngiOjF9",
+      "note": "an unknown op -> status 3 (INVALID), document unchanged",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTM7eyJ4IjoxfQ==",
+      "stdin_preview": "[{\"op\":\"bogus\",\"path\":\"/x\"}]\n{\"x\":1}",
+      "stdout_preview": "status=3;{\"x\":1}"
+    },
+    {
+      "id": "merge-null",
+      "args": [
+        "merge"
+      ],
+      "stdin_b64": "eyJhIjpudWxsfQp7ImEiOjEsImIiOjJ9",
+      "note": "null removes a key",
+      "rc": 0,
+      "stdout_b64": "eyJiIjoyfQ==",
+      "stdin_preview": "{\"a\":null}\n{\"a\":1,\"b\":2}",
+      "stdout_preview": "{\"b\":2}"
+    },
+    {
+      "id": "merge-recursive",
+      "args": [
+        "merge"
+      ],
+      "stdin_b64": "eyJhIjp7ImMiOjN9fQp7ImEiOnsiYiI6Mn19",
+      "note": "objects merge recursively",
+      "rc": 0,
+      "stdout_b64": "eyJhIjp7ImIiOjIsImMiOjN9fQ==",
+      "stdin_preview": "{\"a\":{\"c\":3}}\n{\"a\":{\"b\":2}}",
+      "stdout_preview": "{\"a\":{\"b\":2,\"c\":3}}"
+    },
+    {
+      "id": "merge-scalar",
+      "args": [
+        "merge"
+      ],
+      "stdin_b64": "eyJhIjo1fQp7ImEiOjF9",
+      "note": "a scalar replaces",
+      "rc": 0,
+      "stdout_b64": "eyJhIjo1fQ==",
+      "stdin_preview": "{\"a\":5}\n{\"a\":1}",
+      "stdout_preview": "{\"a\":5}"
+    },
+    {
+      "id": "merge-array",
+      "args": [
+        "merge"
+      ],
+      "stdin_b64": "WzEsMl0KeyJhIjoxfQ==",
+      "note": "a non-object patch replaces the whole target",
+      "rc": 0,
+      "stdout_b64": "WzEsMl0=",
+      "stdin_preview": "[1,2]\n{\"a\":1}",
+      "stdout_preview": "[1,2]"
+    },
+    {
+      "id": "genmerge-diff",
+      "args": [
+        "genmerge"
+      ],
+      "stdin_b64": "eyJhIjoxLCJiIjoyfQp7ImEiOjEsImMiOjN9",
+      "note": "generate merge-patch: remove b (null), add c",
+      "rc": 0,
+      "stdout_b64": "eyJiIjpudWxsLCJjIjozfQ==",
+      "stdin_preview": "{\"a\":1,\"b\":2}\n{\"a\":1,\"c\":3}",
+      "stdout_preview": "{\"b\":null,\"c\":3}"
+    },
+    {
+      "id": "genmerge-same",
+      "args": [
+        "genmerge"
+      ],
+      "stdin_b64": "eyJhIjoxfQp7ImEiOjF9",
+      "note": "identical -> null",
+      "rc": 0,
+      "stdout_b64": "bnVsbA==",
+      "stdin_preview": "{\"a\":1}\n{\"a\":1}",
+      "stdout_preview": "null"
+    },
+    {
+      "id": "genpatch-scalar",
+      "args": [
+        "genpatch"
+      ],
+      "stdin_b64": "eyJhIjoxfQp7ImEiOjJ9",
+      "note": "generate patch: replace",
+      "rc": 0,
+      "stdout_b64": "W3sib3AiOiJyZXBsYWNlIiwicGF0aCI6Ii9hIiwidmFsdWUiOjJ9XQ==",
+      "stdin_preview": "{\"a\":1}\n{\"a\":2}",
+      "stdout_preview": "[{\"op\":\"replace\",\"path\":\"/a\",\"value\":2}]"
+    },
+    {
+      "id": "genpatch-add",
+      "args": [
+        "genpatch"
+      ],
+      "stdin_b64": "eyJhIjoxfQp7ImEiOjEsImIiOjJ9",
+      "note": "generate patch: add",
+      "rc": 0,
+      "stdout_b64": "W3sib3AiOiJhZGQiLCJwYXRoIjoiL2IiLCJ2YWx1ZSI6Mn1d",
+      "stdin_preview": "{\"a\":1}\n{\"a\":1,\"b\":2}",
+      "stdout_preview": "[{\"op\":\"add\",\"path\":\"/b\",\"value\":2}]"
+    },
+    {
+      "id": "genpatch-array",
+      "args": [
+        "genpatch"
+      ],
+      "stdin_b64": "WzEsMiwzXQpbMSw5LDNd",
+      "note": "generate patch over an array element",
+      "rc": 0,
+      "stdout_b64": "W3sib3AiOiJyZXBsYWNlIiwicGF0aCI6Ii8xIiwidmFsdWUiOjl9XQ==",
+      "stdin_preview": "[1,2,3]\n[1,9,3]",
+      "stdout_preview": "[{\"op\":\"replace\",\"path\":\"/1\",\"value\":9}]"
+    },
+    {
+      "id": "sort-keys",
+      "args": [
+        "sort"
+      ],
+      "stdin_b64": "eyJjIjozLCJhIjoxLCJiIjoyfQ==",
+      "note": "immediate object keys sort",
+      "rc": 0,
+      "stdout_b64": "eyJhIjoxLCJiIjoyLCJjIjozfQ==",
+      "stdin_preview": "{\"c\":3,\"a\":1,\"b\":2}",
+      "stdout_preview": "{\"a\":1,\"b\":2,\"c\":3}"
+    },
+    {
+      "id": "sort-nonrecursive",
+      "args": [
+        "sort"
+      ],
+      "stdin_b64": "eyJiIjoxLCJhIjp7InoiOjEsInkiOjJ9fQ==",
+      "note": "SortObject is NOT recursive: the nested object keeps z-before-y",
+      "rc": 0,
+      "stdout_b64": "eyJhIjp7InoiOjEsInkiOjJ9LCJiIjoxfQ==",
+      "stdin_preview": "{\"b\":1,\"a\":{\"z\":1,\"y\":2}}",
+      "stdout_preview": "{\"a\":{\"z\":1,\"y\":2},\"b\":1}"
+    },
+    {
+      "id": "sort-array-noop",
+      "args": [
+        "sort"
+      ],
+      "stdin_b64": "W3siYyI6MSwiYSI6Mn1d",
+      "note": "sorting an array is a no-op (no keys to sort at the top; not recursive)",
+      "rc": 0,
+      "stdout_b64": "W3siYyI6MSwiYSI6Mn1d",
+      "stdin_preview": "[{\"c\":1,\"a\":2}]",
+      "stdout_preview": "[{\"c\":1,\"a\":2}]"
+    },
+    {
+      "id": "sort-ci-default",
+      "args": [
+        "sort"
+      ],
+      "stdin_b64": "eyJCIjoxLCJhIjoyfQ==",
+      "note": "default sort is case-INsensitive: a sorts before B",
+      "rc": 0,
+      "stdout_b64": "eyJhIjoyLCJCIjoxfQ==",
+      "stdin_preview": "{\"B\":1,\"a\":2}",
+      "stdout_preview": "{\"a\":2,\"B\":1}"
+    },
+    {
+      "id": "sort-cs",
+      "args": [
+        "sort-cs"
+      ],
+      "stdin_b64": "eyJCIjoxLCJhIjoyfQ==",
+      "note": "case-sensitive sort: uppercase B (0x42) sorts before a (0x61)",
+      "rc": 0,
+      "stdout_b64": "eyJCIjoxLCJhIjoyfQ==",
+      "stdin_preview": "{\"B\":1,\"a\":2}",
+      "stdout_preview": "{\"B\":1,\"a\":2}"
+    },
+    {
+      "id": "findptr-array",
+      "args": [
+        "findptr"
+      ],
+      "stdin_b64": "L2EvMQp7ImEiOlsxMCwyMF0sImIiOjF9",
+      "note": "reverse lookup round-trips an array path",
+      "rc": 0,
+      "stdout_b64": "L2EvMQ==",
+      "stdin_preview": "/a/1\n{\"a\":[10,20],\"b\":1}",
+      "stdout_preview": "/a/1"
+    },
+    {
+      "id": "findptr-key",
+      "args": [
+        "findptr"
+      ],
+      "stdin_b64": "L2EKeyJhIjpbMTAsMjBdfQ==",
+      "note": "reverse lookup of an object key",
+      "rc": 0,
+      "stdout_b64": "L2E=",
+      "stdin_preview": "/a\n{\"a\":[10,20]}",
+      "stdout_preview": "/a"
+    },
+    {
+      "id": "findptr-root",
+      "args": [
+        "findptr"
+      ],
+      "stdin_b64": "CnsiYSI6MX0=",
+      "note": "the root maps to the EMPTY pointer",
+      "rc": 0,
+      "stdout_b64": "",
+      "stdin_preview": "\n{\"a\":1}",
+      "stdout_preview": ""
+    },
+    {
+      "id": "findptr-escaped",
+      "args": [
+        "findptr"
+      ],
+      "stdin_b64": "L2F+MWIKeyJhL2IiOjd9",
+      "note": "an escaped key is re-encoded on the way back",
+      "rc": 0,
+      "stdout_b64": "L2F+MWI=",
+      "stdin_preview": "/a~1b\n{\"a/b\":7}",
+      "stdout_preview": "/a~1b"
+    },
+    {
+      "id": "findptr-tilde",
+      "args": [
+        "findptr"
+      ],
+      "stdin_b64": "L2F+MGIKeyJhfmIiOjd9",
+      "note": "~0 escape re-encoded",
+      "rc": 0,
+      "stdout_b64": "L2F+MGI=",
+      "stdin_preview": "/a~0b\n{\"a~b\":7}",
+      "stdout_preview": "/a~0b"
+    },
+    {
+      "id": "findptr-missing",
+      "args": [
+        "findptr"
+      ],
+      "stdin_b64": "L3p6CnsiYSI6MX0=",
+      "note": "pointer to nothing yields `missing`",
+      "rc": 0,
+      "stdout_b64": "bWlzc2luZw==",
+      "stdin_preview": "/zz\n{\"a\":1}",
+      "stdout_preview": "missing"
+    },
+    {
+      "id": "findptr-deep",
+      "args": [
+        "findptr"
+      ],
+      "stdin_b64": "L2EvMC9iCnsiYSI6W3siYiI6NX1dfQ==",
+      "note": "mixed array/object descent",
+      "rc": 0,
+      "stdout_b64": "L2EvMC9i",
+      "stdin_preview": "/a/0/b\n{\"a\":[{\"b\":5}]}",
+      "stdout_preview": "/a/0/b"
+    },
+    {
+      "id": "findptr-dupkey",
+      "args": [
+        "findptr"
+      ],
+      "stdin_b64": "L2sKeyJrIjoxLCJrIjoyfQ==",
+      "note": "duplicate keys: first match wins",
+      "rc": 0,
+      "stdout_b64": "L2s=",
+      "stdin_preview": "/k\n{\"k\":1,\"k\":2}",
+      "stdout_preview": "/k"
+    },
+    {
+      "id": "addpatch-value",
+      "args": [
+        "addpatch"
+      ],
+      "stdin_b64": "YWRkCS94CjQy",
+      "note": "compose an op with a value",
+      "rc": 0,
+      "stdout_b64": "W3sib3AiOiJhZGQiLCJwYXRoIjoiL3giLCJ2YWx1ZSI6NDJ9XQ==",
+      "stdin_preview": "add\t/x\n42",
+      "stdout_preview": "[{\"op\":\"add\",\"path\":\"/x\",\"value\":42}]"
+    },
+    {
+      "id": "addpatch-novalue",
+      "args": [
+        "addpatch"
+      ],
+      "stdin_b64": "cmVtb3ZlCS95Cg==",
+      "note": "no value member when value is absent",
+      "rc": 0,
+      "stdout_b64": "W3sib3AiOiJyZW1vdmUiLCJwYXRoIjoiL3kifV0=",
+      "stdin_preview": "remove\t/y\n",
+      "stdout_preview": "[{\"op\":\"remove\",\"path\":\"/y\"}]"
+    },
+    {
+      "id": "addpatch-obj",
+      "args": [
+        "addpatch"
+      ],
+      "stdin_b64": "cmVwbGFjZQkvYX4xYgp7ImsiOjF9",
+      "note": "path stored VERBATIM, not re-encoded",
+      "rc": 0,
+      "stdout_b64": "W3sib3AiOiJyZXBsYWNlIiwicGF0aCI6Ii9hfjFiIiwidmFsdWUiOnsiayI6MX19XQ==",
+      "stdin_preview": "replace\t/a~1b\n{\"k\":1}",
+      "stdout_preview": "[{\"op\":\"replace\",\"path\":\"/a~1b\",\"value\":{\"k\":1}}]"
+    },
+    {
+      "id": "addpatch-emptypath",
+      "args": [
+        "addpatch"
+      ],
+      "stdin_b64": "YWRkCQox",
+      "note": "empty path is kept as an empty string",
+      "rc": 0,
+      "stdout_b64": "W3sib3AiOiJhZGQiLCJwYXRoIjoiIiwidmFsdWUiOjF9XQ==",
+      "stdin_preview": "add\t\n1",
+      "stdout_preview": "[{\"op\":\"add\",\"path\":\"\",\"value\":1}]"
+    }
+  ],
+  "fingerprint": "2190622b0da2719e52f1b0a22cd73a1a1309e4be3ef44f4fde70d89ff62e7c4e"
+}

@@ -29,6 +29,18 @@ retrospective and **patch the Porting Kit** with what you learned.
    environment claims **dated and scoped** ("as of YYYY-MM-DD, in this repo").
    When one turns out stale, correct it with a dated note — never a silent rewrite,
    which erases the failure mode instead of recording it.
+   **And never bake a conclusion into a recurring prompt** (LESSONS #32): when you
+   schedule a check-in, hand off, or write a task for future-you, carry the
+   **re-test command**, not the verdict — "run X and report the result", never
+   "X is broken; confirm nothing changed". The cJSON watch wrote "Actions is
+   disabled at the account level" into its own check-in prompt and then re-read it
+   as an established premise ~6 times over two days without retesting; one API
+   re-run (accepted, `201`, jobs rescheduled) disproved the mechanism instantly.
+   A conclusion in a recurring prompt is a premise you will never re-derive, and
+   it launders itself into your reports. Date every environment claim by when it
+   was last **executed**, not last asserted — and if you find yourself declining a
+   cheap experiment because it "would only re-confirm", that is the experiment to
+   run.
 
 1. **Reconstruct the experience from artifacts**, the way
    `RETROSPECTIVE-lsof.md` was built — lean on git history, especially:

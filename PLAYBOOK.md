@@ -255,7 +255,12 @@ transcript, or a hand-edited generated file all fail closed, **and
 red** (LESSONS #23 — verifying the probes that exist says nothing about the module
 nobody probed). Tag each probes file with the `modules: [...]` it decides, exactly
 as Phase 2 tags corpus vectors. `ports/cjson/check.sh` step 1b is the worked
-reference.
+reference. **And the driver's mode set must cover every public entry point the
+module claims** (LESSONS #26): a gate judges only the surface the driver exposes,
+so an accessor no mode calls is ungated whatever the matrix says — cJSON's
+`GetArraySize` shipped wrong through six green gates exactly this way. Before
+advancing a module, enumerate its public API against the driver modes and add a
+mode (or extend one) for anything unreachable.
 **Exit criteria (per module):** all six gates green; `progress` row fully ticked.
 **Artifacts:** the module, its fuzz target, its golden cases, divergence entries.
 **lsof failure modes this prevents:** the 7-commit hang (spike-first + sanitizer

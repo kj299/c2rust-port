@@ -249,9 +249,80 @@ def main():
                 for c in MATRIX if "minify" not in c["mods"]]
     with open(os.path.join(HERE, "matrix-builder.json"), "w") as f:
         json.dump(builder, f, indent=2)
+
+    # cJSON_Utils (JSON Pointer / Patch / Merge / Sort). Faithful cases MUST
+    # match the C; the ~escape patch cases are LEDGERED divergences — the port
+    # FIXES the C's decode_pointer_inplace bug (DIVERGENCES.md). `mods` tags the
+    # three utils modules (pointer / patch / sort).
+    def ucase(name, mode, a, b, mods, rc=0):
+        stdin = a if b is None else a + "\n" + b
+        return {"name": name, "args": [mode], "stdin": stdin,
+                "expect_rc": rc, "mods": list(mods)}
+    utils = [
+        # -- JSON Pointer (faithful, incl. correct ~escape in GET) --
+        ucase("u-ptr-key", "ptr", "/a", '{"a":1,"b":2}', ["utils-pointer"]),
+        ucase("u-ptr-array", "ptr", "/a/1", '{"a":[10,20,30]}', ["utils-pointer"]),
+        ucase("u-ptr-empty", "ptr", "", '{"a":1}', ["utils-pointer"]),
+        ucase("u-ptr-missing", "ptr", "/x", '{"a":1}', ["utils-pointer"]),
+        ucase("u-ptr-esc-slash", "ptr", "/a~1b", '{"a/b":9}', ["utils-pointer"]),
+        ucase("u-ptr-esc-tilde", "ptr", "/a~0b", '{"a~b":9}', ["utils-pointer"]),
+        ucase("u-ptr-leadzero", "ptr", "/00", "[7,8]", ["utils-pointer"]),
+        ucase("u-ptr-nested", "ptr", "/a/b/0", '{"a":{"b":[5]}}', ["utils-pointer"]),
+        # -- FindPointerFromObjectTo / AddPatchToArray: the two public entry
+        # points module 9 shipped with NO driver mode, so six gates were green
+        # over an unported surface (LESSONS #34). --
+        ucase("u-findptr-array", "findptr", "/a/1", '{"a":[10,20],"b":1}', ["utils-pointer"]),
+        ucase("u-findptr-key", "findptr", "/a", '{"a":[10,20]}', ["utils-pointer"]),
+        ucase("u-findptr-root", "findptr", "", '{"a":1}', ["utils-pointer"]),
+        ucase("u-findptr-escaped", "findptr", "/a~1b", '{"a/b":7}', ["utils-pointer"]),
+        ucase("u-findptr-tilde", "findptr", "/a~0b", '{"a~b":7}', ["utils-pointer"]),
+        ucase("u-findptr-missing", "findptr", "/zz", '{"a":1}', ["utils-pointer"]),
+        ucase("u-findptr-deep", "findptr", "/a/0/b", '{"a":[{"b":5}]}', ["utils-pointer"]),
+        ucase("u-addpatch-value", "addpatch", "add\t/x", "42", ["utils-patch"]),
+        ucase("u-addpatch-novalue", "addpatch", "remove\t/y", "", ["utils-patch"]),
+        ucase("u-addpatch-obj", "addpatch", "replace\t/a~1b", '{"k":1}', ["utils-patch"]),
+        ucase("u-addpatch-emptypath", "addpatch", "add\t", "1", ["utils-patch"]),
+        # -- JSON Patch (faithful surface) --
+        ucase("u-patch-replace", "patch", '[{"op":"replace","path":"/x","value":9}]', '{"x":1}', ["utils-patch"]),
+        ucase("u-patch-remove", "patch", '[{"op":"remove","path":"/x"}]', '{"x":1,"y":2}', ["utils-patch"]),
+        ucase("u-patch-add", "patch", '[{"op":"add","path":"/n","value":1}]', '{"a":0}', ["utils-patch"]),
+        ucase("u-patch-append", "patch", '[{"op":"add","path":"/a/-","value":9}]', '{"a":[1,2]}', ["utils-patch"]),
+        ucase("u-patch-index", "patch", '[{"op":"add","path":"/a/1","value":9}]', '{"a":[1,2]}', ["utils-patch"]),
+        ucase("u-patch-test-ok", "patch", '[{"op":"test","path":"/x","value":1}]', '{"x":1}', ["utils-patch"]),
+        ucase("u-patch-test-no", "patch", '[{"op":"test","path":"/x","value":2}]', '{"x":1}', ["utils-patch"]),
+        ucase("u-patch-move", "patch", '[{"op":"move","from":"/a","path":"/b"}]', '{"a":5}', ["utils-patch"]),
+        ucase("u-patch-copy", "patch", '[{"op":"copy","from":"/a","path":"/b"}]', '{"a":5}', ["utils-patch"]),
+        ucase("u-patch-root", "patch", '[{"op":"replace","path":"","value":[1,2]}]', '{"o":1}', ["utils-patch"]),
+        ucase("u-patch-bad-op", "patch", '[{"op":"nope","path":"/x"}]', '{"x":1}', ["utils-patch"]),
+        ucase("u-patch-test-sort", "patch", '[{"op":"test","path":"","value":{"a":1,"b":2}}]', '{"b":2,"a":1}', ["utils-patch"]),
+        ucase("u-patch-root-remove", "patch", '[{"op":"remove","path":""}]', '{"x":1}', ["utils-patch"], rc=1),
+        # -- Merge / Generate --
+        ucase("u-merge-null", "merge", '{"a":null}', '{"a":1,"b":2}', ["utils-patch"]),
+        ucase("u-merge-recur", "merge", '{"a":{"c":3}}', '{"a":{"b":2}}', ["utils-patch"]),
+        ucase("u-genmerge", "genmerge", '{"a":1,"b":2}', '{"a":1,"c":3}', ["utils-patch"]),
+        ucase("u-genpatch", "genpatch", '{"a":1}', '{"a":2,"b":3}', ["utils-patch"]),
+        ucase("u-genpatch-arr", "genpatch", "[1,2,3]", "[1,9]", ["utils-patch"]),
+        # -- Sort (quirks) --
+        ucase("u-sort-keys", "sort", '{"c":3,"a":1,"b":2}', None, ["utils-sort"]),
+        ucase("u-sort-nonrec", "sort", '{"b":1,"a":{"z":1,"y":2}}', None, ["utils-sort"]),
+        ucase("u-sort-array", "sort", "[3,1,2]", None, ["utils-sort"]),
+        ucase("u-sort-dupkey", "sort", '{"a":1,"a":2}', None, ["utils-sort"]),
+        ucase("u-sort-cs", "sort-cs", '{"B":1,"a":2}', None, ["utils-sort"]),
+    ]
+    # LEDGERED divergences: the port fixes decode_pointer_inplace, so these
+    # DIVERGE from the buggy C (asserted by DIVERGENCES.md `utils-tilde-*`).
+    utils_diverge = [
+        ucase("utils-tilde-add", "patch", '[{"op":"add","path":"/a~1b","value":42}]', "{}", ["utils-patch"]),
+        ucase("utils-tilde-add0", "patch", '[{"op":"add","path":"/a~0b","value":1}]', "{}", ["utils-patch"]),
+        ucase("utils-tilde-remove", "patch", '[{"op":"remove","path":"/a~1b"}]', '{"a/b":1,"x":2}', ["utils-patch"]),
+    ]
+    with open(os.path.join(HERE, "matrix-utils.json"), "w") as f:
+        json.dump(utils + utils_diverge, f, indent=2)
+
     print(f"wrote matrix.json ({len(MATRIX)} cases), holdout.json ({len(HOLDOUT)}), "
           f"matrix-ported.json ({len(ported)}), matrix-dup.json ({len(dup)}), "
-          f"matrix-dupeq.json ({len(dupeq)}), matrix-builder.json ({len(builder)})")
+          f"matrix-dupeq.json ({len(dupeq)}), matrix-builder.json ({len(builder)}), "
+          f"matrix-utils.json ({len(utils)+len(utils_diverge)})")
 
 
 if __name__ == "__main__":

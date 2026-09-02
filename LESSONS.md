@@ -869,3 +869,446 @@ the emphasized half.
 - **Section amended:** harnesses/gate-mutation/mutate_gates.py (`coverage_gaps` +
   self-test); harnesses/fuzz/gen_fuzz_target.sh; harnesses/supply-chain/run_supply_chain.sh;
   harnesses/skeleton-check/check_skeleton.sh; RETROSPECTIVE-probe-harness.md · §6.
+
+---
+
+## 026. A gate judges only the surface the driver exposes
+
+- **Date:** 2026-08-29
+- **Codebase:** cJSON port, module 8 (`ffi-builder`) — found while porting the
+  builder/query surface
+- **What happened:** `cJSON_GetArraySize` counts a node's CHILDREN whatever the
+  node is — the C walks `child`/`next`, so an *object* reports its member count.
+  The port's version said "array length, else 0", written from reasoning about
+  the function's name — and it shipped through **all six gates** and sat on
+  `main` at cutover, fully ticked, with the divergence live. Nothing caught it
+  because no differential driver mode ever *called* the accessor: the driver
+  exposed parse/print/minify/dup pipelines, so "the differential is 79/79 green"
+  was a statement about those pipelines, not about the API the module claims.
+  The probe harness caught it the moment module 8's `query` mode put the
+  accessor on the observable surface (`{"a":{"b":1}}` → C says `size=1`).
+  This is the kit's characteristic bug at a **sixth altitude**: after the
+  verdict (#6), the input (#14/#18/#20), the wiring (#23), the tool inventory
+  (#22), and inherited state (#24) — now the *observable surface itself*. A
+  gate hardened against everything it can see says nothing about what it was
+  never shown.
+- **Kit change:** module 8's `build`/`query` driver modes put the builder,
+  query, predicate, and struct-field surface on the compared contract, each
+  side implemented ONCE (`crates/core/src/modes.rs`, `oracle/cjson_modes.c`)
+  so the executable and ABI tests cannot drift; the fix is pinned by the
+  generated `probe_query_object` test (reverting it goes red — verified).
+  Discipline, wired into the prompts: PLAYBOOK Phase 4 and PROMPTS/10 step 0
+  now require the module's driver modes to cover **every public entry point
+  the module claims** before the module may advance — an accessor the driver
+  cannot reach is ungated, whatever the matrix says. And the lessons-pinned
+  gate itself grew with this entry: its extension list knew only `.py/.sh/.yml`,
+  so a lesson amending a port's Rust or C — like this one — was checked by
+  nothing (the extension-list twin of the `ports/` prefix gap, LESSONS #19);
+  `.rs/.c/.h` are now extracted and enforced, with negative fixtures.
+- **Section amended:** ports/cjson/rust/crates/core/src/dom.rs
+  (`get_array_size`); ports/cjson/rust/crates/core/src/modes.rs;
+  ports/cjson/oracle/cjson_modes.c; harnesses/doc-check/check_lessons_pinned.py
+  (extension list + self-test); PLAYBOOK · Phase 4 entry criteria;
+  PROMPTS/10-module-port.md · step 0.
+
+---
+
+## 027. A shared driver's new branch corrupted the modes it didn't own
+
+- **Date:** 2026-08-29
+- **Codebase:** cJSON port, module 9 (`cJSON_Utils`) — found wiring the
+  pointer/patch/merge/sort driver modes
+- **What happened:** The differential driver is ONE binary dispatching every
+  mode. The new cJSON_Utils block split stdin on the first newline and wrote
+  `*nl = '\0'` to NUL-terminate the first field — but it did so *before*
+  checking whether the mode was actually a utils mode, and only the `sort`
+  branch restored the byte. So for every FALL-THROUGH mode
+  (minify/print/roundtrip/dup), any newline-bearing input reached the C library
+  truncated at the first newline: `print "a\nb"` made the *oracle* emit `"a"`
+  (the string value NUL-terminated mid-buffer) while the correct Rust emitted
+  `"a\nb"`. The oracle — the thing the port is measured against — was now wrong,
+  and the port "diverged" by being *right*. The matrix differential never caught
+  it (its vectors are newline-free compact JSON); nothing in the utils gates
+  could see it (utils modes behaved correctly). It surfaced only when the
+  PRE-EXISTING base modes were re-fuzzed after the shared driver changed: minify
+  found 25 divergences, the first at iteration 1. This is the LESSONS #26 shape
+  inverted — there a gate was blind to a NEW surface; here the newly-broken
+  surface was the OLD modes, corrupted by a new sibling mutating shared state
+  they depend on.
+- **Kit change:** `driver.c` computes `is_utils` from the mode name BEFORE
+  touching `input`, and only the utils branch splits — the fall-through modes
+  always see pristine bytes; a revert re-fails the base-mode diff-fuzz. Wired
+  into the prompt: after any change to the SHARED differential driver, re-run the
+  diff-fuzz of the PRE-EXISTING modes, not just the new one — a shared harness is
+  software whose new branch can break the old callers (the "test harness is
+  software with a hostile host" habit, extended from encoding/quoting to
+  cross-mode buffer state).
+- **Section amended:** ports/cjson/oracle/driver.c (`is_utils`-before-mutate);
+  PROMPTS/10-module-port.md · step 0 (shared-driver re-fuzz).
+
+## 028. A predicate-defined intentional divergence can't be pinned — fuzz against a corrected oracle
+
+- **Date:** 2026-08-29
+- **Codebase:** cJSON port, module 9 (`cJSON_Utils`), JSON Patch
+- **What happened:** The port intentionally FIXES a cJSON defect —
+  `decode_pointer_inplace` writes `decoded_string[1] = '/'` where `[0]` is meant,
+  so a Patch child key `a~1b` builds `a~/` instead of `a/b` (ledgered
+  `utils-tilde-*`, CWE-707). The matrix differential handles that with three
+  pinned rows. But differential FUZZING against the pristine oracle rediscovers
+  the divergence for EVERY `~`-escaped child key — an unbounded class, not a
+  finite set of fingerprints. Each witness looks like a fresh finding; the fuzzer
+  is a whack-a-mole that never goes green, because the divergence is
+  *predicate-defined* ("any input where a Patch key contains `~0`/`~1`") and a
+  predicate has infinitely many witnesses.
+- **Kit change:** the **corrected-fuzz-oracle** pattern. `make_fixed_utils.py`
+  regenerates `cJSON_Utils.c` with ONLY the one-line decode fix (the pristine
+  vendored source is never touched; the generated `.c` and its binary are
+  gitignored), and `build_fixed.sh` builds `cjson_oracle_fixed`. `check.sh`
+  fuzzes `patch` against THAT: both sides decode correctly, the intentional class
+  collapses to no-divergence, and any finding is a REAL port bug — which is
+  exactly how this port's invalid-escape decode, array-index terminator, and a
+  NUL-key bug were caught. The other five utils modes have no intentional
+  divergence and fuzz against pristine C. General rule, wired into the prompt:
+  when the port diverges from the oracle by a *predicate* (a fix-of-defect over a
+  whole input class), differential fuzzing needs a reference that shares the fix,
+  or it cannot tell the intentional class from a real bug.
+- **Section amended:** ports/cjson/oracle/make_fixed_utils.py;
+  ports/cjson/oracle/build_fixed.sh; ports/cjson/check.sh (module-9 diff-fuzz);
+  DIVERGENCES.md (`utils-tilde-*`); PROMPTS/10-module-port.md · step 2.
+
+## 029. C-string (NUL-truncation) semantics must hold at EVERY boundary, not most
+
+- **Date:** 2026-08-29
+- **Codebase:** cJSON port, modules 6 (`dom`) + 9 (`cJSON_Utils`)
+- **What happened:** cJSON stores keys and strings as C strings — every compare
+  (`strcmp`, `case_insensitive_strcmp`, `compare_pointers`, `compare_strings`)
+  and every print stops at the first NUL. The base port reproduced this for
+  string VALUES (`dom::compare` via `strcmp_eq`) and for PRINTING keys — but
+  object-KEY lookup (`get_object_item`) compared FULL bytes. So a key `a\0b` was
+  distinct from `a` for lookup/compare yet identical when printed: an internal
+  inconsistency, faithful in the visible half and divergent in the half no single
+  vector happened to probe. It stayed latent on `main` from the dom module until
+  fuzzing put NUL-bearing keys on the compared surface — `dup-eq` on
+  `{"a\0":1,"a":2}` said a value equals its duplicate (Rust `true`) while C said
+  `false`, and utils merge/genmerge/genpatch diverged wherever a NUL-collapsing
+  key appeared. The dedicated `dup-eq` mode COULD have shown it, but the base
+  fuzz never generated a NUL-collapsing dup key.
+- **Kit change:** NUL-truncation now applies at every key boundary —
+  `dom::get_object_item` (case-sensitive via `strcmp_eq`) and `dom::eq_ci`
+  (case-insensitive, truncating too), and `utils::key_matches` /
+  `utils::compare_keys` — so the port's key semantics ARE the C's C-string
+  semantics everywhere, not just at print; pinned by the `dup-eq` differential
+  and `utils::tests::keys_compare_nul_truncated`. A sibling defect fell out of
+  the same fuzzing: RFC-7396 null-merge calls `cJSON_DeleteItemFromObject`, which
+  removes only the FIRST matching key, but the port's `retain` removed ALL —
+  corrected to remove-first (`merge_null_removes_only_the_first_duplicate`).
+  Rule: when the source treats a datum as a C string, apply the NUL-truncation at
+  compare AND lookup AND print, or a single un-truncated boundary is a divergence
+  waiting for the one input that reaches it. **A later HIGH-BUDGET fuzz pass
+  (25k iters × seeds, vs the gate's 2k) proved the "not most" thesis literally:
+  it found THREE more un-truncated boundaries the key fix hadn't reached — a JSON
+  Patch op's `op`/`path`/`from` (cJSON's `valuestring`, so `path:"\0"` is the
+  root path and `/a/-\0` is `/a/-`), the GetPointer pointer itself (`/a\0/b` is
+  the pointer `/a`), and the GENERATED pointer path in genpatch
+  (`encode_string_as_pointer` is strlen-based, so a key `a\0` encodes to `a` and
+  a nested diff addresses `/a/`, not a NUL-bearing `/a` that drops its tail on
+  print). All the same rule, one boundary at a time; each fixed at its single
+  chokepoint (`as_string`, the `ptr` branch, `encode_pointer_segment`) and pinned
+  (`patch_path_is_nul_truncated`, `pointer_is_nul_truncated`,
+  `genpatch_encodes_nul_truncated_key_paths`). The budget, not the technique, was
+  the difference — a hardening pass earns its keep.**
+- **Section amended:** ports/cjson/rust/crates/core/src/dom.rs (`get_object_item`,
+  `eq_ci`); ports/cjson/rust/crates/core/src/utils.rs (`key_matches`,
+  `compare_keys`, `merge_patch` delete-first, `as_string` op/path/from,
+  the `ptr` pointer, `encode_pointer_segment`).
+
+## 030. A property test encodes an ASSUMPTION — validate it against the oracle, not the spec
+
+- **Date:** 2026-08-29
+- **Codebase:** cJSON port, module 9 (`cJSON_Utils`), hardening pass
+- **What happened:** Property-based tests are the right tool to check what the
+  differential cannot — the differential only asserts Rust == C, never that
+  either is *correct*, so invariants like "minify is idempotent" and the RFC
+  round-trips (`patch(genpatch(a,b),a) ≈ b`, `merge(genmerge(a,b),a) ≈ b`) add
+  real signal. But each property is an ASSUMPTION, and for a *faithful* port the
+  invariant that must hold is the C's actual (quirky) behavior, not the spec's
+  ideal. Two "obviously true" properties were false:
+  (1) **sort idempotence** — `cJSONUtils_SortObject` permutes an ARRAY via a
+  NULL-key mergesort, so `sort(sort(arr)) != sort(arr)`; it is idempotent only on
+  distinct-key OBJECTS. (2) **RFC-7396 merge round-trip** — cJSON's `genmerge`
+  SORTS keys case-insensitively but DIFFS them with a hardcoded case-sensitive
+  `strcmp` (cJSON_Utils.c:1423), while `merge` applies case-insensitively, so the
+  round-trip is genuinely ill-defined for a mixed-case key set like `{"Z","aa"}`
+  — the C doesn't round-trip it either. Both failures were the TEST's bug, not
+  the port's; but chasing them is what surfaced the genmerge case quirk (and, in
+  the same pass, real port bugs — see #29). A property that bakes in the spec's
+  ideal instead of the oracle's behavior fails on the port's faithful quirks and
+  cries wolf.
+- **Kit change:** the generator restricts each property to the domain where its
+  invariant is actually well-defined — sort idempotence to top-level distinct-key
+  objects, the merge round-trip to an all-lowercase key pool whose
+  case-insensitive order equals its case-sensitive order — with a comment at each
+  restriction naming the quirk that forces it. Reconstruction is checked by
+  `dom::compare` (order-independent), not byte equality, so a legitimate
+  key reordering is not a false failure. Discipline, wired into the prompt: when
+  a property fails, first ask whether the C satisfies it — if not, the property
+  is wrong (tighten its domain or weaken its claim to the C's real invariant),
+  not the port. Faithful quirks the properties now encode are noted in
+  DIVERGENCES.md (genmerge's case-sensitive diff under a case-insensitive sort).
+- **Section amended:** ports/cjson/rust/crates/core/tests/properties.rs
+  (domain restrictions + `dom::compare` reconstruction); PROMPTS/10-module-port.md
+  (validate a failing property against the oracle before the port).
+
+## 031. A declared control nothing invokes is indistinguishable from one that always passes
+
+- **Date:** 2026-08-30
+- **Codebase:** cJSON port — found by the closing retrospective's step 0 ("run
+  every harness against the real target"), not by reading anything
+- **What happened:** The kit had two strong guarantees and a hole between them.
+  `mutate_gates.py` proves every gate **refuses** (neutralize its verdict and its
+  self-test goes red — 19 gates, 0 survivors), and `probe.py coverage` proves
+  every tracked module **is probed** (LESSONS #23). Neither asks the prior
+  question: *is this control run against the port at all?* Running the harnesses
+  by hand at cutover showed **three of the six script-backed controls in
+  `CLAUDE.md`'s own gate table were never invoked by `ports/cjson/check.sh`** —
+  `supply-chain`, `c-flaw-scan`, and `threat-model`, **two of them marked "hard
+  fail"**. All three passed the mutation sweep, because a sweep measures a
+  harness's *self-test*, not its *use*. The control table was prose; no gate read
+  it. Two real consequences had been sitting there through a green cutover:
+  (1) `cJSON_Utils.c` entered scope at **module 9** and the Phase-0 flaw scan was
+  never re-run, so its **8 copy-sink sites were un-triaged** — the scanner said
+  25, `FLAW-SCAN.md` said 17, and nothing compared the two; (2) the port's
+  dependency tree had **never been audited** (`cargo-audit`/`cargo-deny` are not
+  even installed). This is the kit's characteristic bug at a **seventh altitude**:
+  after the verdict (#6), the input (#14/#18/#20), the wiring (#23), the tool
+  inventory (#22), inherited state (#24), and the observable surface (#26) — now
+  the *invocation itself*. Absence is the one thing reading a gate script cannot
+  show you, and green CI actively hides it.
+- **Kit change:** new harness `control-coverage/check_controls.py` — it parses the
+  gate table in `CLAUDE.md` (table ROWS only, so prose can't smuggle a control in)
+  and fails if a port's gate script never calls one, with written-down exemptions
+  (`# control-coverage: exempt <path> -- <why>`), a 0-of-0 guard (LESSONS #18), a
+  fail-closed error on a missing gate file, and negative fixtures in its
+  self-test; its verdict lives in one predicate (`control_is_wired`) so the
+  mutation sweep can neutralize it, and it is now the sweep's 20th entry (0
+  survivors). **The table in `CLAUDE.md` is now executable**: adding a row obliges
+  every port's gate to call it. All three missing controls are wired into
+  `ports/cjson/check.sh`; the flaw scan now re-runs over **all** of `c/` every gate
+  run (not once at Phase 0) so a newly-ported source cannot arrive un-triaged; and
+  the 8 `cJSON_Utils.c` sinks are triaged in `FLAW-SCAN.md` (all exact-fit manual
+  sizing, none a live bug, the class structurally absent from the Rust).
+  supply-chain is wired toolchain-optional like the sanitizers — a missing
+  `cargo-audit` prints a loud SKIP every run instead of being invisible, and no
+  `|| true` softens the harness's verdict when the tools are present.
+  **And the fix is made to compound:** the kit shipped no gate template at all,
+  which is *why* each port assembled `check.sh` by hand and cJSON's came out
+  three controls short. `skeleton/check.sh` is now a fail-closed template with
+  every control already wired (its port-specific blocks `exit 2` until filled in,
+  rather than skipping quietly), and `make check-kit` runs control-coverage
+  against that template, so the thing every future port copies cannot drift out
+  of compliance.
+- **Section amended:** harnesses/control-coverage/check_controls.py (new);
+  harnesses/gate-mutation/mutate_gates.py (20th entry);
+  ports/cjson/check.sh (steps 0/0b/5b); skeleton/check.sh (new template);
+  CLAUDE.md · gate table; ports/cjson/FLAW-SCAN.md · scope + the 8 utils sinks.
+
+## 032. A self-scheduled check-in freezes your unverified claim into a premise
+
+- **Date:** 2026-08-30
+- **Codebase:** cJSON port, the PR #26 CI watch
+- **What happened:** PR CI went red. I diagnosed it from real evidence — all four
+  jobs dying in 2–4s, logs 404, unrelated jobs (`adler32`, `skeleton`) failing
+  identically, and base `main` reproducing it — and concluded "**account-level
+  GitHub Actions is disabled/blocked**". Then I did the damaging thing: I wrote
+  that conclusion into the **prompt of my own scheduled check-in** ("Established
+  blocker: … owner must re-enable Actions in Settings") and instructed future-me
+  to compare new observations against it. Over ~6 check-ins across two days I
+  re-read my own conclusion as an established premise, confirmed "nothing
+  changed", and re-armed — never re-testing. I even declined the one permitted
+  CI re-run on the explicit reasoning that it "would just re-confirm a block
+  already established". That reasoning was the failure: the re-run is precisely
+  the experiment that separates the hypotheses. The retrospective's step 0 forced
+  it, and the claim was **wrong in its mechanism**: `rerun_failed_jobs` returned
+  **201 Created**, the jobs re-ran as `run_attempt: 2`, and were scheduled onto
+  `ubuntu-latest` runners — the Actions API accepts writes and runs are created,
+  so Actions is *not* "disabled". The jobs fail at **startup** (~2s, logs 404) on
+  every commit including base `main`: a startup-time policy/entitlement rejection
+  (an allowed-actions policy refusing even first-party `actions/checkout`, or a
+  billing/spending block). Same remedy, different fact — and the wrong fact was
+  what I reported to the user, repeatedly.
+  **LESSONS #15 already covers this** ("re-verify every inherited 'this doesn't
+  work here' claim before you repeat it") and it did **not** fire. Why: #15 is
+  addressed to someone *reading LESSONS.md at retrospective time*, while the
+  claim lived in an automated loop that never reads it. A lesson wired only to a
+  human's reading habit is not wired to anything.
+- **Kit change:** `PROMPTS/90-retrospective.md` step 0 now states the rule the
+  check-in loop broke: **a scheduled or handed-off prompt must carry the
+  re-test command, never the conclusion** — write "run X and report the result",
+  not "X is broken, confirm nothing changed" — and an environment claim repeated
+  across sessions must carry the date it was last *executed*, not last asserted.
+  A conclusion in a recurring prompt is a premise you will never re-derive.
+  The stale claim itself is corrected in place with a dated note (never a silent
+  rewrite) on PR #26.
+- **Section amended:** PROMPTS/90-retrospective.md · step 0.
+
+## 033. A fuzz budget is a regression floor, not evidence of sufficiency
+
+- **Date:** 2026-08-30
+- **Codebase:** cJSON port, module 9 (`cJSON_Utils`) — read off this port's own
+  commit sequence, the artifact the retrospective says carries the most signal
+- **What happened:** `9b999d2` landed module 9 and declared **"11/11 DONE"** with
+  all six gates green — differential clean, diff-fuzz clean, miri/asan clean,
+  unsafe-audit clean, every rung re-earned from that run's own reports. The two
+  commits that follow it are `11f2a9a` and `4e28943`, and between them they fix
+  **four real divergences from the C**: NUL-truncation of a Patch op's
+  `op`/`path`/`from`, of the GetPointer pointer, and of a generated pointer path,
+  plus `generate_merge_patch`'s hardcoded case-sensitive key diff. Every one was
+  a genuine fidelity bug in already-"DONE" code, and **not one was reachable at
+  the gate's budget**: `check.sh` fuzzes each mode for 2000 iterations, and all
+  four needed ~25 000 across two seeds. The gate was not wrong; its *sufficiency*
+  was simply never examined. The budget is a single constant applied uniformly to
+  every mode, so `minify` (one document, no grammar) and `patch` (two documents,
+  a pointer grammar, an op grammar, six modes, a case-sensitivity axis) get
+  identical effort — and "DONE" ends up meaning "clean at whatever 2000 iterations
+  happened to reach". Worse, the four bugs surfaced only because a hardening pass
+  was requested; **no kit rule required one**, so on any other day the port ships
+  with them and the ledger says six-of-six.
+- **Kit change:** `PROMPTS/10-module-port.md` step 3 now states the rule: the
+  gate's iteration count is a **regression floor** that keeps a fixed budget cheap
+  in CI, *not* the evidence that a module is done. Before a module may be called
+  DONE it must survive at least one **high-budget sweep — ≥10× the gate budget,
+  ≥2 seeds, every mode** — with zero findings, and the budget must be argued from
+  the module's actual input space (modes × framing × grammars), not inherited from
+  the module before it. **Stated honestly: this is a discipline, not yet a gate.**
+  Nothing mechanically refuses a `DONE` that never ran the sweep — making the
+  sweep a recorded rung (like `sanitized`, which advances only from a stamped
+  report) is the next port's target, and is exactly the shape LESSONS #24 used to
+  stop `sanitized` being hand-set.
+- **Section amended:** PROMPTS/10-module-port.md · step 3 (fuzz budget).
+
+## 034. A rule that lives only in a playbook is not wired to anything
+
+- **Date:** 2026-08-31
+- **Codebase:** cJSON port, module 9 (`cJSON_Utils`) — found by asking the
+  question LESSONS #26 already told me to ask, one increment too late
+- **What happened:** LESSONS #26 ("a gate judges only the surface the driver
+  exposes") ended by amending `PLAYBOOK` Phase 4 and `PROMPTS/10` step 0 to
+  require that *"the module's driver modes cover **every public entry point the
+  module claims**"*. That was written **while porting module 8**. Module 9 was
+  then built, gated, hardened over two further passes, declared **11/11 DONE**,
+  and retrospected — and it shipped with **two of `cJSON_Utils.h`'s 14 exported
+  symbols never ported and never gated**: `cJSONUtils_FindPointerFromObjectTo`
+  and `cJSONUtils_AddPatchToArray`. Six green gates, a 25k-iteration fuzz sweep,
+  property tests and a full retrospective all ran over a surface that was ~14%
+  absent, because *no check ever compared the header to the driver*. This is the
+  exact shape of LESSONS #32 (a claim wired only to a reading habit): #26 was
+  real, correct, recently written, written **by me**, and it still did not fire.
+  Prose in a playbook is a hope, not a control.
+  A second, smaller trap sits in measuring it: a bare identifier grep of the
+  header also reported `cJSONUtils_AtomicApplyPatches` missing — it is a
+  **commented-out suggestion** in a `/* */` block with no implementation and no
+  `CJSON_PUBLIC`. A gate that invents work is as corrosive as one that hides it,
+  so the checker strips C comments and requires the export macro.
+- **Kit change:** new harness `api-coverage/check_api.py` — extracts exported
+  symbols from the C header (comments stripped, export macro required, or
+  `extern` fallback) and fails unless every one is **accounted for** in the
+  port's `API-COVERAGE.md`: either `ported` (naming the mode/fn that gates it) or
+  `out-of-scope` **with a written reason**; an unexplained exclusion, a stale row
+  for a symbol the header no longer exports, and a 0-of-0 header all fail
+  (LESSONS #18). Added to `CLAUDE.md`'s executable control table — so
+  `control-coverage` now obliges every port's gate to call it — plus the port
+  gate, the shipped `skeleton/check.sh`, `make check-kit`, and the mutation sweep
+  (21 gates, 0 survivors). **The sweep immediately earned its place**: mutating
+  the verdict made the reporting path raise `KeyError` instead of going cleanly
+  red, which the sweep treats as a hard error — so the harness's own reporting
+  bug was caught by the harness that exists to catch exactly that.
+  Both missing entry points are now ported (`utils::find_pointer_from_object_to`,
+  `utils::add_patch_to_array`), exposed as `findptr`/`addpatch` driver modes on
+  both sides, and gated by 12 probes and 11 matrix cases — all matching the C
+  first try.
+- **Section amended:** harnesses/api-coverage/check_api.py (new);
+  harnesses/gate-mutation/mutate_gates.py (21st entry);
+  ports/cjson/check.sh · step 0b; skeleton/check.sh · step 0b;
+  ports/cjson/oracle/cjson_utils_modes.c (findptr/addpatch shims);
+  ports/cjson/rust/crates/core/src/utils.rs (the two ported entry points);
+  CLAUDE.md · gate table; ports/cjson/API-COVERAGE.md (new manifest).
+
+## 035. Scoping a checker narrowly moves the hole into the checker
+
+- **Date:** 2026-09-02
+- **Codebase:** cJSON port — found one increment after building the gate that
+  was supposed to make this class impossible
+- **What happened:** LESSONS #34 built `api-coverage` so that no public entry
+  point could ship ungated, wired it into the port gate, the executable control
+  table, `skeleton/check.sh` and the mutation sweep, and the port went green:
+  *"api coverage: 14 exported symbol(s) — 14 ported"*. That line was true and
+  deeply misleading. The gate was invoked with `--header c/cJSON_Utils.h` — the
+  header of the module I had just finished — so it certified 14 of the port's
+  **92** exported symbols. The base library's `cJSON.h` was never passed in, and
+  **35 of its entry points were ungated**: the entire detach/delete/insert/
+  replace mutation API, the parse/print options surface, the typed-array
+  constructors, `cJSON_SetValuestring`.
+  I did record the hole rather than paper over it — the manifest said in writing
+  that `cJSON.h` was not wired in. That is why it got fixed. But it is also the
+  point: **a known hole written next to a green check is read as the check.**
+  The check prints a number; the number is what people carry away. `control-
+  coverage` (LESSONS #31) asks whether a control *runs*; nothing asked whether it
+  runs over *everything it claims to cover*, and a checker's scope argument is
+  exactly as invisible as an unwired control was.
+  The honest triage then exposed a second, more interesting failure — one the
+  gate's own vocabulary was pushing me toward. It had two statuses: `ported` and
+  `out-of-scope`. Of the 43 ungated base symbols, 8 are genuine refusals
+  (`cJSON_InitHooks`' global mutable allocator hooks; the six borrowed-pointer
+  `*Reference` constructors and `cJSON_AddItemToObjectCS`, whose contract is
+  "the caller guarantees a lifetime the library cannot check" — the exact class
+  `#![forbid(unsafe_code)]` exists to delete). The other 35 are simply **not done
+  yet**. With only two statuses available, filing them `out-of-scope` would have
+  laundered a TODO into a decision — the precise laundering this gate was built
+  to stop — and filing them `ported` would have been a lie. A binary vocabulary
+  in a gate does not eliminate the middle state; it just forces you to misfile
+  it, and the misfiling is permanent because the reason column then reads as
+  settled.
+  Measuring it had the LESSONS #34 trap a third time: the first extraction
+  reported **80** symbols, including `__declspec` and `__attribute__`, because
+  `#define CJSON_PUBLIC(type) __declspec(dllexport) type CJSON_STDCALL` is a line
+  the declaration pattern reads as a declaration. Same family as the
+  commented-out `cJSONUtils_AtomicApplyPatches` false positive that the same
+  checker already pinned — I had stripped comments and stopped, having fixed the
+  instance instead of the class.
+- **Kit change:** three, in the order they bind.
+  1. `api-coverage` gains a third status, **`unported`** — not done yet, written
+     reason required, distinct from `out-of-scope` (never will be). Honesty about
+     a middle state is worth nothing if it becomes a parking lot, so it is
+     governed by a **ratchet**: the manifest must state `api-coverage:
+     max-unported = N` in plain text, more than N fails (the ungated surface
+     grew), and *fewer than N also fails* (ratchet down, lock the progress in).
+     An unstated ceiling is an infinite one and fails too. The count prints
+     **loudly on every green run** — "this port does NOT cover its C library's
+     public API — 35 of 92 entry points are ungated" — because a green gate over
+     an incomplete API must never read as a complete one. `ratchet_holds()` is a
+     second verdict predicate with its own mutation-sweep entry (22 gates, 0
+     survivors), since it governs a different failure than
+     `symbol_is_accounted()`.
+  2. The extractor now strips **preprocessor directive lines** (with backslash
+     continuations) as well as comments, and both false positives — the
+     commented-out declaration and the export macro's own `#define` — are pinned
+     as self-test cases.
+  3. `skeleton/check.sh` and `skills/porting-kit-audit` now say to pass **every**
+     public header in one invocation, and the audit skill says to quote the
+     UNPORTED count rather than writing "api-coverage: PASS".
+  The cJSON manifest now covers all 92 symbols: 49 ported, 8 out-of-scope with a
+  written refusal each, 35 unported against a declared ceiling. The port's next
+  module is chosen from that list instead of from memory.
+- **The generalization:** a control has a **scope argument**, and the scope
+  argument is unverified input. "Does the gate run?" (#31) and "does the gate
+  refuse?" (#25) are both answerable by machine; "does the gate run over
+  everything it implies it covers?" was answerable only by me remembering to
+  check — the LESSONS #32 shape again, at the level above the one I had just
+  mechanized. When you add a gate, write down what it does **not** cover in the
+  same commit, as a number the gate itself prints, not as a paragraph beside it.
+- **Section amended:** harnesses/api-coverage/check_api.py (`unported` status,
+  `ratchet_holds()`, directive stripping, 8 new self-test cases);
+  harnesses/gate-mutation/mutate_gates.py (22nd entry, `api-coverage-ratchet`);
+  ports/cjson/check.sh · step 0b (both headers);
+  skeleton/check.sh · step 0b; skills/porting-kit-audit/SKILL.md · step 0;
+  ports/cjson/API-COVERAGE.md (full 92-symbol triage + declared ceiling).

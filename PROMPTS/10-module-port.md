@@ -31,9 +31,17 @@ Then run every gate; each is a hard requirement before merge:
    and hand-edits to the generated file — **and `probe.py coverage --probes
    <files> --progress progress.json`, so a module nobody probed is red rather
    than invisible** (LESSONS #23). Tag each probes file with the `modules: [...]`
-   it decides. Where a probed behavior looks like a bug, that is a *decision* —
+   it decides. **Check the driver's modes against the module's PUBLIC API, not
+   just its pipeline** (LESSONS #26): the differential judges only the surface
+   the driver exposes, and an accessor no mode calls is ungated — probe every
+   entry point the module claims, adding driver modes where none can reach it.
+   Where a probed behavior looks like a bug, that is a *decision* —
    reproduce it faithfully, or fix it and ledger the divergence — never a silent
-   cleanup.
+   cleanup. **The differential driver is one binary shared by every mode; a new
+   mode that mutates the input buffer (splitting, NUL-terminating) can corrupt
+   the modes it doesn't own** (LESSONS #27) — decide the dispatch BEFORE touching
+   `input`, and after any change to the shared driver re-run the diff-fuzz of the
+   PRE-EXISTING modes, not just the new one.
 
 1. **Port** into `core` (pure logic) or a safe wrapper in `sys` (if it touches
    FFI). Translate idioms safely: call-twice-for-size → growing `Vec` + length
@@ -44,12 +52,36 @@ Then run every gate; each is a hard requirement before merge:
    `python3 porting-kit/harnesses/differential/diff_run.py --oracle <c> --rust
    <rust> --matrix <m> --ledger DIVERGENCES.md`. A divergence is a TRIAGE: fix the
    Rust, OR — if the C was wrong — record the intentional fix in `DIVERGENCES.md`
-   (`- [x] <case>: <why + CWE>`). Never silently match a C bug.
+   (`- [x] <case>: <why + CWE>`). Never silently match a C bug. **If the fix
+   applies to a whole input CLASS (a predicate: "any ~-escaped Patch key"),
+   differential FUZZING against the pristine oracle rediscovers the intentional
+   divergence forever — an infinite class has no finite set of fingerprints to
+   pin** (LESSONS #28). Build a *corrected oracle* (the vendored C + only that
+   one fix, generated and gitignored — never edit the pristine source) and fuzz
+   the affected mode against it, so both sides share the fix and any finding is a
+   real port bug.
 3. **Fuzz** the input surface:
    `bash porting-kit/harnesses/fuzz/gen_fuzz_target.sh [MODULE] --crate <crate>`,
    then `cargo fuzz run [MODULE] -- -max_total_time=60`. Any panic/crash blocks.
+   Property tests add signal the differential can't (it only asserts Rust == C,
+   never that either is correct) — but a property is an ASSUMPTION, and when one
+   fails, first ask whether the C satisfies it: a faithful port must uphold the
+   oracle's real (quirky) invariant, not the spec's ideal, so restrict the
+   property's domain to where the C actually holds it rather than "fixing" the
+   port (LESSONS #30).
+   **The gate's iteration count is a regression FLOOR, not proof of sufficiency**
+   (LESSONS #33). A fixed budget is what keeps CI cheap; it is not what makes a
+   module done. cJSON module 9 was declared DONE with six green gates and the next
+   two commits fixed four real divergences, none reachable at the gate's 2000
+   iterations and all found at 25 000 across two seeds. So before calling a module
+   DONE: run a **high-budget sweep — ≥10× the gate budget, ≥2 seeds, every mode —
+   with zero findings**, and argue the budget from the module's actual input space
+   (modes × framing × grammars) instead of inheriting the previous module's
+   number. A module whose surface is many times larger than its neighbour's must
+   not get the same effort by default.
 4. **Sanitize:** `bash porting-kit/harnesses/sanitizers/run_sanitizers.sh miri .`
-   (and `asan`/`tsan` for the `sys` layer / threaded code).
+   (and `asan`/`lsan`/`tsan` for the `sys` layer / threaded code — `lsan` catches
+   FFI-boundary leaks; `tsan` only earns its cost with real threads).
 5. **Unsafe-audit:** `python3 porting-kit/harnesses/unsafe-audit/audit_unsafe.py
    crates/` — must report **0 undocumented**. Add a `// SAFETY:` to any block it
    flags.

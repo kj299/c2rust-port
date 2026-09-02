@@ -39,6 +39,7 @@ pub mod num;
 pub mod parse;
 pub mod print;
 pub mod string;
+pub mod utils;
 pub mod value;
 
 pub use minify::minify;

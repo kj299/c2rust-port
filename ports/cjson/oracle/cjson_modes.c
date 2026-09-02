@@ -8,6 +8,10 @@
  *
  * Both entry points return a malloc'd NUL-terminated string the caller frees,
  * or NULL on failure.
+ *
+ * These modes put the builder/query/accessor API on the compared contract at
+ * all (LESSONS #26): a gate judges only the surface the driver exposes, and an
+ * accessor no mode calls is ungated whatever the matrix says.
  */
 #include <stdio.h>
 #include <stdlib.h>

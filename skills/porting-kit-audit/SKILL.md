@@ -10,6 +10,27 @@ Nothing here is optional for a "safe" verdict; a module that compiles and matche
 oracle is at gate 2 of 6, not done.
 
 ## Procedure — run each gate, collect results
+
+0. **Every declared control actually RUNS** (do this first — it decides whether
+   the rest of this list is even being executed):
+   `python3 porting-kit/harnesses/control-coverage/check_controls.py --controls
+   porting-kit/CLAUDE.md --gate <port>/check.sh` → must be 0 unwired.
+   At the cJSON cutover three of six controls below — supply-chain, c-flaw-scan
+   and threat-model, two of them "hard fail" — were in this list and in the
+   mutation sweep, yet the port's gate script never called any of them
+   (LESSONS #31). Reading a gate script cannot show you an absence; ask the tool.
+   Then: `python3 porting-kit/harnesses/api-coverage/check_api.py --header <c.h>
+   [--header <c2.h> ...] --manifest API-COVERAGE.md` → every exported symbol
+   `ported`, or `unported`/`out-of-scope` with a written reason and within the
+   ceiling the manifest declares. cJSON module 9 passed six gates, a 25k fuzz
+   sweep and a retrospective with 2 of 14 public symbols unported, because
+   LESSONS #26 said to check this in prose and nothing enforced it (LESSONS #34).
+   **Pass EVERY public header in one invocation** and check the report's scope
+   against the library's headers yourself: pointed at one header the gate is
+   green over that header alone, which is how cJSON kept 35 ungated base-library
+   entry points under a green api-coverage line (LESSONS #35). A green run that
+   prints an UNPORTED count is not a complete API — quote that count in the
+   audit report rather than writing "api-coverage: PASS".
 1. **Unsafe contained + documented** (toolchain-free hard gate):
    `python3 porting-kit/harnesses/unsafe-audit/audit_unsafe.py crates/`  → must be 0
    undocumented. (On a real backend this found 51/131 undocumented — exactly what a
