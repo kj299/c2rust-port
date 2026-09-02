@@ -1232,3 +1232,83 @@ the emphasized half.
   ports/cjson/oracle/cjson_utils_modes.c (findptr/addpatch shims);
   ports/cjson/rust/crates/core/src/utils.rs (the two ported entry points);
   CLAUDE.md · gate table; ports/cjson/API-COVERAGE.md (new manifest).
+
+## 035. Scoping a checker narrowly moves the hole into the checker
+
+- **Date:** 2026-09-02
+- **Codebase:** cJSON port — found one increment after building the gate that
+  was supposed to make this class impossible
+- **What happened:** LESSONS #34 built `api-coverage` so that no public entry
+  point could ship ungated, wired it into the port gate, the executable control
+  table, `skeleton/check.sh` and the mutation sweep, and the port went green:
+  *"api coverage: 14 exported symbol(s) — 14 ported"*. That line was true and
+  deeply misleading. The gate was invoked with `--header c/cJSON_Utils.h` — the
+  header of the module I had just finished — so it certified 14 of the port's
+  **92** exported symbols. The base library's `cJSON.h` was never passed in, and
+  **35 of its entry points were ungated**: the entire detach/delete/insert/
+  replace mutation API, the parse/print options surface, the typed-array
+  constructors, `cJSON_SetValuestring`.
+  I did record the hole rather than paper over it — the manifest said in writing
+  that `cJSON.h` was not wired in. That is why it got fixed. But it is also the
+  point: **a known hole written next to a green check is read as the check.**
+  The check prints a number; the number is what people carry away. `control-
+  coverage` (LESSONS #31) asks whether a control *runs*; nothing asked whether it
+  runs over *everything it claims to cover*, and a checker's scope argument is
+  exactly as invisible as an unwired control was.
+  The honest triage then exposed a second, more interesting failure — one the
+  gate's own vocabulary was pushing me toward. It had two statuses: `ported` and
+  `out-of-scope`. Of the 43 ungated base symbols, 8 are genuine refusals
+  (`cJSON_InitHooks`' global mutable allocator hooks; the six borrowed-pointer
+  `*Reference` constructors and `cJSON_AddItemToObjectCS`, whose contract is
+  "the caller guarantees a lifetime the library cannot check" — the exact class
+  `#![forbid(unsafe_code)]` exists to delete). The other 35 are simply **not done
+  yet**. With only two statuses available, filing them `out-of-scope` would have
+  laundered a TODO into a decision — the precise laundering this gate was built
+  to stop — and filing them `ported` would have been a lie. A binary vocabulary
+  in a gate does not eliminate the middle state; it just forces you to misfile
+  it, and the misfiling is permanent because the reason column then reads as
+  settled.
+  Measuring it had the LESSONS #34 trap a third time: the first extraction
+  reported **80** symbols, including `__declspec` and `__attribute__`, because
+  `#define CJSON_PUBLIC(type) __declspec(dllexport) type CJSON_STDCALL` is a line
+  the declaration pattern reads as a declaration. Same family as the
+  commented-out `cJSONUtils_AtomicApplyPatches` false positive that the same
+  checker already pinned — I had stripped comments and stopped, having fixed the
+  instance instead of the class.
+- **Kit change:** three, in the order they bind.
+  1. `api-coverage` gains a third status, **`unported`** — not done yet, written
+     reason required, distinct from `out-of-scope` (never will be). Honesty about
+     a middle state is worth nothing if it becomes a parking lot, so it is
+     governed by a **ratchet**: the manifest must state `api-coverage:
+     max-unported = N` in plain text, more than N fails (the ungated surface
+     grew), and *fewer than N also fails* (ratchet down, lock the progress in).
+     An unstated ceiling is an infinite one and fails too. The count prints
+     **loudly on every green run** — "this port does NOT cover its C library's
+     public API — 35 of 92 entry points are ungated" — because a green gate over
+     an incomplete API must never read as a complete one. `ratchet_holds()` is a
+     second verdict predicate with its own mutation-sweep entry (22 gates, 0
+     survivors), since it governs a different failure than
+     `symbol_is_accounted()`.
+  2. The extractor now strips **preprocessor directive lines** (with backslash
+     continuations) as well as comments, and both false positives — the
+     commented-out declaration and the export macro's own `#define` — are pinned
+     as self-test cases.
+  3. `skeleton/check.sh` and `skills/porting-kit-audit` now say to pass **every**
+     public header in one invocation, and the audit skill says to quote the
+     UNPORTED count rather than writing "api-coverage: PASS".
+  The cJSON manifest now covers all 92 symbols: 49 ported, 8 out-of-scope with a
+  written refusal each, 35 unported against a declared ceiling. The port's next
+  module is chosen from that list instead of from memory.
+- **The generalization:** a control has a **scope argument**, and the scope
+  argument is unverified input. "Does the gate run?" (#31) and "does the gate
+  refuse?" (#25) are both answerable by machine; "does the gate run over
+  everything it implies it covers?" was answerable only by me remembering to
+  check — the LESSONS #32 shape again, at the level above the one I had just
+  mechanized. When you add a gate, write down what it does **not** cover in the
+  same commit, as a number the gate itself prints, not as a paragraph beside it.
+- **Section amended:** harnesses/api-coverage/check_api.py (`unported` status,
+  `ratchet_holds()`, directive stripping, 8 new self-test cases);
+  harnesses/gate-mutation/mutate_gates.py (22nd entry, `api-coverage-ratchet`);
+  ports/cjson/check.sh · step 0b (both headers);
+  skeleton/check.sh · step 0b; skills/porting-kit-audit/SKILL.md · step 0;
+  ports/cjson/API-COVERAGE.md (full 92-symbol triage + declared ceiling).

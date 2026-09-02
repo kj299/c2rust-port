@@ -105,6 +105,16 @@ MUTATIONS = [
      "why": "an unported, unlisted public symbol counts as accounted for",
      "cmd": ["harnesses/api-coverage/check_api.py", "--self-test"]},
 
+    # LESSONS #35: the SECOND verdict in the same harness. `unported` lets a port
+    # in flight be honest instead of laundering a TODO into `out-of-scope`; the ceiling is
+    # what stops that honesty from becoming a parking lot. Neutralize it and a
+    # growing ungated API surface ships green.
+    {"gate": "api-coverage-ratchet", "file": "harnesses/api-coverage/check_api.py",
+     "old": "    if actual == 0:\n        return declared in (None, 0)",
+     "new": "    return True\n    if actual == 0:\n        return declared in (None, 0)",
+     "why": "the unported ceiling never binds: the ungated API surface may grow",
+     "cmd": ["harnesses/api-coverage/check_api.py", "--self-test"]},
+
     {"gate": "control-coverage", "file": "harnesses/control-coverage/check_controls.py",
      "old": "    base = os.path.basename(control)\n"
             "    return any((control in text) or (base in text) for text in gate_texts)",

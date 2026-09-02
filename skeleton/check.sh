@@ -31,9 +31,14 @@ echo "===== 0b. Phase-0 controls — re-run against the C actually ported ====="
 # and a source added later would otherwise arrive un-triaged (LESSONS #31).
 "$PY" "$KIT/harnesses/c-flaw-scan/scan_c_flaws.py" "$HERE/c" | tail -4
 "$PY" "$KIT/harnesses/threat-model/check_threat_model.py" "$HERE/THREAT-MODEL.md"
-# Every exported symbol must be accounted for (ported, or out-of-scope WITH a
-# written reason). PORT-SPECIFIC: point --header at your library's header and
-# set --export-macro to its export marker (LESSONS #34).
+# Every exported symbol must be accounted for: `ported`, or `unported` /
+# `out-of-scope` WITH a written reason, with the unported count held to the
+# ceiling the manifest declares (LESSONS #34/#35).
+# PORT-SPECIFIC: pass --header ONCE PER PUBLIC HEADER — all of them, in one
+# invocation against one manifest. Naming only the header you just worked on is
+# how the cJSON port stayed green with 35 base-library entry points ungated:
+# scoping the checker narrowly moves the hole into the checker. Set
+# --export-macro to your library's export marker if it is not CJSON_PUBLIC.
 "$PY" "$KIT/harnesses/api-coverage/check_api.py" \
     --header "$HERE/c/lib.h" --manifest "$HERE/API-COVERAGE.md"
 

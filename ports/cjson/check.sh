@@ -41,8 +41,15 @@ echo "===== 0b. Phase-0 controls — re-run against the C actually ported ====="
 # LESSONS #34 (mechanizing #26): every exported symbol must be accounted for in
 # API-COVERAGE.md — module 9 shipped DONE with two of cJSON_Utils.h's 14 public
 # symbols never ported and never gated, because #26 was prose in a playbook.
+#
+# BOTH headers, one manifest, one ratchet (LESSONS #35). This ran over
+# cJSON_Utils.h alone at first, which made it green while 35 of the BASE
+# library's entry points sat ungated — the gate's own scope was the next place
+# the hole moved to. `unported` rows and the declared ceiling in the manifest
+# keep that number honest and stop it growing.
 "$PY" "$KIT/harnesses/api-coverage/check_api.py" \
-    --header "$HERE/c/cJSON_Utils.h" --manifest "$HERE/API-COVERAGE.md"
+    --header "$HERE/c/cJSON.h" --header "$HERE/c/cJSON_Utils.h" \
+    --manifest "$HERE/API-COVERAGE.md"
 
 echo "===== 1. oracle (build + validate all vectors against C) ====="
 bash "$HERE/oracle/run.sh" > /dev/null

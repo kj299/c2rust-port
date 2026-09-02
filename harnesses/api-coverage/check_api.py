@@ -19,16 +19,40 @@ the header with a bare identifier grep reported a THIRD missing symbol,
 comments before matching and requires the export macro, never a bare name: a gate
 that invents work is as bad as one that hides it.
 
+The same class of false positive bit again when the checker was pointed at
+`cJSON.h`: `#define CJSON_PUBLIC(type) __declspec(dllexport) type CJSON_STDCALL`
+*is* a line containing `CJSON_PUBLIC(...)` followed by an identifier and a paren,
+so the macro's own DEFINITION was reported as exporting `__declspec` and
+`__attribute__`. Preprocessor directive lines are therefore stripped too, with
+their backslash continuations. Both false positives are pinned in the self-test:
+a checker that manufactures symbols trains you to ignore it.
+
 Mechanics (format-driven, conservative):
   * Symbols = `<EXPORT_MACRO>(<type>) <name>(` in the header, AFTER stripping
-    `/* */` and `//` comments. `--export-macro` defaults to `CJSON_PUBLIC`; pass
-    your library's (e.g. `ZEXPORT`). With `--export-macro ''` it falls back to
-    `extern <type> <name>(` declarations.
+    `/* */` and `//` comments and `#...` directive lines. `--export-macro`
+    defaults to `CJSON_PUBLIC`; pass your library's (e.g. `ZEXPORT`). With
+    `--export-macro ''` it falls back to `extern <type> <name>(` declarations.
   * The manifest is a markdown table: `| symbol | status | note |`, status one of
-    `ported` / `out-of-scope`. An `out-of-scope` row MUST carry a non-empty note —
-    an unexplained exclusion is the thing this gate exists to prevent.
+    `ported` / `out-of-scope` / `unported`. Both non-`ported` statuses MUST carry
+    a non-empty note — an unexplained exclusion is the thing this gate exists to
+    prevent.
   * A symbol with no row at all fails. A row for an unknown symbol fails too
     (it means the manifest has drifted from the header, e.g. after an upgrade).
+
+THE `unported` RATCHET (LESSONS #35)
+  A port mid-flight has entry points that are neither done nor abandoned. Forcing
+  that state into `out-of-scope` launders a TODO into a decision — the exact
+  laundering this gate exists to stop — and forcing it into `ported` is a lie.
+  So `unported` is a real status, and it is governed by a ceiling the manifest
+  must state in plain text:
+
+      api-coverage: max-unported = 37
+
+  * more `unported` rows than declared  -> FAIL: the ungated surface GREW.
+  * fewer                               -> FAIL: ratchet down, lock the progress in.
+  * any `unported` row and no ceiling   -> FAIL.
+  Exactly-as-declared passes, and prints the shortfall LOUDLY every run, because
+  a green gate over an incomplete API must never read as a complete one.
 
 Usage:
   check_api.py --header H [--header H2] --manifest API-COVERAGE.md
@@ -46,8 +70,13 @@ import sys
 
 BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.S)
 LINE_COMMENT = re.compile(r"//[^\n]*")
+# A `#...` directive plus any backslash-continued lines. Matched AFTER comments
+# are stripped, so `#define X /* c */ y` still collapses to one directive line.
+DIRECTIVE = re.compile(r"^[ \t]*#(?:[^\n\\]|\\\n|\\[^\n])*", re.M)
 TABLE_ROW = re.compile(r"^\s*\|")
-VALID_STATUS = ("ported", "out-of-scope")
+VALID_STATUS = ("ported", "out-of-scope", "unported")
+NEEDS_REASON = ("out-of-scope", "unported")
+MAX_UNPORTED = re.compile(r"api-coverage:\s*max-unported\s*=\s*(\d+)")
 
 
 def strip_comments(text):
@@ -55,11 +84,19 @@ def strip_comments(text):
     return LINE_COMMENT.sub("", BLOCK_COMMENT.sub("", text))
 
 
+def strip_directives(text):
+    """Remove preprocessor lines so the EXPORT MACRO'S OWN `#define` is not read
+    as a declaration. In cJSON.h that definition is spelled
+    `#define CJSON_PUBLIC(type) __declspec(dllexport) type CJSON_STDCALL`,
+    which the declaration pattern happily reads as exporting `__declspec`."""
+    return DIRECTIVE.sub("", text)
+
+
 def exported_symbols(header_paths, export_macro):
     syms = []
     for p in header_paths:
         with open(p, encoding="utf-8") as fh:
-            src = strip_comments(fh.read())
+            src = strip_directives(strip_comments(fh.read()))
         if export_macro:
             pat = re.compile(re.escape(export_macro) + r"\s*\([^)]*\)\s*\*?\s*([A-Za-z_]\w*)\s*\(")
         else:
@@ -87,15 +124,35 @@ def manifest_rows(manifest_path):
     return rows
 
 
+def declared_max_unported(manifest_path):
+    """The ceiling the manifest states in plain text, or None if it states none."""
+    with open(manifest_path, encoding="utf-8") as fh:
+        m = MAX_UNPORTED.search(fh.read())
+    return int(m.group(1)) if m else None
+
+
 def symbol_is_accounted(sym, rows):
     """THE VERDICT (one predicate, so gate-mutation can neutralize it and the
     self-test's negative fixtures must then go red — LESSONS #25)."""
     if sym not in rows:
         return False
     status, note = rows[sym]
-    if status == "out-of-scope" and not note:
+    if status in NEEDS_REASON and not note:
         return False                            # an unexplained exclusion is not an account
     return True
+
+
+def ratchet_holds(actual, declared):
+    """THE SECOND VERDICT — the `unported` ceiling. Separate predicate on purpose:
+    the mutation sweep neutralizes each verdict independently, and this one governs
+    a different failure (a growing ungated surface) than `symbol_is_accounted`
+    (an unexplained one). `declared is None` with any unported row is a failure,
+    not a default: an unstated ceiling is an infinite one."""
+    if actual == 0:
+        return declared in (None, 0)
+    if declared is None:
+        return False
+    return actual == declared
 
 
 def check(header_paths, manifest_path, export_macro, as_json=False):
@@ -115,13 +172,22 @@ def check(header_paths, manifest_path, export_macro, as_json=False):
     rows = manifest_rows(manifest_path)
     missing = [s for s in syms if not symbol_is_accounted(s, rows)]
     stale = [s for s in rows if s not in syms]
-    ported = [s for s in syms if s in rows and rows[s][0] == "ported"]
-    scoped = [s for s in syms if s in rows and rows[s][0] == "out-of-scope" and rows[s][1]]
+
+    def by_status(want):
+        return [s for s in syms
+                if s in rows and rows[s][0] == want and (want == "ported" or rows[s][1])]
+
+    ported, scoped, todo = by_status("ported"), by_status("out-of-scope"), by_status("unported")
+    declared = declared_max_unported(manifest_path)
+    ratchet_ok = ratchet_holds(len(todo), declared)
+    failed = bool(missing) or bool(stale) or not ratchet_ok
 
     if as_json:
         json.dump({"tool": "api-coverage", "symbols": syms, "ported": ported,
-                   "out_of_scope": scoped, "unaccounted": missing, "stale_rows": stale,
-                   "ok": not missing and not stale}, sys.stdout, indent=1)
+                   "out_of_scope": scoped, "unported": todo,
+                   "max_unported_declared": declared, "ratchet_ok": ratchet_ok,
+                   "unaccounted": missing, "stale_rows": stale,
+                   "ok": not failed}, sys.stdout, indent=1)
         print()
     else:
         for s in syms:
@@ -141,13 +207,36 @@ def check(header_paths, manifest_path, export_macro, as_json=False):
             print(f"\napi-coverage FAILED: {len(missing)} unaccounted, {len(stale)} stale.\n"
                   "Every exported symbol needs a manifest row:\n"
                   "  | <symbol> | ported | <the driver mode / fn that gates it> |\n"
-                  "  | <symbol> | out-of-scope | <why, in writing> |\n"
+                  "  | <symbol> | unported | <not done yet — what is missing> |\n"
+                  "  | <symbol> | out-of-scope | <why it will never be ported> |\n"
                   "An entry point no mode reaches is ungated whatever the matrix says "
                   "(LESSONS #26).", file=sys.stderr)
-        else:
-            print(f"\napi coverage: {len(syms)} exported symbol(s) — "
-                  f"{len(ported)} ported, {len(scoped)} out-of-scope with a reason")
-    return 1 if (missing or stale) else 0
+        if not ratchet_ok:
+            print(f"\napi-coverage FAILED the unported ratchet: {len(todo)} unported, "
+                  f"manifest declares {declared}.", file=sys.stderr)
+            if declared is None:
+                print("  State the ceiling in the manifest, in plain text:\n"
+                      f"      api-coverage: max-unported = {len(todo)}\n"
+                      "  An unstated ceiling is an infinite one.", file=sys.stderr)
+            elif len(todo) > declared:
+                print("  The UNGATED surface GREW. Port the new entry points, or "
+                      "raise the ceiling deliberately and say why.", file=sys.stderr)
+            else:
+                print(f"  Progress to lock in: ratchet the ceiling down to {len(todo)}.",
+                      file=sys.stderr)
+        if not failed:
+            line = (f"\napi coverage: {len(syms)} exported symbol(s) — "
+                    f"{len(ported)} ported, {len(scoped)} out-of-scope with a reason")
+            if todo:
+                # Loud on every run: green here means "exactly as incomplete as
+                # declared", never "complete". A ceiling you stop seeing is a
+                # ceiling you stop lowering.
+                line += (f", {len(todo)} UNPORTED (ceiling {declared})\n"
+                         f"api coverage: this port does NOT cover its C library's "
+                         f"public API — {len(todo)} of {len(syms)} entry points are "
+                         f"ungated. See the manifest's unported rows.")
+            print(line)
+    return 1 if failed else 0
 
 
 def _self_test():
@@ -163,6 +252,16 @@ def _self_test():
         hdr = os.path.join(d, "lib.h")
         with open(hdr, "w", encoding="utf-8") as fh:
             fh.write(
+                # cJSON.h's real shape: the export macro defines ITSELF, several
+                # times, under #ifdef — each definition a line that looks like a
+                # declaration to the pattern below.
+                "#ifdef LIB_EXPORT_SYMBOLS\n"
+                "#define CJSON_PUBLIC(type)   __declspec(dllexport) type LIB_STDCALL\n"
+                "#else\n"
+                "#define CJSON_PUBLIC(type)   __attribute__((visibility(\"default\"))) type\n"
+                "#endif\n"
+                "#define LIB_WRAP(x) \\\n"
+                "    CJSON_PUBLIC(int) lib_Continued(x)\n"
                 "CJSON_PUBLIC(char *) lib_GetPointer(const cJSON *o);\n"
                 "CJSON_PUBLIC(void) lib_AddPatch(cJSON *a, const char *op);\n"
                 "/*\n"
@@ -176,6 +275,11 @@ def _self_test():
         # THE regression for the false positive this gate was born from:
         case("a commented-out declaration is NOT a symbol",
              "lib_AtomicApply" not in syms and "lib_Commented" not in syms)
+        # ...and for its sibling, found when the gate was pointed at cJSON.h:
+        case("the export macro's own #define is NOT a symbol",
+             "__declspec" not in syms and "__attribute__" not in syms)
+        case("a backslash-continued directive is fully stripped",
+             "lib_Continued" not in syms)
 
         good = os.path.join(d, "good.md")
         with open(good, "w", encoding="utf-8") as fh:
@@ -210,6 +314,39 @@ def _self_test():
                      "| `lib_AddPatch` | ported | mode |\n"
                      "| `lib_Removed` | ported | mode |\n")
         case("a stale manifest row fails", check([hdr], drifted, "CJSON_PUBLIC") == 1)
+
+        # ---- the `unported` ratchet (LESSONS #35) ------------------------
+        def manifest(name, addpatch_row, extra=""):
+            p = os.path.join(d, name)
+            with open(p, "w", encoding="utf-8") as fh:
+                fh.write("| Symbol | Status | Where |\n|---|---|---|\n"
+                         "| `lib_GetPointer` | ported | driver mode `ptr` |\n"
+                         f"{addpatch_row}{extra}")
+            return p
+
+        UNPORTED = "| `lib_AddPatch` | unported | no driver mode reaches it yet |\n"
+        case("unported + a matching ceiling passes",
+             check([hdr], manifest("r_ok.md", UNPORTED,
+                                   "\napi-coverage: max-unported = 1\n"),
+                   "CJSON_PUBLIC") == 0)
+        case("unported with NO ceiling fails (an unstated ceiling is infinite)",
+             check([hdr], manifest("r_none.md", UNPORTED), "CJSON_PUBLIC") == 1)
+        case("the ungated surface GROWING past the ceiling fails",
+             check([hdr], manifest("r_grew.md", UNPORTED,
+                                   "\napi-coverage: max-unported = 0\n"),
+                   "CJSON_PUBLIC") == 1)
+        case("a ceiling left above reality fails (ratchet down)",
+             check([hdr], manifest("r_slack.md", UNPORTED,
+                                   "\napi-coverage: max-unported = 5\n"),
+                   "CJSON_PUBLIC") == 1)
+        case("unported with NO written reason fails",
+             check([hdr], manifest("r_mute.md", "| `lib_AddPatch` | unported |  |\n",
+                                   "\napi-coverage: max-unported = 1\n"),
+                   "CJSON_PUBLIC") == 1)
+        case("ratchet predicate: unstated ceiling is not a pass",
+             ratchet_holds(3, None) is False)
+        case("ratchet predicate: slack is not a pass", ratchet_holds(1, 5) is False)
+        case("ratchet predicate: exact match passes", ratchet_holds(3, 3) is True)
 
         # 0-of-0 must not pass
         empty = os.path.join(d, "empty.h")
