@@ -35,9 +35,27 @@ impl Printer {
             Value::True => self.out.extend_from_slice(b"true"),
             Value::Number(n) => self.out.extend_from_slice(print_number(n).as_bytes()),
             Value::String(s) => self.out.extend_from_slice(&print_string(s)),
-            // cJSON_Raw with a NULL valuestring fails in C; a parse can never
-            // produce Raw (DOM-only, module 6), so the driver can't reach this.
-            Value::Raw(_) => return None,
+            // cJSON.c:1421 `case cJSON_Raw` — the content is passed through
+            // VERBATIM, with none of the escaping a String gets. That is the
+            // whole point of a Raw node, and the reason it deserves its own
+            // differential mode: it is the one way to get unescaped bytes into
+            // the printer's output.
+            //
+            // The C copies `strlen(valuestring) + 1` bytes and then advances by
+            // `strlen` (`update_offset`), so the trailing NUL is written and
+            // immediately overwritten — the observable output is exactly the
+            // bytes up to the first NUL, which is what `Value::Raw` holds
+            // (`dom::create_raw` truncates on construction, like the C's
+            // `cJSON_strdup`). An empty Raw therefore contributes nothing,
+            // printing `{"k":}` — invalid JSON that cJSON emits happily.
+            //
+            // This arm previously returned None, on the reasoning that a parse
+            // can never produce Raw so the driver could not reach it. True at
+            // the time and false the moment `construct` put cJSON_CreateRaw on
+            // the compared contract (LESSONS #26 again: unreachable-by-the-
+            // current-driver is not a property of the code, it is a property of
+            // the driver, and it expires without warning). LESSONS #36.
+            Value::Raw(s) => self.out.extend_from_slice(s),
             Value::Array(items) => self.array(items)?,
             Value::Object(entries) => self.object(entries)?,
         }
@@ -104,9 +122,12 @@ impl Printer {
     }
 }
 
-/// Render a value. Returns None only for the not-yet-ported `Raw` arm (module
-/// 6, unreachable from parse) — the driver maps that to its "print failed"
-/// exit.
+/// Render a value. Total since module 11 ported `Raw`: every arm now writes
+/// bytes, so `None` is unreachable. The `Option` is kept because the C's
+/// `print_value` genuinely can fail (`ensure` returns NULL on an allocation
+/// failure or the 2683d4d overflow guard), and the driver maps that to its
+/// "print failed" exit — dropping it would change the driver's contract for a
+/// case the port cannot currently produce but a future arm might.
 #[must_use]
 pub fn print_value(value: &Value, formatted: bool) -> Option<Vec<u8>> {
     let mut p = Printer {

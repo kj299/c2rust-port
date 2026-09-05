@@ -51,7 +51,66 @@ Format:
   The separate GetPointer decoder (`decode_token`, mirroring `compare_pointers`)
   was already correct in the C and is ported as-is.
 
-Beyond those three JSON-Patch escape fixes, every ported module matches the C
+- [x] `construct-nan-double-quiet` [sha256:ff80ae78004c]: **`cJSON_CreateNumber(NaN)`
+  converts a NaN to `int`** (CWE-758, reliance on undefined behavior).
+  `cJSON_CreateNumber` saturates `valuedouble` into `valueint` with two guards
+  (cJSON.c:2460): `num >= INT_MAX` and `num <= (double)INT_MIN`. Every
+  comparison with a NaN is false, so a NaN falls past both and reaches
+  `item->valueint = (int)num` — undefined behavior (C17 6.3.1.4p1: undefined if
+  the truncated value cannot be represented). It is undefined in a way that
+  *actually differs per target*, not merely in theory: x86-64's `cvttsd2si`
+  yields INT_MIN (probed: `-2147483648`), AArch64's `fcvtzs` yields 0. Rust's
+  `as` cast is defined to saturate and to map NaN to 0, so the port answers
+  **0** — the defined answer, and the one shipped cJSON already gives on
+  AArch64. Reproducing the x86 value would mean writing
+  `if d.is_nan() { i32::MIN }`, i.e. deliberately encoding one platform's
+  interpretation of undefined behavior into a port whose whole purpose is to
+  remove it.
+- [x] `construct-nan-double-negative` [sha256:dc773701b885]: same defect, negative NaN.
+- [x] `construct-nan-double-signalling` [sha256:02cb3d3c3146]: same defect, signalling NaN.
+- [x] `construct-nan-float` [sha256:28ec6f0d0627]: same defect reached through
+  `cJSON_CreateFloatArray`, which widens each `float` to `double` before calling
+  `cJSON_CreateNumber` — an f32 NaN widens to an f64 NaN, so the float array is
+  a second route to the same cast.
+- [x] `construct-nan-float-negative` [sha256:a4cc71562ff2]: same, negative f32 NaN.
+
+  All five are ONE defect at one line. Why it survived six green gates: the cast
+  is unreachable from *parsing*. `parse_number` (cJSON.c:374) has the identical
+  code, but its character whitelist is `0-9 + - e E .`, so `strtod` there can
+  return an infinity (which both guards catch) but never a NaN. Only the
+  *construction* API can reach it, and no driver mode constructed a number from
+  attacker-supplied bits until `dom-construct` did (LESSONS #26 yet again).
+  `cJSON_SetNumberHelper` (cJSON.c:396) carries the same cast and is the third
+  route; it belongs to the not-yet-ported mutation API and is recorded as
+  unported in API-COVERAGE.md rather than fixed blind.
+
+  Because the class is predicate-defined (*every* NaN, and 8 random bytes are a
+  NaN about once in 2048), it cannot be pinned case-by-case for the FUZZER — so
+  `construct` fuzzes against the corrected oracle (`oracle/make_fixed_core.py`,
+  the LESSONS #28 mechanism that `patch` already used), where both sides answer
+  0 and any finding is a real port bug. The five rows above are the finite
+  assertion against *shipped* cJSON, and they fail if the divergence ever stops
+  happening.
+
+- [ ] `scalar-parent-child` — **NOT YET ON THE COMPARED CONTRACT.** `cJSON`'s
+  `add_item_to_array` / `add_item_to_object` never check that the parent is a
+  container: their only guards are NULL and self-reference. Probed against
+  v1.7.18: `cJSON_AddTrueToObject(node, "k")` succeeds on an array, a number, a
+  string, `true` and `null` alike, hanging a child off a scalar. The printer
+  ignores that child (a number still prints `7`), but `cJSON_GetArraySize` then
+  answers 1 and `cJSON_GetArrayItem(node, 0)` hands it back — so the malformed
+  tree is observable, not inert. The port cannot reproduce it: `Value::Number`
+  has nowhere to put a child, so the malformed state is unrepresentable rather
+  than merely rejected, and the Add helpers answer false.
+
+  Deliberately left unledgered and ungated for now: no mode builds a
+  non-container parent, so nothing observes it, and pretending otherwise with a
+  ledger entry would assert a divergence no run measures (LESSONS #31 — a
+  control nothing invokes). It belongs to `add_item_to_*`, which the `dom` and
+  `ffi-builder` modules own, not to the twelve constructors this module gates.
+  Putting it on the contract is its own increment, tracked as such.
+
+Beyond those three JSON-Patch escape fixes and the NaN cast above, every ported module matches the C
 byte-for-byte (the `dom` module's Compare/Duplicate quirks — inf never equals
 itself, dup-keys never compare equal — are REPRODUCED, so they are matches, not
 divergences; likewise every faithful cJSON_Utils behavior — non-recursive sort,
@@ -95,6 +154,19 @@ the port diverges and the divergence is judged an intentional fix-of-C-defect.
   future contract puts error detail on stdout, expect divergences here.
 
 ## Structural eliminations (NOT divergences — no output change)
+
+- **The typed-array constructors' unchecked `(pointer, count)` pair.**
+  `cJSON_CreateIntArray` / `FloatArray` / `DoubleArray` / `StringArray` take
+  `(const T *numbers, int count)` with no way to reconcile the two; a count past
+  the end of the buffer is an out-of-bounds read the library cannot detect, and
+  it is the only memory-safety hazard these four functions have. The port's core
+  takes a **slice**, so the pair cannot disagree — the hazard is designed out
+  rather than checked. This improvement is invisible to the differential *by
+  construction*: exercising the mismatch would make the C oracle undefined, so
+  there is no defined behavior to compare against, and `construct` therefore
+  clamps every count to the elements its payload actually holds. Stated here
+  because "the differential shows no divergence" must not be misread as "the
+  differential checked it".
 
 These historical-CVE classes are eliminated by Rust's type system and produce
 **no observable divergence**, so they never appear as ledger entries — they are

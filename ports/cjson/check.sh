@@ -61,7 +61,7 @@ echo "===== 1b. probe-then-port — transcripts pinned, tests generated ====="
 # fails closed on oracle drift, a tampered transcript, or a hand-edited/stale
 # generated test file. The generated tests themselves run under `cargo test`
 # in step 2.
-PROBE_SETS=(quirks plumbing builder utils)
+PROBE_SETS=(quirks plumbing builder utils access construct)
 PROBE_FILES=()
 for set in "${PROBE_SETS[@]}"; do
   PROBE_FILES+=("$HERE/oracle/probes-$set.json")
@@ -135,6 +135,34 @@ echo "----- module 8 (ffi-builder): builder + query differentials -----"
     --matrix "$HERE/oracle/matrix-builder.json" --ledger "$HERE/DIVERGENCES.md" \
     --json > "$HERE/reports/ffi-builder.json"
 
+echo "----- module 10 (dom-access): the five accessor entry points -----"
+# cJSON_GetObjectItem (CASE-INSENSITIVE), HasObjectItem, GetArrayItem,
+# GetStringValue, GetNumberValue — one `access` mode exercising all five per
+# input, because their contracts interlock (the value accessors are fed the
+# lookup RESULTS, NULL included). Chosen as the first of the 35 unported
+# cJSON.h entry points because you need accessors to OBSERVE what the mutation
+# API does, so this is the dependency root, not just the easy one.
+"$PY" "$KIT/harnesses/differential/diff_run.py" \
+    --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
+    --matrix "$HERE/oracle/matrix-access.json" --ledger "$HERE/DIVERGENCES.md" \
+    --json > "$HERE/reports/dom-access.json"
+
+echo "----- module 11 (dom-construct): the twelve constructor entry points -----"
+# cJSON_CreateFalse/Bool/Raw, the four typed-array constructors, and the five
+# Add*ToObject helpers — one `construct` mode exercising all twelve per input.
+#
+# Five of these rows ASSERT a ledgered divergence rather than a match: the C's
+# cJSON_CreateNumber converts a NaN to int, which is UNDEFINED behavior and
+# answers INT_MIN on x86-64 but 0 on AArch64. The port takes Rust's defined
+# saturating cast (0). This matrix is the finite assertion against SHIPPED
+# cJSON — it fails if that divergence ever stops happening — while the fuzzer
+# below uses the corrected oracle, because "every NaN" is not a set to pin
+# (LESSONS #28).
+"$PY" "$KIT/harnesses/differential/diff_run.py" \
+    --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
+    --matrix "$HERE/oracle/matrix-construct.json" --ledger "$HERE/DIVERGENCES.md" \
+    --json > "$HERE/reports/dom-construct.json"
+
 echo "----- module 9 (cJSON_Utils): pointer / patch / merge / sort differentials -----"
 # JSON Pointer (RFC 6901), Patch (6902), Merge-Patch (7396), object sort. The 3
 # utils-tilde-* rows in the matrix ASSERT the ledgered decode fix still diverges
@@ -149,6 +177,14 @@ cp "$HERE/reports/utils-pointer.json" "$HERE/reports/utils-sort.json"
 
 echo "===== 4. diff-fuzz — differential fuzzing, Rust vs C ====="
 mkdir -p "$HERE/reports/fuzz"
+# The CORRECTED oracle — the vendored C with its two known defects fixed. Built
+# once here because TWO modes now need it (LESSONS #28: a predicate-defined
+# intentional divergence cannot be fingerprint-pinned for a fuzzer, so those
+# modes fuzz against a C that shares the port's fix and every finding is real):
+#   patch     : cJSON_Utils.c's ~0/~1 pointer decode  (utils-tilde-*)
+#   construct : cJSON.c's NaN -> int conversion       (create-number-nan-*)
+# Every other mode fuzzes against the PRISTINE oracle.
+bash "$HERE/oracle/build_fixed.sh" > /dev/null
 "$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
     --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
     --args print-unformatted --matrix "$HERE/oracle/matrix.json" \
@@ -173,19 +209,33 @@ mkdir -p "$HERE/reports/fuzz"
     --args query --matrix "$HERE/oracle/matrix-builder.json" \
     --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
     --json > "$HERE/reports/fuzz/ffi-builder.json"
+# access mode: fuzz the accessor surface. Its own matrix is the seed corpus, so
+# the fuzzer mutates the "<key>\t<index>\n<json>" framing too — a malformed
+# index or a missing tab has to normalize identically on both sides before
+# cJSON_GetArrayItem ever sees an int.
+"$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
+    --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
+    --args access --matrix "$HERE/oracle/matrix-access.json" \
+    --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
+    --json > "$HERE/reports/fuzz/dom-access.json"
+# construct mode: fuzz the twelve constructors against the CORRECTED oracle (see
+# the build_fixed.sh note above). Its own matrix seeds the corpus, so the fuzzer
+# mutates the "<count>\t<name>\t<raw>\n<payload>" framing as well as the element
+# bytes — and those seeds include stdin_b64 rows carrying NaN bit patterns that
+# a UTF-8 seed string could not spell at all (LESSONS #36).
+"$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
+    --oracle "$HERE/oracle/cjson_oracle_fixed" --rust "$RUST_DRIVER" \
+    --args construct --matrix "$HERE/oracle/matrix-construct.json" \
+    --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
+    --json > "$HERE/reports/fuzz/dom-construct.json"
 for m in scalar-parse string-parse buffer-plumbing recursive-core; do
   cp "$HERE/reports/fuzz/alloc-node.json" "$HERE/reports/fuzz/$m.json"
 done
 
 # module 9 (cJSON_Utils): fuzz all six modes. `patch` decodes a ~0/~1 escape in a
-# Patch child key CORRECTLY (the ledgered fix), so fuzzing it against the PRISTINE
-# oracle would rediscover that intentional divergence for every ~escaped key — a
-# predicate-defined divergence class is not a finite set to pin (LESSONS #28). So
-# `patch` fuzzes against a CORRECTED oracle (build_fixed.sh: pristine cJSON + the
-# one-line decode fix), where both sides decode correctly and any divergence is a
-# REAL port bug. The other five modes have no intentional divergence and fuzz
-# against the pristine oracle.
-bash "$HERE/oracle/build_fixed.sh" > /dev/null
+# Patch child key CORRECTLY (the ledgered fix), so it uses the corrected oracle
+# built at the top of this section; the other five have no intentional
+# divergence and fuzz against the pristine one.
 "$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
     --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
     --args ptr --matrix "$HERE/oracle/matrix-utils.json" \
@@ -247,7 +297,12 @@ echo "===== 5. unsafe-audit over the rust workspace ====="
 mkdir -p "$HERE/reports/unsafe"
 "$PY" "$KIT/harnesses/unsafe-audit/audit_unsafe.py" "$HERE/rust/crates" --json \
     > "$HERE/reports/unsafe/alloc-node.json"
-for m in scalar-parse string-parse buffer-plumbing recursive-core dom entry-minify ffi-builder utils-pointer utils-patch utils-sort; do
+# From progress.json, not a literal — the same hand-maintained-list trap the
+# sanitizer fan-out had (LESSONS #25). The audit is workspace-wide, so one
+# verdict legitimately covers every tracked module; what must not be hand-kept
+# is WHICH modules exist.
+for m in $("$PY" -c 'import json,sys; print(" ".join(json.load(open(sys.argv[1]))["modules"]))' "$HERE/progress.json"); do
+  [ "$HERE/reports/unsafe/$m.json" = "$HERE/reports/unsafe/alloc-node.json" ] && continue
   cp "$HERE/reports/unsafe/alloc-node.json" "$HERE/reports/unsafe/$m.json"
 done
 
@@ -272,10 +327,20 @@ if [ "$SAN_RAN" = "1" ]; then
   # five rungs. A SKIP writes no report — and a report where nothing ran carries
   # an empty `modes_run`, which `progress.py` refuses. The claim can no longer
   # outlive the run that earned it.
-  for m in scalar-parse string-parse buffer-plumbing recursive-core dom entry-minify ffi-builder utils-pointer utils-patch utils-sort; do
+  # The module list comes from progress.json, NOT a literal here. It used to be
+  # hardcoded, and adding module 10 (dom-access) left it out — the gate caught it
+  # (`REPLAY FAILED: dom-access stuck at fuzzed`), which is the system working,
+  # but a hand-maintained list that must be edited in lockstep with another file
+  # is the LESSONS #25 shape and would eventually be edited wrong in the safe
+  # direction instead. The sanitizer run is workspace-wide, so every tracked
+  # module is legitimately covered by this one report.
+  SAN_MODULES=$("$PY" -c 'import json,sys; print(" ".join(json.load(open(sys.argv[1]))["modules"]))' "$HERE/progress.json")
+  for m in $SAN_MODULES; do
+    # skip the stem the harness itself wrote — `cp x x` is an error under set -e
+    [ "$HERE/reports/sanitize/$m.json" = "$SAN_REPORT" ] && continue
     cp "$SAN_REPORT" "$HERE/reports/sanitize/$m.json"
   done
-  echo "sanitizer reports emitted for every module"
+  echo "sanitizer reports emitted for every module ($SAN_MODULES)"
 fi
 
 echo "===== 6. progress — the ladder must be EARNED from this run's reports ====="

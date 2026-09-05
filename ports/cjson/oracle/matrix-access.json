@@ -1,0 +1,376 @@
+[
+ {
+  "name": "access-key-case-insensitive",
+  "args": [
+   "access"
+  ],
+  "stdin": "ABC\t0\n{\"abc\":\"hi\"}",
+  "expect_rc": 0,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-key-exact",
+  "args": [
+   "access"
+  ],
+  "stdin": "abc\t0\n{\"abc\":\"hi\"}",
+  "expect_rc": 0,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-key-missing",
+  "args": [
+   "access"
+  ],
+  "stdin": "zz\t0\n{\"abc\":\"hi\"}",
+  "expect_rc": 0,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-index-on-object-root",
+  "args": [
+   "access"
+  ],
+  "stdin": "a\t0\n{\"a\":1}",
+  "expect_rc": 0,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-index-nested-object",
+  "args": [
+   "access"
+  ],
+  "stdin": "k\t0\n{\"a\":{\"b\":1}}",
+  "expect_rc": 0,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-index-object-third",
+  "args": [
+   "access"
+  ],
+  "stdin": "k\t2\n{\"a\":1,\"b\":2,\"c\":3}",
+  "expect_rc": 0,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-key-on-array-root",
+  "args": [
+   "access"
+  ],
+  "stdin": "k\t0\n[1,2]",
+  "expect_rc": 0,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-index-in-range",
+  "args": [
+   "access"
+  ],
+  "stdin": "k\t1\n[10,\"two\",true]",
+  "expect_rc": 0,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-index-out-of-range",
+  "args": [
+   "access"
+  ],
+  "stdin": "k\t9\n[10,\"two\",true]",
+  "expect_rc": 0,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-index-negative",
+  "args": [
+   "access"
+  ],
+  "stdin": "k\t-1\n[10,\"two\",true]",
+  "expect_rc": 0,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-index-int-min",
+  "args": [
+   "access"
+  ],
+  "stdin": "k\t-2147483648\n[1,2]",
+  "expect_rc": 0,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-index-int-max",
+  "args": [
+   "access"
+  ],
+  "stdin": "k\t2147483647\n[1,2]",
+  "expect_rc": 0,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-index-overflowing",
+  "args": [
+   "access"
+  ],
+  "stdin": "k\t99999999999999999999\n[1,2]",
+  "expect_rc": 0,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-index-non-numeric",
+  "args": [
+   "access"
+  ],
+  "stdin": "k\tabc\n[1,2]",
+  "expect_rc": 0,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-index-plus-signed",
+  "args": [
+   "access"
+  ],
+  "stdin": "k\t+1\n[7,8,9]",
+  "expect_rc": 0,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-index-space-padded",
+  "args": [
+   "access"
+  ],
+  "stdin": "k\t  2\n[7,8,9]",
+  "expect_rc": 0,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-scalar-root",
+  "args": [
+   "access"
+  ],
+  "stdin": "k\t0\n42",
+  "expect_rc": 0,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-string-root",
+  "args": [
+   "access"
+  ],
+  "stdin": "k\t0\n\"hello\"",
+  "expect_rc": 0,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-empty-array",
+  "args": [
+   "access"
+  ],
+  "stdin": "k\t0\n[]",
+  "expect_rc": 0,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-empty-object",
+  "args": [
+   "access"
+  ],
+  "stdin": "k\t0\n{}",
+  "expect_rc": 0,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-duplicate-keys",
+  "args": [
+   "access"
+  ],
+  "stdin": "k\t0\n{\"k\":1,\"k\":2}",
+  "expect_rc": 0,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-duplicate-keys-case",
+  "args": [
+   "access"
+  ],
+  "stdin": "K\t0\n{\"k\":1,\"K\":2}",
+  "expect_rc": 0,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-empty-key",
+  "args": [
+   "access"
+  ],
+  "stdin": "\t0\n{\"\":7}",
+  "expect_rc": 0,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-string-interior-nul",
+  "args": [
+   "access"
+  ],
+  "stdin": "k\t0\n{\"k\":\"a\\u0000b\"}",
+  "expect_rc": 0,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-number-fractional",
+  "args": [
+   "access"
+  ],
+  "stdin": "n\t0\n{\"n\":3.5}",
+  "expect_rc": 0,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-number-integral",
+  "args": [
+   "access"
+  ],
+  "stdin": "n\t0\n{\"n\":42}",
+  "expect_rc": 0,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-number-huge",
+  "args": [
+   "access"
+  ],
+  "stdin": "k\t0\n{\"k\":1e308}",
+  "expect_rc": 0,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-number-negative-zero",
+  "args": [
+   "access"
+  ],
+  "stdin": "k\t0\n{\"k\":-0.0}",
+  "expect_rc": 0,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-bool-value",
+  "args": [
+   "access"
+  ],
+  "stdin": "k\t0\n{\"k\":true}",
+  "expect_rc": 0,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-null-value",
+  "args": [
+   "access"
+  ],
+  "stdin": "k\t0\n{\"k\":null}",
+  "expect_rc": 0,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-deep-nest",
+  "args": [
+   "access"
+  ],
+  "stdin": "k\t0\n[[[[1]]]]",
+  "expect_rc": 0,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-parse-failure",
+  "args": [
+   "access"
+  ],
+  "stdin": "k\t0\n{bad",
+  "expect_rc": 1,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-missing-tab",
+  "args": [
+   "access"
+  ],
+  "stdin": "k0\n[1]",
+  "expect_rc": 2,
+  "mods": [
+   "dom-access"
+  ]
+ },
+ {
+  "name": "access-missing-newline",
+  "args": [
+   "access"
+  ],
+  "stdin": "k\t0",
+  "expect_rc": 2,
+  "mods": [
+   "dom-access"
+  ]
+ }
+]

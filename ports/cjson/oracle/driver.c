@@ -22,6 +22,7 @@
  * can't run off the end — the historical parse_string OOB-read class (a167d9e)
  * is exactly what the corpus probes here.
  */
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -93,6 +94,69 @@ int main(int argc, char **argv) {
         char *out = cjson_modes_query(input, json, json_len);
         free(input);
         if (out == NULL) { fprintf(stderr, "parse error\n"); return 1; }
+        fputs(out, stdout);
+        free(out);
+        return 0;
+    }
+
+    if (strcmp(mode, "access") == 0) {
+        /* stdin is "<key>\t<index>\n<json>". Self-contained early return like
+         * `query` above: it splits its OWN view and never falls through, so it
+         * cannot corrupt the modes below it (LESSONS #27 — the bug there was a
+         * branch mutating `input` that later branches still depended on). */
+        char *nl = memchr(input, '\n', len);
+        char *tab = nl ? memchr(input, '\t', (size_t)(nl - input)) : NULL;
+        if (nl == NULL || tab == NULL) {
+            fprintf(stderr, "access needs <key>\\t<index>\\n<json>\n");
+            free(input);
+            return 2;
+        }
+        *nl = '\0';
+        *tab = '\0';
+        char *json = nl + 1;
+        size_t json_len = len - (size_t)(json - input);
+        /* strtol, not atoi: the fuzzer WILL send a non-number and an overflowing
+         * one, and atoi's answer there is undefined. Out-of-range clamps to
+         * INT_MAX/INT_MIN, which is a value cJSON_GetArrayItem handles. */
+        long idx = strtol(tab + 1, NULL, 10);
+        if (idx > INT_MAX) idx = INT_MAX;
+        if (idx < INT_MIN) idx = INT_MIN;
+        char *out = cjson_modes_access(input, (int)idx, json, json_len);
+        free(input);
+        if (out == NULL) { fprintf(stderr, "parse error\n"); return 1; }
+        fputs(out, stdout);
+        free(out);
+        return 0;
+    }
+
+    if (strcmp(mode, "construct") == 0) {
+        /* stdin is "<count>\t<name>\t<raw>\n<payload>". Self-contained early
+         * return like `access` above (LESSONS #27): it splits its OWN view of
+         * `input` and never falls through, so it cannot corrupt the modes
+         * below it. */
+        char *nl = memchr(input, '\n', len);
+        char *t1 = nl ? memchr(input, '\t', (size_t)(nl - input)) : NULL;
+        char *t2 = t1 ? memchr(t1 + 1, '\t', (size_t)(nl - t1 - 1)) : NULL;
+        if (nl == NULL || t1 == NULL || t2 == NULL) {
+            fprintf(stderr, "construct needs <count>\\t<name>\\t<raw>\\n<payload>\n");
+            free(input);
+            return 2;
+        }
+        *nl = '\0';
+        *t1 = '\0';
+        *t2 = '\0';
+        /* strtol, not atoi, for the same reason as `access`: the fuzzer sends
+         * junk and overflowing digits, and atoi's answer there is undefined.
+         * Kept as a long and clamped inside cjson_modes_construct, which is
+         * where the C's own `count < 0` guard is exercised. */
+        long count = strtol(input, NULL, 10);
+        if (count > INT_MAX) count = INT_MAX;
+        if (count < INT_MIN) count = INT_MIN;
+        const unsigned char *payload = (const unsigned char *)(nl + 1);
+        size_t payload_len = len - (size_t)((char *)payload - input);
+        char *out = cjson_modes_construct(count, t1 + 1, t2 + 1, payload, payload_len);
+        free(input);
+        if (out == NULL) { fprintf(stderr, "construct failed\n"); return 1; }
         fputs(out, stdout);
         free(out);
         return 0;

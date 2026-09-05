@@ -7,6 +7,13 @@ kit did not write (`RETROSPECTIVE-kit-audit.md` §6, keystone item).
 
 ## Status: **Phase 5 (cutover) — drop-in `.so` verified against the C at the ABI level**
 
+> **Current numbers live in `progress.json` and `API-COVERAGE.md`, not here.**
+> As of module 11: **13/13 tracked modules fully gated**, and **66 of 92
+> exported symbols ported, 8 out-of-scope, 18 unported** against a declared
+> ceiling the gate enforces. The narrative below is the port's history and its
+> counts are as-of-then; the two files above are the ones a gate reads, so they
+> are the ones to trust.
+
 Phase 0 (inventory/plan) merged in #15; Phase 2 (oracle) merged in #16. The Rust
 port now exists (`rust/`: `#![forbid(unsafe_code)]` core + differential driver)
 with **six of seven modules** at the **fuzzed** gate — the entire CLI-observable

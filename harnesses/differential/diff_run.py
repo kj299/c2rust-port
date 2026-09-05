@@ -25,6 +25,11 @@ Matrix (TOML or JSON): a list of cases, each with a name and argv, e.g.
   args = ["-nP", "-iTCP"]
   # optional: stdin = "...", env = {FOO="bar"}, timeout = 10
 
+Give stdin as `stdin` (UTF-8 text) or `stdin_b64` (raw bytes), never both. Use
+`stdin_b64` for any input a JSON/TOML string cannot spell — a lone 0x80-0xFF
+byte, an embedded NUL — so a fuzz finding on such an input can be PINNED as a
+matrix case (LESSONS #36).
+
 Ledger entries come in two strengths. `- [x] <case>: <why>` suppresses by case
 name alone (legacy). `- [x] <case> [sha256:<12-hex>]: <why>` pins the entry to
 ONE accepted divergence — the tool prints the fingerprint to pin, and if the
@@ -48,6 +53,8 @@ any TIMEOUT, or a LEDGER-STALE case (a ledgered divergence that stopped occurrin
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import difflib
 import hashlib
 import json
@@ -63,7 +70,17 @@ import normalize as N  # noqa: E402
 def _validate_matrix(cases):
     """Case names become file names (golden corpus: <name>.golden) and report
     labels; a separator or '..' would escape the corpus directory. The test
-    harness is software with a hostile host — reject, don't sanitize."""
+    harness is software with a hostile host — reject, don't sanitize.
+
+    Also resolves `stdin_b64` into `stdin_bytes` so every consumer of a matrix
+    (this tool's runner AND diff_fuzz's seed corpus) gets raw bytes for free.
+
+    LESSONS #36: a matrix case could only spell its stdin as a JSON/TOML string,
+    which the runner UTF-8 encodes — so the fixed matrix could not express an
+    input the FUZZER generates constantly (any byte 0x80-0xFF outside a valid
+    UTF-8 sequence). That is a hole in "fix-forward, then immediately pin the
+    regression test": a fuzz finding on such an input had nowhere to be pinned.
+    `stdin_b64` is the same escape hatch probe.py already had."""
     for case in cases:
         name = case.get("name")
         if not name or not isinstance(name, str):
@@ -71,6 +88,14 @@ def _validate_matrix(cases):
         if re.search(r"[/\\]", name) or name in (".", ".."):
             sys.exit(f"error: case name {name!r} contains a path separator / traversal "
                      "(names become corpus file names)")
+        if "stdin_b64" in case:
+            if case.get("stdin"):
+                sys.exit(f"error: case {name!r} sets both `stdin` and `stdin_b64` — "
+                         "give exactly one (they would silently disagree)")
+            try:
+                case["stdin_bytes"] = base64.b64decode(case["stdin_b64"], validate=True)
+            except (ValueError, binascii.Error) as exc:
+                sys.exit(f"error: case {name!r} has an undecodable `stdin_b64`: {exc}")
     return cases
 
 
@@ -456,6 +481,32 @@ def _self_test():
     check("`- [x]` lines inside a ``` fence are documentation, not entries",
           load_ledger(ledger_path) == {"real": None})
     os.unlink(ledger_path)
+
+    # `stdin_b64` — raw bytes a JSON/TOML string cannot spell (LESSONS #36).
+    # 0x80 alone is not valid UTF-8, so this seed is unreachable via `stdin`.
+    raw = b"\x80\x00\xff"
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+        json.dump([{"name": "b64", "args": [],
+                    "stdin_b64": base64.b64encode(raw).decode()}], f)
+        mpath = f.name
+    loaded = load_matrix(mpath)
+    check("`stdin_b64` resolves to the exact raw bytes",
+          loaded[0].get("stdin_bytes") == raw)
+    # ...and the LOADED case must feed them verbatim, end to end. Run the case
+    # object load_matrix produced, not a hand-built one: that is the path a real
+    # matrix takes, and it is what would silently drop the bytes.
+    catout, _rc, _to, _e = run_one(cat, dict(loaded[0], timeout=5))
+    check("a `stdin_b64` case reaches the child verbatim, end to end",
+          "\\x80" in catout and "\\xff" in catout)
+    with open(mpath, "w") as f:
+        json.dump([{"name": "both", "args": [], "stdin": "x", "stdin_b64": "eA=="}], f)
+    check("a case with BOTH `stdin` and `stdin_b64` is refused",
+          _exits(lambda: load_matrix(mpath)))
+    with open(mpath, "w") as f:
+        json.dump([{"name": "bad", "args": [], "stdin_b64": "not!base64"}], f)
+    check("an undecodable `stdin_b64` is refused, not silently empty",
+          _exits(lambda: load_matrix(mpath)))
+    os.unlink(mpath)
 
     # exit-code fidelity: same stdout, different exit status must DIVERGE.
     with tempfile.TemporaryDirectory() as d:
