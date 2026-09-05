@@ -1312,3 +1312,95 @@ the emphasized half.
   ports/cjson/check.sh · step 0b (both headers);
   skeleton/check.sh · step 0b; skills/porting-kit-audit/SKILL.md · step 0;
   ports/cjson/API-COVERAGE.md (full 92-symbol triage + declared ceiling).
+
+## 036. The differential can only compare where the C has an answer
+
+*(2026-09-05, cJSON module 11 `dom-construct` — the twelve constructor entry points.)*
+
+- **What happened:** the module put `cJSON_CreateDoubleArray` on the compared
+  contract with arbitrary f64 bits, and the first NaN element diverged.
+  `cJSON_CreateNumber` saturates `valuedouble` into `valueint` behind two guards
+  (`num >= INT_MAX`, `num <= (double)INT_MIN`). Every comparison with a NaN is
+  false, so a NaN falls past both and reaches `item->valueint = (int)num` —
+  **undefined behavior** (C17 6.3.1.4p1), and undefined in a way that differs by
+  target rather than only in theory: x86-64's `cvttsd2si` answers INT_MIN,
+  AArch64's `fcvtzs` answers 0. Rust's `as` is defined to saturate NaN to 0, so
+  the port already answered 0 — the defined answer, and the one shipped cJSON
+  itself gives on ARM.
+- **Why six green gates missed it:** the cast is unreachable from *parsing*.
+  `parse_number` has the identical line, but its character whitelist is
+  `0-9 + - e E .`, so `strtod` there can return an infinity (both guards catch
+  it) and never a NaN. Only the *construction* API reaches it, and no driver
+  mode had ever constructed a number from attacker-supplied bits. LESSONS #26
+  for the third module running.
+- **The thing worth keeping:** a differential test compares two answers, so it
+  is silent wherever the C has **no defined answer**. That silence has two
+  shapes, and they need opposite handling.
+  1. *The C answers, but only by accident of the target.* Put it on the contract
+     and ledger the divergence — the port's answer is the defined one. Do NOT
+     "fix" the port to match the platform you happen to be testing on: that
+     writes one architecture's interpretation of undefined behavior into a port
+     whose purpose is removing it.
+  2. *The C cannot be asked at all.* The four typed-array constructors take
+     `(const T *, int count)` with no way to reconcile the pair; a count past the
+     buffer is an OOB read. The port takes a slice, so the mismatch is
+     unrepresentable — but exercising it in the oracle would be UB, so **no
+     differential can ever show that win**. The gate clamps the count and says
+     so, because "the differential found nothing" must not be read as "the
+     differential checked it".
+- **The harness fought back, and that was information.** The four arrays first
+  read one shared payload. That made whole classes of case unprobeable: an f64
+  infinity is `7F F0 00 … 00`, whose high four bytes are an f32 NaN, and an
+  `INT_MIN, INT_MAX` int pair *is* the f64 `0x7FFFFFFF80000000` — also a NaN. So
+  every interesting value forced the ledgered divergence into a **sibling**
+  array, through code it was not testing. The regions are now disjoint thirds,
+  one per interpretation that can produce a NaN. The generator asserts no probe
+  payload yields one, rather than relying on hand-checked bit patterns — the
+  guard caught two of my own mistakes while I wrote the set.
+- **Kit change:** three.
+  1. `diff_run.py` matrix cases accept **`stdin_b64`**, resolved into
+     `stdin_bytes` at load, and `diff_fuzz.py` seeds from it. A matrix could
+     previously only spell stdin as a JSON/TOML string, which the runner UTF-8
+     encodes — so the *fixed* matrix could not express an input the *fuzzer*
+     generates constantly (any byte 0x80–0xFF outside a valid sequence). A fuzz
+     finding on such an input had nowhere to be pinned, which is a hole straight
+     through "fix-forward, then immediately pin the regression test". Four new
+     self-test cases, including the end-to-end feed and the both-fields refusal.
+  2. The corrected-reference mechanism (#28) generalizes from `cJSON_Utils.c` to
+     the library proper: `oracle/make_fixed_core.py` alongside
+     `make_fixed_utils.py`, one `build_fixed.sh` producing an oracle with *both*
+     known defects fixed, used by every mode with a predicate-defined
+     intentional divergence (`patch`, now `construct`).
+  3. Both generators now assert the pristine pattern occurs **exactly once**
+     instead of merely occurring. `str.replace(..., 1)` patches the first match,
+     so N>1 would have left the others defective while the file still looked
+     corrected — a silent-in-the-safe-direction failure in the one artifact whose
+     job is to be trustworthy.
+- **Also found, and deliberately NOT fixed here:** `add_item_to_array` /
+  `add_item_to_object` never check that the parent is a container. Probed:
+  `cJSON_AddTrueToObject` succeeds on an array, a number, a string, `true` and
+  `null`, hanging a child off a scalar that `cJSON_GetArrayItem` then hands back.
+  Two doc comments in `dom.rs` asserted a type check the C does not perform —
+  the third and fourth in that file, after `get_array_size` and `get_array_item`
+  shipped wrong for exactly that reason. The comments are corrected and the
+  behavior is recorded (`DIVERGENCES.md scalar-parent-child`), but it is left
+  **unledgered and ungated**: no mode builds a non-container parent, so nothing
+  observes it, and a ledger entry asserting a divergence no run measures is
+  LESSONS #31 wearing a different hat. It belongs to `add_item_to_*`, which
+  other modules own. Its own increment, tracked as such.
+- **The generalization:** *a doc comment stating a constraint is a claim, and an
+  unreached claim never gets audited.* Every one of these four wrong comments
+  read as documentation of verified behavior. The gate that would catch them
+  does not exist yet; until it does, treat "the C surely checks X" as a probe to
+  run, not a sentence to write.
+- **Section amended:** harnesses/differential/diff_run.py (`stdin_b64` in
+  `_validate_matrix`, 4 self-test cases); harnesses/diff-fuzz/diff_fuzz.py
+  (`_seeds` reads `stdin_bytes`, 1 self-test case);
+  ports/cjson/oracle/make_fixed_core.py (new);
+  ports/cjson/oracle/make_fixed_utils.py (exactly-once assertion);
+  ports/cjson/oracle/build_fixed.sh (both corrections);
+  ports/cjson/check.sh (module-11 differential + fuzz, `build_fixed.sh` hoisted);
+  ports/cjson/rust/crates/core/src/print.rs (the `Raw` arm, previously
+  unimplemented on the reasoning that no mode could reach it);
+  ports/cjson/rust/crates/core/src/dom.rs (12 constructors, 4 corrected doc
+  comments); ports/cjson/DIVERGENCES.md (5 pinned NaN rows + 2 notes).

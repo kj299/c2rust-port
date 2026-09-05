@@ -16,15 +16,15 @@ it down and lock the progress in).
 
 ## The headline number, stated before the tables
 
-**92 exported symbols across both headers: 54 ported, 8 out-of-scope, 30
+**92 exported symbols across both headers: 66 ported, 8 out-of-scope, 18
 unported.** This port covers cJSON_Utils completely and the base library's
-parse / print / minify / query / build / **accessor** surface; **it does not
-cover the base library's mutation API** (detach, delete, insert, replace, and
-most of the typed-array and setter constructors). Anything that reads "cJSON is
-ported" without that sentence is overclaiming, which is why the gate prints the
-shortfall on every run rather than only on failure.
+parse / print / minify / query / build / **accessor** / **constructor** surface;
+**it does not cover the base library's mutation API** (detach, delete, insert,
+replace, and the two setters), nor the parse/print *options* surface. Anything
+that reads "cJSON is ported" without that sentence is overclaiming, which is why
+the gate prints the shortfall on every run rather than only on failure.
 
-api-coverage: max-unported = 30
+api-coverage: max-unported = 18
 
 Why it exists (LESSONS #34, mechanizing #26): module 9 (`cJSON_Utils`) shipped
 **"DONE" through all six green gates with two of these 14 symbols never ported and
@@ -98,7 +98,7 @@ wired into the gate. Two notes on getting the *number* right first:
   is precisely the rounding-up this gate exists to stop. Their own contract —
   NULL arguments, type mismatches, detached-item ownership — is never called.
 
-### Ported — 40
+### Ported — 52
 
 | Symbol | Status | Where it is gated |
 |---|---|---|
@@ -143,6 +143,19 @@ wired into the gate. Two notes on getting the *number* right first:
 | `cJSON_GetStringValue` | ported | `dom::get_string_value` — driver mode `access` (`kstr=`/`istr=`) |
 | `cJSON_GetNumberValue` | ported | `dom::get_number_value` — driver mode `access` (`knum=`/`inum=`) |
 
+| `cJSON_CreateFalse` | ported | driver mode `construct` (probe `construct-*`, 48 matrix cases) |
+| `cJSON_CreateBool` | ported | driver mode `construct` — the count field selects true/false |
+| `cJSON_CreateRaw` | ported | driver mode `construct`; raw passthrough pinned by `construct-raw-*` probes (empty / valid JSON / garbage / quotes / NUL-truncated) |
+| `cJSON_CreateIntArray` | ported | driver mode `construct`, ints region; guards `count < 0` and NULL pointer both probed |
+| `cJSON_CreateFloatArray` | ported | driver mode `construct`, floats region; f32→f64 widening pinned incl. subnormals and infinities |
+| `cJSON_CreateDoubleArray` | ported | driver mode `construct`, doubles region; saturation boundaries probed, NaN ledgered |
+| `cJSON_CreateStringArray` | ported | driver mode `construct`, NUL-split fields; per-element NUL truncation pinned |
+| `cJSON_AddTrueToObject` | ported | driver mode `construct` (`addT` field) |
+| `cJSON_AddFalseToObject` | ported | driver mode `construct` (`addF` field) |
+| `cJSON_AddRawToObject` | ported | driver mode `construct` (`addR`); the NULL-raw case adds nothing |
+| `cJSON_AddObjectToObject` | ported | driver mode `construct` (`addO`) |
+| `cJSON_AddArrayToObject` | ported | driver mode `construct` (`addA`) |
+
 ### Out of scope — 8, each a deliberate refusal under the Prime Directive
 
 These are not backlog. The C's contract for each one is *"the caller guarantees a
@@ -182,7 +195,7 @@ and a 20-digit overflow with both sides normalizing identically. That is a wider
 space than `findptr`'s single pointer, and narrower than `patch`'s two-document
 op grammar, where 2000 was demonstrably insufficient.
 
-### Unported — 30, against the ceiling declared at the top
+### Unported — 18, against the ceiling declared at the top
 
 Real work not done, recorded as such. Grouped by what would be needed.
 
@@ -192,18 +205,6 @@ Real work not done, recorded as such. Grouped by what would be needed.
 | `cJSON_ParseWithLengthOpts` | unported | same options surface, length-delimited |
 | `cJSON_PrintBuffered` | unported | the prebuffer growth strategy; only the default printer is compared |
 | `cJSON_PrintPreallocated` | unported | caller-owned output buffer. Needs a mode that compares the truncation/failure boundary, which is the interesting part — the header warns the estimate is not exact ("allocate 5 bytes more than you actually need") |
-| `cJSON_CreateFalse` | unported | `cjson_modes_build` builds `true` but never `false` |
-| `cJSON_CreateBool` | unported | the bool-dispatching constructor |
-| `cJSON_CreateRaw` | unported | raw passthrough nodes — worth a mode of their own, since raw content bypasses the printer's escaping |
-| `cJSON_CreateIntArray` | unported | bulk typed-array constructor (`count`-driven loop, a classic overflow sink) |
-| `cJSON_CreateFloatArray` | unported | same |
-| `cJSON_CreateDoubleArray` | unported | same |
-| `cJSON_CreateStringArray` | unported | same |
-| `cJSON_AddTrueToObject` | unported | convenience constructor, no build variant exercises it |
-| `cJSON_AddFalseToObject` | unported | same |
-| `cJSON_AddRawToObject` | unported | same, and inherits the raw-passthrough question above |
-| `cJSON_AddObjectToObject` | unported | same |
-| `cJSON_AddArrayToObject` | unported | same |
 | `cJSON_DetachItemViaPointer` | unported | the whole detach/delete/insert/replace mutation API is absent from the compared surface. It is the part of cJSON that rewires the sibling/child list in place — i.e. the part where a use-after-free would actually live — so it needs its own module and its own mutation-sequence fuzzer, not a bolted-on mode |
 | `cJSON_DetachItemFromArray` | unported | as above |
 | `cJSON_DeleteItemFromArray` | unported | as above |
@@ -218,6 +219,26 @@ Real work not done, recorded as such. Grouped by what would be needed.
 | `cJSON_ReplaceItemInObjectCaseSensitive` | unported | as above |
 | `cJSON_SetNumberHelper` | unported | in-place number mutation behind the `cJSON_SetNumberValue` macro; needs the mutation surface above |
 | `cJSON_SetValuestring` | unported | in-place string replacement. cJSON reuses the existing buffer when the new string is no longer than the old — a length-dependent branch that is exactly what a differential mode should be pinning |
+
+### High-budget sweep on the `construct` mode (LESSONS #33)
+
+The gate's 2000-iteration budget is a regression floor, so the sweep was run
+before calling these twelve done:
+
+| Mode | Seed | Iterations | Findings |
+|---|---|---|---|
+| `construct` | 0 | 25 000 | 0 |
+| `construct` | 12345 | 25 000 | 0 |
+| `construct` | 777 | 25 000 | 0 |
+
+75 000 generated inputs, zero divergences (executed 2026-09-05, against the
+**corrected** oracle — see DIVERGENCES.md `create-number-nan-valueint` for why
+this mode cannot fuzz against pristine cJSON). Three seeds, matching `access`:
+the input carries a `<count>\t<name>\t<raw>` framing *and* a binary payload
+that four constructors reinterpret at three widths, so the fuzzer has more
+independent grammars to mutate here than anywhere except `patch`. The seed
+corpus includes the matrix's `stdin_b64` rows, which carry NaN bit patterns a
+UTF-8 seed string could not have spelled at all (LESSONS #36).
 
 ### What this table changed
 

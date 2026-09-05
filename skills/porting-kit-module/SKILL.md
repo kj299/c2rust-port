@@ -50,6 +50,17 @@ reference.
    `[workspace.lints]` and CI) cover `unsafe fn` docs.
 6. **Pin the regression + merge.** If a bug slipped through, add the golden/matrix case
    that would have caught it *in the same change* (fix-forward, then immediately pin).
+   A matrix case gives stdin as `stdin` (UTF-8 text) **or `stdin_b64` (raw
+   bytes)** — use the latter for anything a JSON/TOML string cannot spell, such
+   as a fuzz reproducer containing a lone 0x80–0xFF byte (LESSONS #36).
+
+Triaging a divergence, before you touch the Rust: ask whether the C's answer is
+*defined*. Undefined behavior (a NaN cast to `int`, signed overflow, an OOB read)
+has no answer to match, so matching the platform you happen to be testing on
+writes UB into the port — take the defined answer and ledger the divergence. If
+the class is predicate-defined (*every* NaN, *every* escaped key) it cannot be
+fingerprint-pinned for the fuzzer: build a corrected reference oracle for that
+mode (LESSONS #28) and keep the finite assertion in the matrix.
 
 Advance the tracker as gates clear:
 `python3 porting-kit/harnesses/progress/progress.py set <module> <gate>`

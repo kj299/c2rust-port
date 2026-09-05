@@ -26,4 +26,32 @@ char *cjson_modes_query(const char *key, const char *json, size_t json_len);
 char *cjson_modes_access(const char *key, int index,
                          const char *json, size_t json_len);
 
+/* The CONSTRUCTOR surface, all twelve entry points in one shot (LESSONS #26):
+ * cJSON_CreateFalse, cJSON_CreateBool, cJSON_CreateRaw, the four typed-array
+ * constructors (Int/Float/Double/String), and the five Add*ToObject helpers
+ * (True/False/Raw/Object/Array).
+ *
+ * `payload` supplies the array elements as whole little-endian groups from
+ * DISJOINT thirds -- ints, then doubles, then floats -- while the string array
+ * reads the whole payload split on NUL. The regions are disjoint so that no two
+ * arrays reinterpret the same bytes at different widths: an f64 infinity's high
+ * four bytes are an f32 NaN, and an INT_MIN/INT_MAX pair is an f64 NaN, so
+ * sharing made every interesting value unprobeable (see cjson_modes.c). `count`
+ * is the caller's requested element count, passed through the C's own
+ * `count < 0` guard; a NULL element pointer is reached by an empty region.
+ *
+ * `count` is clamped to the elements the payload actually holds, and that is a
+ * deliberate limit of this gate, not an oversight. The four typed-array
+ * constructors take a (pointer, count) pair with NO way to check that the
+ * pointer really has `count` elements, so a count past the buffer is an
+ * out-of-bounds read — undefined behavior in the ORACLE, which has no defined
+ * answer to compare against. The port removes the hazard structurally (its core
+ * takes a slice, so the pair cannot disagree), and that improvement is
+ * therefore invisible to a differential test by construction. Recorded in
+ * DIVERGENCES.md under "Structural eliminations".
+ *
+ * Returns NULL only on allocation failure. */
+char *cjson_modes_construct(long count, const char *name, const char *raw,
+                            const unsigned char *payload, size_t payload_len);
+
 #endif /* CJSON_MODES_H */

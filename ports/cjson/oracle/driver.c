@@ -129,6 +129,39 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    if (strcmp(mode, "construct") == 0) {
+        /* stdin is "<count>\t<name>\t<raw>\n<payload>". Self-contained early
+         * return like `access` above (LESSONS #27): it splits its OWN view of
+         * `input` and never falls through, so it cannot corrupt the modes
+         * below it. */
+        char *nl = memchr(input, '\n', len);
+        char *t1 = nl ? memchr(input, '\t', (size_t)(nl - input)) : NULL;
+        char *t2 = t1 ? memchr(t1 + 1, '\t', (size_t)(nl - t1 - 1)) : NULL;
+        if (nl == NULL || t1 == NULL || t2 == NULL) {
+            fprintf(stderr, "construct needs <count>\\t<name>\\t<raw>\\n<payload>\n");
+            free(input);
+            return 2;
+        }
+        *nl = '\0';
+        *t1 = '\0';
+        *t2 = '\0';
+        /* strtol, not atoi, for the same reason as `access`: the fuzzer sends
+         * junk and overflowing digits, and atoi's answer there is undefined.
+         * Kept as a long and clamped inside cjson_modes_construct, which is
+         * where the C's own `count < 0` guard is exercised. */
+        long count = strtol(input, NULL, 10);
+        if (count > INT_MAX) count = INT_MAX;
+        if (count < INT_MIN) count = INT_MIN;
+        const unsigned char *payload = (const unsigned char *)(nl + 1);
+        size_t payload_len = len - (size_t)((char *)payload - input);
+        char *out = cjson_modes_construct(count, t1 + 1, t2 + 1, payload, payload_len);
+        free(input);
+        if (out == NULL) { fprintf(stderr, "construct failed\n"); return 1; }
+        fputs(out, stdout);
+        free(out);
+        return 0;
+    }
+
     /* cJSON_Utils modes. The two-document modes split stdin on the first '\n':
      * valid compact JSON never carries a raw newline, so the split is
      * unambiguous.

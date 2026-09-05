@@ -190,6 +190,215 @@ fn access(input: &[u8]) -> (i32, Vec<u8>) {
     (0, out)
 }
 
+/// Element cap for `construct`, matching `MAX_ELEMS` in `cjson_modes.c`. It
+/// bounds the descriptor whatever the fuzzer sends and costs no coverage: the
+/// saturation logic these constructors perform is per element, and the one thing
+/// a bigger count could reach — a count past the end of the buffer — is
+/// undefined behavior in the C, so there is no defined answer to compare to.
+const CONSTRUCT_MAX_ELEMS: usize = 16;
+
+/// The C driver's `strtol` + clamp on the count field, then
+/// `cjson_modes_construct`'s clamp to what the payload actually holds. A
+/// negative count survives (it is the C's `count < 0` → NULL guard); a positive
+/// one is never allowed past `avail`.
+fn construct_count(count: i32, avail: usize) -> Option<usize> {
+    if count < 0 {
+        return None;
+    }
+    let n = usize::try_from(count).unwrap_or(0);
+    Some(n.min(avail))
+}
+
+/// `construct`: stdin is `<count>\t<name>\t<raw>\n<payload>` — the twelve
+/// constructor entry points in one shot.
+///
+/// `payload` supplies the elements as whole little-endian groups from DISJOINT
+/// thirds — ints, then doubles, then floats — while the string array reads the
+/// whole payload split on NUL. An EMPTY region is how the C's NULL-pointer guard
+/// is reached, since a null pointer is the one thing a slice cannot express.
+fn construct(input: &[u8]) -> (i32, Vec<u8>) {
+    let Some(nl) = input.iter().position(|&b| b == b'\n') else {
+        return (RC_USAGE, Vec::new());
+    };
+    let (head, rest) = input.split_at(nl);
+    let payload = rest.get(1..).unwrap_or(&[]);
+    let Some(t1) = head.iter().position(|&b| b == b'\t') else {
+        return (RC_USAGE, Vec::new());
+    };
+    let (count_field, after) = head.split_at(t1);
+    let after = after.get(1..).unwrap_or(&[]);
+    let Some(t2) = after.iter().position(|&b| b == b'\t') else {
+        return (RC_USAGE, Vec::new());
+    };
+    let (name_field, raw_field) = after.split_at(t2);
+    let raw_field = raw_field.get(1..).unwrap_or(&[]);
+
+    // The C reads `name` and `raw` as C strings out of a buffer it NUL-split,
+    // so both truncate at an interior NUL before cJSON ever sees them.
+    let name = cstr_prefix(name_field);
+    let raw = cstr_prefix(raw_field);
+    let count = parse_index(count_field);
+
+    // The three number arrays read DISJOINT thirds — ints, then doubles, then
+    // floats — so no two of them reinterpret the same bytes at different
+    // widths. Sharing one buffer made whole classes of case unprobeable: an f64
+    // infinity is `7F F0 00 .. 00`, whose high four bytes are an f32 NaN, and an
+    // INT_MIN/INT_MAX pair is the f64 `0x7FFFFFFF80000000` — also a NaN. So
+    // every interesting value forced a NaN into a sibling array, and NaN is the
+    // one value this mode cannot put in a probe (it is the ledgered
+    // divergence). The coupling was the harness's, not cJSON's.
+    let third = payload.len() / 3;
+    let i_reg = payload.get(..third).unwrap_or(&[]);
+    let d_reg = payload.get(third..third.saturating_mul(2)).unwrap_or(&[]);
+    let g_reg = payload.get(third.saturating_mul(2)..).unwrap_or(&[]);
+
+    // `chunks_exact` yields only WHOLE groups, matching the C's
+    // `len / sizeof(T)` — a trailing partial group is dropped, never padded.
+    let ints: Vec<i32> = i_reg
+        .chunks_exact(4)
+        .take(CONSTRUCT_MAX_ELEMS)
+        .map(|c| i32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+        .collect();
+    let doubles: Vec<f64> = d_reg
+        .chunks_exact(8)
+        .take(CONSTRUCT_MAX_ELEMS)
+        .map(|c| f64::from_le_bytes([c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7]]))
+        .collect();
+    let floats: Vec<f32> = g_reg
+        .chunks_exact(4)
+        .take(CONSTRUCT_MAX_ELEMS)
+        .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+        .collect();
+    // `split` on NUL gives count(NUL)+1 fields, matching the C's walk over a
+    // NUL-terminated private copy of the WHOLE payload.
+    let strings: Vec<&[u8]> = payload
+        .split(|&b| b == 0)
+        .take(CONSTRUCT_MAX_ELEMS)
+        .collect();
+
+    // Each array's pointer is NULL iff its OWN region is empty, so the C's
+    // `numbers == NULL` guard is reachable per array rather than
+    // all-or-nothing: a 1-byte payload gives the int and double arrays NULL and
+    // the float array a non-NULL pointer with zero whole elements.
+    let arr_i = (!i_reg.is_empty())
+        .then(|| construct_count(count, ints.len()))
+        .flatten()
+        .map(|n| dom::create_int_array(ints.get(..n).unwrap_or(&[])));
+    let arr_d = (!d_reg.is_empty())
+        .then(|| construct_count(count, doubles.len()))
+        .flatten()
+        .map(|n| dom::create_double_array(doubles.get(..n).unwrap_or(&[])));
+    let arr_g = (!g_reg.is_empty())
+        .then(|| construct_count(count, floats.len()))
+        .flatten()
+        .map(|n| dom::create_float_array(floats.get(..n).unwrap_or(&[])));
+    let arr_s = (!payload.is_empty())
+        .then(|| construct_count(count, strings.len()))
+        .flatten()
+        .map(|n| dom::create_string_array(strings.get(..n).unwrap_or(&[])));
+
+    let fal = dom::create_false();
+    let boo = dom::bool_value(count != 0);
+    let rw = dom::create_raw(Some(raw));
+
+    // All five Add*ToObject calls use the SAME key on purpose: cJSON APPENDS a
+    // duplicate key rather than replacing it, so one input covers both paths.
+    let mut root = Value::Object(Vec::new());
+    let ok_t = dom::add_true_to_object(&mut root, name).is_some();
+    let ok_f = dom::add_false_to_object(&mut root, name).is_some();
+    let ok_r = dom::add_raw_to_object(&mut root, name, Some(raw)).is_some();
+    let ok_o = dom::add_object_to_object(&mut root, name).is_some();
+    let ok_a = dom::add_array_to_object(&mut root, name).is_some();
+
+    let mut out = Vec::new();
+    out.extend_from_slice(
+        format!(
+            "false={};bool={};raw=",
+            dom::type_code(&fal),
+            dom::type_code(&boo)
+        )
+        .as_bytes(),
+    );
+    push_bytes(&mut out, rw.as_ref().and_then(dom::value_string));
+    out.extend_from_slice(b";ints=");
+    push_num_array(&mut out, arr_i.as_ref());
+    out.extend_from_slice(b";flts=");
+    push_num_array(&mut out, arr_g.as_ref());
+    out.extend_from_slice(b";dbls=");
+    push_num_array(&mut out, arr_d.as_ref());
+    out.extend_from_slice(b";strs=");
+    push_str_array(&mut out, arr_s.as_ref());
+    out.extend_from_slice(
+        format!(
+            ";addT={};addF={};addR={};addO={};addA={};obj=",
+            i32::from(ok_t),
+            i32::from(ok_f),
+            i32::from(ok_r),
+            i32::from(ok_o),
+            i32::from(ok_a),
+        )
+        .as_bytes(),
+    );
+    match crate::print_value(&root, false) {
+        Some(p) => out.extend_from_slice(&p),
+        None => out.push(b'-'),
+    }
+    (0, out)
+}
+
+/// Everything up to the first NUL — the C driver hands `cjson_modes_construct`
+/// pointers into a NUL-split buffer, so both fields are C strings.
+fn cstr_prefix(s: &[u8]) -> &[u8] {
+    s.get(..s.iter().position(|&b| b == 0).unwrap_or(s.len()))
+        .unwrap_or(s)
+}
+
+/// Length-prefixed bytes, or `-` for NULL. Length-prefixed rather than
+/// delimited because `["a,b"]` and `["a","b"]` would otherwise render
+/// identically and a real divergence between them would be invisible.
+fn push_bytes(out: &mut Vec<u8>, s: Option<&[u8]>) {
+    match s {
+        Some(s) => {
+            out.extend_from_slice(format!("{}:", s.len()).as_bytes());
+            out.extend_from_slice(s);
+        }
+        None => out.push(b'-'),
+    }
+}
+
+/// A number array as the C descriptor spells it: `-` for NULL, else the size and
+/// every element's `valueint` and `valuedouble` bits. `valueint` is the point —
+/// the saturation in `dom::number` is the only computation these constructors do.
+fn push_num_array(out: &mut Vec<u8>, arr: Option<&Value>) {
+    let Some(Value::Array(items)) = arr else {
+        out.push(b'-');
+        return;
+    };
+    out.extend_from_slice(format!("{}", items.len()).as_bytes());
+    for it in items {
+        let d = match it {
+            Value::Number(n) => n.d,
+            _ => f64::NAN,
+        };
+        // Raw bits, NOT `encode_double`: this descriptor must distinguish NaN
+        // payloads and the sign of -0.0, and `valuedouble` here comes straight
+        // from the caller's bytes rather than from an accessor's NULL fallback.
+        out.extend_from_slice(format!("|{},{:016x}", dom::value_int(it), d.to_bits()).as_bytes());
+    }
+}
+
+fn push_str_array(out: &mut Vec<u8>, arr: Option<&Value>) {
+    let Some(Value::Array(items)) = arr else {
+        out.push(b'-');
+        return;
+    };
+    out.extend_from_slice(format!("{}", items.len()).as_bytes());
+    for it in items {
+        out.push(b'|');
+        push_bytes(out, dom::value_string(it));
+    }
+}
+
 /// `cJSON_PrintUnformatted(item)` for the descriptor, or `-` for a NULL item.
 fn push_printed(out: &mut Vec<u8>, item: Option<&Value>) {
     match item.and_then(|v| crate::print_value(v, false)) {
@@ -296,6 +505,9 @@ pub fn run(mode: &str, input: &[u8]) -> (i32, Vec<u8>) {
     }
     if mode == "access" {
         return access(input);
+    }
+    if mode == "construct" {
+        return construct(input);
     }
 
     // cJSON_Utils modes (JSON Pointer / Patch / Merge / Sort) — one dispatch,

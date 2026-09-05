@@ -1,0 +1,525 @@
+{
+  "probe_transcript": 1,
+  "module": "dom-construct",
+  "oracle_sha256": "d4f8caa2b510ed5c594626e3c7f870ffa60f7456ec465afade8d8e985065fd64",
+  "generated_by": "harnesses/probe/probe.py run",
+  "entries": [
+    {
+      "id": "construct-empty-payload",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MwlrCXgK",
+      "note": "EMPTY payload = the NULL element pointer, the only way to reach `numbers == NULL -> return NULL` in all four typed-array constructors. A Rust slice cannot be null, so this branch lives at the driver boundary",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTE6eDtpbnRzPS07Zmx0cz0tO2RibHM9LTtzdHJzPS07YWRkVD0xO2FkZEY9MTthZGRSPTE7YWRkTz0xO2FkZEE9MTtvYmo9eyJrIjp0cnVlLCJrIjpmYWxzZSwiayI6eCwiayI6e30sImsiOltdfQ==",
+      "stdin_preview": "3\tk\tx\n",
+      "stdout_preview": "false=1;bool=2;raw=1:x;ints=-;flts=-;dbls=-;strs=-;addT=1;addF=1;addR=1;addO=1;a\u2026"
+    },
+    {
+      "id": "construct-count-negative",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "LTEJawl4CmFiY2RlZmdo",
+      "note": "count < 0 -> NULL in all four constructors (cJSON.c:2574). Distinct from count == 0, which returns an EMPTY array, not NULL",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTE6eDtpbnRzPS07Zmx0cz0tO2RibHM9LTtzdHJzPS07YWRkVD0xO2FkZEY9MTthZGRSPTE7YWRkTz0xO2FkZEE9MTtvYmo9eyJrIjp0cnVlLCJrIjpmYWxzZSwiayI6eCwiayI6e30sImsiOltdfQ==",
+      "stdin_preview": "-1\tk\tx\nabcdefgh",
+      "stdout_preview": "false=1;bool=2;raw=1:x;ints=-;flts=-;dbls=-;strs=-;addT=1;addF=1;addR=1;addO=1;a\u2026"
+    },
+    {
+      "id": "construct-count-zero",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MAlrCXgKYWJjZGVmZ2g=",
+      "note": "count == 0 with a non-NULL pointer: an empty array, and `a->child` stays NULL so the trailing prev-pointer fixup is skipped",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTE7cmF3PTE6eDtpbnRzPTA7Zmx0cz0wO2RibHM9MDtzdHJzPTA7YWRkVD0xO2FkZEY9MTthZGRSPTE7YWRkTz0xO2FkZEE9MTtvYmo9eyJrIjp0cnVlLCJrIjpmYWxzZSwiayI6eCwiayI6e30sImsiOltdfQ==",
+      "stdin_preview": "0\tk\tx\nabcdefgh",
+      "stdout_preview": "false=1;bool=1;raw=1:x;ints=0;flts=0;dbls=0;strs=0;addT=1;addF=1;addR=1;addO=1;a\u2026"
+    },
+    {
+      "id": "construct-count-past-avail",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "OTkJawl4CmFiY2RlZmdo",
+      "note": "count clamped to what the payload holds. Passing count > the buffer is the out-of-bounds read these APIs cannot detect -- UB in the oracle, so it is deliberately unreachable from this mode",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTE6eDtpbnRzPTA7Zmx0cz0xfDIxNDc0ODM2NDcsNDUwY2VjY2NhMDAwMDAwMDtkYmxzPTA7c3Rycz0xfDg6YWJjZGVmZ2g7YWRkVD0xO2FkZEY9MTthZGRSPTE7YWRkTz0xO2FkZEE9MTtvYmo9eyJrIjp0cnVlLCJrIjpmYWxzZSwiayI6eCwiayI6e30sImsiOltdfQ==",
+      "stdin_preview": "99\tk\tx\nabcdefgh",
+      "stdout_preview": "false=1;bool=2;raw=1:x;ints=0;flts=1|2147483647,450ceccca0000000;dbls=0;strs=1|8\u2026"
+    },
+    {
+      "id": "construct-count-junk",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "enoJawl4CmFiY2Q=",
+      "note": "a non-numeric count: strtol answers 0 and both sides must agree before cJSON ever sees an int",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTE7cmF3PTE6eDtpbnRzPTA7Zmx0cz0wO2RibHM9MDtzdHJzPTA7YWRkVD0xO2FkZEY9MTthZGRSPTE7YWRkTz0xO2FkZEE9MTtvYmo9eyJrIjp0cnVlLCJrIjpmYWxzZSwiayI6eCwiayI6e30sImsiOltdfQ==",
+      "stdin_preview": "zz\tk\tx\nabcd",
+      "stdout_preview": "false=1;bool=1;raw=1:x;ints=0;flts=0;dbls=0;strs=0;addT=1;addF=1;addR=1;addO=1;a\u2026"
+    },
+    {
+      "id": "construct-count-overflow",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "OTk5OTk5OTk5OTk5OTk5OTk5OTkJawl4CmFiY2RlZmdo",
+      "note": "20 digits overflow long; strtol saturates and the driver clamps to INT_MAX, then the element count clamps again -- two clamps that must compose identically",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTE6eDtpbnRzPTA7Zmx0cz0xfDIxNDc0ODM2NDcsNDUwY2VjY2NhMDAwMDAwMDtkYmxzPTA7c3Rycz0xfDg6YWJjZGVmZ2g7YWRkVD0xO2FkZEY9MTthZGRSPTE7YWRkTz0xO2FkZEE9MTtvYmo9eyJrIjp0cnVlLCJrIjpmYWxzZSwiayI6eCwiayI6e30sImsiOltdfQ==",
+      "stdin_preview": "99999999999999999999\tk\tx\nabcdefgh",
+      "stdout_preview": "false=1;bool=2;raw=1:x;ints=0;flts=1|2147483647,450ceccca0000000;dbls=0;strs=1|8\u2026"
+    },
+    {
+      "id": "construct-count-plus",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "KzIJawl4CmFiY2RlZmdo",
+      "note": "a leading '+' is accepted by strtol; Rust's own integer parse is not, so the driver has to normalize it explicitly",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTE6eDtpbnRzPTA7Zmx0cz0xfDIxNDc0ODM2NDcsNDUwY2VjY2NhMDAwMDAwMDtkYmxzPTA7c3Rycz0xfDg6YWJjZGVmZ2g7YWRkVD0xO2FkZEY9MTthZGRSPTE7YWRkTz0xO2FkZEE9MTtvYmo9eyJrIjp0cnVlLCJrIjpmYWxzZSwiayI6eCwiayI6e30sImsiOltdfQ==",
+      "stdin_preview": "+2\tk\tx\nabcdefgh",
+      "stdout_preview": "false=1;bool=2;raw=1:x;ints=0;flts=1|2147483647,450ceccca0000000;dbls=0;strs=1|8\u2026"
+    },
+    {
+      "id": "construct-count-leading-space",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "ICAgMglrCXgKYWJjZGVmZ2g=",
+      "note": "strtol skips leading whitespace",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTE6eDtpbnRzPTA7Zmx0cz0xfDIxNDc0ODM2NDcsNDUwY2VjY2NhMDAwMDAwMDtkYmxzPTA7c3Rycz0xfDg6YWJjZGVmZ2g7YWRkVD0xO2FkZEY9MTthZGRSPTE7YWRkTz0xO2FkZEE9MTtvYmo9eyJrIjp0cnVlLCJrIjpmYWxzZSwiayI6eCwiayI6e30sImsiOltdfQ==",
+      "stdin_preview": "   2\tk\tx\nabcdefgh",
+      "stdout_preview": "false=1;bool=2;raw=1:x;ints=0;flts=1|2147483647,450ceccca0000000;dbls=0;strs=1|8\u2026"
+    },
+    {
+      "id": "construct-count-trailing-junk",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "Mnh5eglrCXgKYWJjZGVmZ2g=",
+      "note": "strtol stops at the first non-digit and keeps the prefix",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTE6eDtpbnRzPTA7Zmx0cz0xfDIxNDc0ODM2NDcsNDUwY2VjY2NhMDAwMDAwMDtkYmxzPTA7c3Rycz0xfDg6YWJjZGVmZ2g7YWRkVD0xO2FkZEY9MTthZGRSPTE7YWRkTz0xO2FkZEE9MTtvYmo9eyJrIjp0cnVlLCJrIjpmYWxzZSwiayI6eCwiayI6e30sImsiOltdfQ==",
+      "stdin_preview": "2xyz\tk\tx\nabcdefgh",
+      "stdout_preview": "false=1;bool=2;raw=1:x;ints=0;flts=1|2147483647,450ceccca0000000;dbls=0;strs=1|8\u2026"
+    },
+    {
+      "id": "construct-ints-basic",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MglrCXgKAQAAAAIAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "note": "cJSON_CreateIntArray: (double)int is exact, so valueint round-trips",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTE6eDtpbnRzPTJ8MSwzZmYwMDAwMDAwMDAwMDAwfDIsNDAwMDAwMDAwMDAwMDAwMDtmbHRzPTJ8MCwwMDAwMDAwMDAwMDAwMDAwfDAsMDAwMDAwMDAwMDAwMDAwMDtkYmxzPTF8MCwwMDAwMDAwMDAwMDAwMDAwO3N0cnM9MnwxOgF8MDo7YWRkVD0xO2FkZEY9MTthZGRSPTE7YWRkTz0xO2FkZEE9MTtvYmo9eyJrIjp0cnVlLCJrIjpmYWxzZSwiayI6eCwiayI6e30sImsiOltdfQ==",
+      "stdin_preview": "2\tk\tx\n\u0001\u0000\u0000\u0000\u0002\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
+      "stdout_preview": "false=1;bool=2;raw=1:x;ints=2|1,3ff0000000000000|2,4000000000000000;flts=2|0,000\u2026"
+    },
+    {
+      "id": "construct-ints-extremes",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MglrCXgKAAAAgP///38AAAAAAAAAAAAAAAAAAAAA",
+      "note": "INT_MIN and INT_MAX. Both widen to doubles the C's guards catch BEFORE the cast, so the saturation branch runs even for values needing no saturating. Probeable only because the arrays now read disjoint regions: this byte pair reinterpreted as an f64 is 0x7FFFFFFF80000000 -- a NaN -- so it used to diverge through a sibling array rather than through anything it tested",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTE6eDtpbnRzPTJ8LTIxNDc0ODM2NDgsYzFlMDAwMDAwMDAwMDAwMHwyMTQ3NDgzNjQ3LDQxZGZmZmZmZmZjMDAwMDA7Zmx0cz0yfDAsMDAwMDAwMDAwMDAwMDAwMHwwLDAwMDAwMDAwMDAwMDAwMDA7ZGJscz0xfDAsMDAwMDAwMDAwMDAwMDAwMDtzdHJzPTJ8MDp8MDo7YWRkVD0xO2FkZEY9MTthZGRSPTE7YWRkTz0xO2FkZEE9MTtvYmo9eyJrIjp0cnVlLCJrIjpmYWxzZSwiayI6eCwiayI6e30sImsiOltdfQ==",
+      "stdin_preview": "2\tk\tx\n\u0000\u0000\u0000\\x80\\xff\\xff\\xff\u007f\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
+      "stdout_preview": "false=1;bool=2;raw=1:x;ints=2|-2147483648,c1e0000000000000|2147483647,41dfffffff\u2026"
+    },
+    {
+      "id": "construct-double-inf",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MglrCXgKAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPB/AAAAAAAA8P8AAAAAAAAAAAAAAAAAAAAA",
+      "note": "+inf >= INT_MAX and -inf <= (double)INT_MIN, so both saturate through the guards -- DEFINED behavior, unlike NaN, which fails both comparisons and falls into the undefined cast",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTE6eDtpbnRzPTJ8MCwwMDAwMDAwMDAwMDAwMDAwfDAsMDAwMDAwMDAwMDAwMDAwMDtmbHRzPTJ8MCwwMDAwMDAwMDAwMDAwMDAwfDAsMDAwMDAwMDAwMDAwMDAwMDtkYmxzPTJ8MjE0NzQ4MzY0Nyw3ZmYwMDAwMDAwMDAwMDAwfC0yMTQ3NDgzNjQ4LGZmZjAwMDAwMDAwMDAwMDA7c3Rycz0yfDA6fDA6O2FkZFQ9MTthZGRGPTE7YWRkUj0xO2FkZE89MTthZGRBPTE7b2JqPXsiayI6dHJ1ZSwiayI6ZmFsc2UsImsiOngsImsiOnt9LCJrIjpbXX0=",
+      "stdin_preview": "2\tk\tx\n\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\\xf0\u007f\u0000\u0000\u0000\u0000\u0000\u0000\\xf0\\xff\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
+      "stdout_preview": "false=1;bool=2;raw=1:x;ints=2|0,0000000000000000|0,0000000000000000;flts=2|0,000\u2026"
+    },
+    {
+      "id": "construct-double-neg-zero",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MQlrCXgKAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAA",
+      "note": "-0.0: valueint 0, but the descriptor's raw bits carry the sign the printed form loses",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTE6eDtpbnRzPTF8MCwwMDAwMDAwMDAwMDAwMDAwO2ZsdHM9MXwwLDAwMDAwMDAwMDAwMDAwMDA7ZGJscz0xfDAsODAwMDAwMDAwMDAwMDAwMDtzdHJzPTF8MDo7YWRkVD0xO2FkZEY9MTthZGRSPTE7YWRkTz0xO2FkZEE9MTtvYmo9eyJrIjp0cnVlLCJrIjpmYWxzZSwiayI6eCwiayI6e30sImsiOltdfQ==",
+      "stdin_preview": "1\tk\tx\n\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\\x80\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
+      "stdout_preview": "false=1;bool=2;raw=1:x;ints=1|0,0000000000000000;flts=1|0,0000000000000000;dbls=\u2026"
+    },
+    {
+      "id": "construct-double-huge",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MQlrCXgKAAAAAAAAAACcdQCIPOQ3fgAAAAAAAAAA",
+      "note": "1e300 saturates valueint to INT_MAX while valuedouble keeps full range",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTE6eDtpbnRzPTF8MCwwMDAwMDAwMDAwMDAwMDAwO2ZsdHM9MXwwLDAwMDAwMDAwMDAwMDAwMDA7ZGJscz0xfDIxNDc0ODM2NDcsN2UzN2U0M2M4ODAwNzU5YztzdHJzPTF8MDo7YWRkVD0xO2FkZEY9MTthZGRSPTE7YWRkTz0xO2FkZEE9MTtvYmo9eyJrIjp0cnVlLCJrIjpmYWxzZSwiayI6eCwiayI6e30sImsiOltdfQ==",
+      "stdin_preview": "1\tk\tx\n\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\\x9cu\u0000\\x88<\\xe47~\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
+      "stdout_preview": "false=1;bool=2;raw=1:x;ints=1|0,0000000000000000;flts=1|0,0000000000000000;dbls=\u2026"
+    },
+    {
+      "id": "construct-double-int-boundary",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MglrCXgKAAAAAAAAAAAAAAAAAAAAAAAAwP///99BAACg////30EAAAAAAAAAAAAAAAAAAAAA",
+      "note": "the >= INT_MAX guard is INCLUSIVE, so 2147483647.0 takes the guard rather than the cast; 2147483646.5 truncates toward zero",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTE6eDtpbnRzPTJ8MCwwMDAwMDAwMDAwMDAwMDAwfDAsMDAwMDAwMDAwMDAwMDAwMDtmbHRzPTJ8MCwwMDAwMDAwMDAwMDAwMDAwfDAsMDAwMDAwMDAwMDAwMDAwMDtkYmxzPTJ8MjE0NzQ4MzY0Nyw0MWRmZmZmZmZmYzAwMDAwfDIxNDc0ODM2NDYsNDFkZmZmZmZmZmEwMDAwMDtzdHJzPTJ8MDp8MDo7YWRkVD0xO2FkZEY9MTthZGRSPTE7YWRkTz0xO2FkZEE9MTtvYmo9eyJrIjp0cnVlLCJrIjpmYWxzZSwiayI6eCwiayI6e30sImsiOltdfQ==",
+      "stdin_preview": "2\tk\tx\n\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\\xc0\\xff\\xff\\xff\\xdfA\u0000\u0000\\xa0\\xff\\xff\\xff\\xdfA\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u2026",
+      "stdout_preview": "false=1;bool=2;raw=1:x;ints=2|0,0000000000000000|0,0000000000000000;flts=2|0,000\u2026"
+    },
+    {
+      "id": "construct-double-neg-boundary",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MglrCXgKAAAAAAAAAAAAAAAAAAAAAAAAAAAAAODBAAAQAAAA4MEAAAAAAAAAAAAAAAAAAAAA",
+      "note": "the <= (double)INT_MIN guard is inclusive too",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTE6eDtpbnRzPTJ8MCwwMDAwMDAwMDAwMDAwMDAwfDAsMDAwMDAwMDAwMDAwMDAwMDtmbHRzPTJ8MCwwMDAwMDAwMDAwMDAwMDAwfDAsMDAwMDAwMDAwMDAwMDAwMDtkYmxzPTJ8LTIxNDc0ODM2NDgsYzFlMDAwMDAwMDAwMDAwMHwtMjE0NzQ4MzY0OCxjMWUwMDAwMDAwMTAwMDAwO3N0cnM9MnwwOnwwOjthZGRUPTE7YWRkRj0xO2FkZFI9MTthZGRPPTE7YWRkQT0xO29iaj17ImsiOnRydWUsImsiOmZhbHNlLCJrIjp4LCJrIjp7fSwiayI6W119",
+      "stdin_preview": "2\tk\tx\n\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\\xe0\\xc1\u0000\u0000\u0010\u0000\u0000\u0000\\xe0\\xc1\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
+      "stdout_preview": "false=1;bool=2;raw=1:x;ints=2|0,0000000000000000|0,0000000000000000;flts=2|0,000\u2026"
+    },
+    {
+      "id": "construct-double-subnormal",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MQlrCXgKAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAA",
+      "note": "the smallest positive subnormal: valueint 0, valuedouble denormal",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTE6eDtpbnRzPTF8MCwwMDAwMDAwMDAwMDAwMDAwO2ZsdHM9MXwwLDAwMDAwMDAwMDAwMDAwMDA7ZGJscz0xfDAsMDAwMDAwMDAwMDAwMDAwMTtzdHJzPTF8MDo7YWRkVD0xO2FkZEY9MTthZGRSPTE7YWRkTz0xO2FkZEE9MTtvYmo9eyJrIjp0cnVlLCJrIjpmYWxzZSwiayI6eCwiayI6e30sImsiOltdfQ==",
+      "stdin_preview": "1\tk\tx\n\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
+      "stdout_preview": "false=1;bool=2;raw=1:x;ints=1|0,0000000000000000;flts=1|0,0000000000000000;dbls=\u2026"
+    },
+    {
+      "id": "construct-double-fraction",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MglrCXgKAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOA/AAAAAAAA4L8AAAAAAAAAAAAAAAAAAAAA",
+      "note": "truncation toward zero on both signs (not floor)",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTE6eDtpbnRzPTJ8MCwwMDAwMDAwMDAwMDAwMDAwfDAsMDAwMDAwMDAwMDAwMDAwMDtmbHRzPTJ8MCwwMDAwMDAwMDAwMDAwMDAwfDAsMDAwMDAwMDAwMDAwMDAwMDtkYmxzPTJ8MCwzZmUwMDAwMDAwMDAwMDAwfDAsYmZlMDAwMDAwMDAwMDAwMDtzdHJzPTJ8MDp8MDo7YWRkVD0xO2FkZEY9MTthZGRSPTE7YWRkTz0xO2FkZEE9MTtvYmo9eyJrIjp0cnVlLCJrIjpmYWxzZSwiayI6eCwiayI6e30sImsiOltdfQ==",
+      "stdin_preview": "2\tk\tx\n\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\\xe0?\u0000\u0000\u0000\u0000\u0000\u0000\\xe0\\xbf\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
+      "stdout_preview": "false=1;bool=2;raw=1:x;ints=2|0,0000000000000000|0,0000000000000000;flts=2|0,000\u2026"
+    },
+    {
+      "id": "construct-float-basic",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MglrCXgKAAAAAAAAAAAAAAAAAAAAAAAAwD8AACDA",
+      "note": "cJSON_CreateFloatArray widens f32 to f64 before CreateNumber, so valuedouble is the exact widening, never a re-rounded decimal",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTE6eDtpbnRzPTJ8MCwwMDAwMDAwMDAwMDAwMDAwfDAsMDAwMDAwMDAwMDAwMDAwMDtmbHRzPTJ8MSwzZmY4MDAwMDAwMDAwMDAwfC0yLGMwMDQwMDAwMDAwMDAwMDA7ZGJscz0xfDAsMDAwMDAwMDAwMDAwMDAwMDtzdHJzPTJ8MDp8MDo7YWRkVD0xO2FkZEY9MTthZGRSPTE7YWRkTz0xO2FkZEE9MTtvYmo9eyJrIjp0cnVlLCJrIjpmYWxzZSwiayI6eCwiayI6e30sImsiOltdfQ==",
+      "stdin_preview": "2\tk\tx\n\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\\xc0?\u0000\u0000 \\xc0",
+      "stdout_preview": "false=1;bool=2;raw=1:x;ints=2|0,0000000000000000|0,0000000000000000;flts=2|1,3ff\u2026"
+    },
+    {
+      "id": "construct-float-inf",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MglrCXgKAAAAAAAAAAAAAAAAAAAAAAAAgH8AAID/",
+      "note": "f32 infinities widen to f64 infinities and saturate the same way",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTE6eDtpbnRzPTJ8MCwwMDAwMDAwMDAwMDAwMDAwfDAsMDAwMDAwMDAwMDAwMDAwMDtmbHRzPTJ8MjE0NzQ4MzY0Nyw3ZmYwMDAwMDAwMDAwMDAwfC0yMTQ3NDgzNjQ4LGZmZjAwMDAwMDAwMDAwMDA7ZGJscz0xfDAsMDAwMDAwMDAwMDAwMDAwMDtzdHJzPTJ8MDp8MDo7YWRkVD0xO2FkZEY9MTthZGRSPTE7YWRkTz0xO2FkZEE9MTtvYmo9eyJrIjp0cnVlLCJrIjpmYWxzZSwiayI6eCwiayI6e30sImsiOltdfQ==",
+      "stdin_preview": "2\tk\tx\n\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\\x80\u007f\u0000\u0000\\x80\\xff",
+      "stdout_preview": "false=1;bool=2;raw=1:x;ints=2|0,0000000000000000|0,0000000000000000;flts=2|21474\u2026"
+    },
+    {
+      "id": "construct-float-subnormal",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MglrCXgKAAAAAAAAAAAAAAAAAAAAAAEAAAABAAAA",
+      "note": "an f32 subnormal widens to a NORMAL f64 -- the widening has to be the hardware conversion on both sides, not a decimal round-trip",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTE6eDtpbnRzPTJ8MCwwMDAwMDAwMDAwMDAwMDAwfDAsMDAwMDAwMDAwMDAwMDAwMDtmbHRzPTJ8MCwzNmEwMDAwMDAwMDAwMDAwfDAsMzZhMDAwMDAwMDAwMDAwMDtkYmxzPTF8MCwwMDAwMDAwMDAwMDAwMDAwO3N0cnM9MnwwOnwwOjthZGRUPTE7YWRkRj0xO2FkZFI9MTthZGRPPTE7YWRkQT0xO29iaj17ImsiOnRydWUsImsiOmZhbHNlLCJrIjp4LCJrIjp7fSwiayI6W119",
+      "stdin_preview": "2\tk\tx\n\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000\u0000\u0001\u0000\u0000\u0000",
+      "stdout_preview": "false=1;bool=2;raw=1:x;ints=2|0,0000000000000000|0,0000000000000000;flts=2|0,36a\u2026"
+    },
+    {
+      "id": "construct-float-huge",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MglrCXgKAAAAAAAAAAAAAAAAAAAAAJ7Jf3+eyX//",
+      "note": "near +/-FLT_MAX: the widening is exact and valueint saturates both ways",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTE6eDtpbnRzPTJ8MCwwMDAwMDAwMDAwMDAwMDAwfDAsMDAwMDAwMDAwMDAwMDAwMDtmbHRzPTJ8MjE0NzQ4MzY0Nyw0N2VmZjkzM2MwMDAwMDAwfC0yMTQ3NDgzNjQ4LGM3ZWZmOTMzYzAwMDAwMDA7ZGJscz0xfDAsMDAwMDAwMDAwMDAwMDAwMDtzdHJzPTJ8MDp8MDo7YWRkVD0xO2FkZEY9MTthZGRSPTE7YWRkTz0xO2FkZEE9MTtvYmo9eyJrIjp0cnVlLCJrIjpmYWxzZSwiayI6eCwiayI6e30sImsiOltdfQ==",
+      "stdin_preview": "2\tk\tx\n\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\\x9e\\xc9\u007f\u007f\\x9e\\xc9\u007f\\xff",
+      "stdout_preview": "false=1;bool=2;raw=1:x;ints=2|0,0000000000000000|0,0000000000000000;flts=2|21474\u2026"
+    },
+    {
+      "id": "construct-strings-split",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "NAlrCXgKYWIAY2QAAGVm",
+      "note": "the payload split on NUL: fields are the maximal runs BETWEEN NULs, so a doubled NUL yields an EMPTY field, not a skipped one",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTE6eDtpbnRzPTA7Zmx0cz0wO2RibHM9MDtzdHJzPTR8MjphYnwyOmNkfDA6fDI6ZWY7YWRkVD0xO2FkZEY9MTthZGRSPTE7YWRkTz0xO2FkZEE9MTtvYmo9eyJrIjp0cnVlLCJrIjpmYWxzZSwiayI6eCwiayI6e30sImsiOltdfQ==",
+      "stdin_preview": "4\tk\tx\nab\u0000cd\u0000\u0000ef",
+      "stdout_preview": "false=1;bool=2;raw=1:x;ints=0;flts=0;dbls=0;strs=4|2:ab|2:cd|0:|2:ef;addT=1;addF\u2026"
+    },
+    {
+      "id": "construct-strings-trailing-nul",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MwlrCXgKYWIA",
+      "note": "a trailing NUL yields a final EMPTY field -- the C's private copy is NUL-terminated so that field is a valid C string too",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTE6eDtpbnRzPTA7Zmx0cz0wO2RibHM9MDtzdHJzPTJ8MjphYnwwOjthZGRUPTE7YWRkRj0xO2FkZFI9MTthZGRPPTE7YWRkQT0xO29iaj17ImsiOnRydWUsImsiOmZhbHNlLCJrIjp4LCJrIjp7fSwiayI6W119",
+      "stdin_preview": "3\tk\tx\nab\u0000",
+      "stdout_preview": "false=1;bool=2;raw=1:x;ints=0;flts=0;dbls=0;strs=2|2:ab|0:;addT=1;addF=1;addR=1;\u2026"
+    },
+    {
+      "id": "construct-strings-all-nuls",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "NQlrCXgKAAAAAA==",
+      "note": "every byte a separator: five empty strings, and the int/float arrays see a zeroed group",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTE6eDtpbnRzPTA7Zmx0cz0wO2RibHM9MDtzdHJzPTV8MDp8MDp8MDp8MDp8MDo7YWRkVD0xO2FkZEY9MTthZGRSPTE7YWRkTz0xO2FkZEE9MTtvYmo9eyJrIjp0cnVlLCJrIjpmYWxzZSwiayI6eCwiayI6e30sImsiOltdfQ==",
+      "stdin_preview": "5\tk\tx\n\u0000\u0000\u0000\u0000",
+      "stdout_preview": "false=1;bool=2;raw=1:x;ints=0;flts=0;dbls=0;strs=5|0:|0:|0:|0:|0:;addT=1;addF=1;\u2026"
+    },
+    {
+      "id": "construct-strings-no-nul",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MglrCXgKYWJjZGVmZ2g=",
+      "note": "no separator at all: exactly ONE field, the whole payload",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTE6eDtpbnRzPTA7Zmx0cz0xfDIxNDc0ODM2NDcsNDUwY2VjY2NhMDAwMDAwMDtkYmxzPTA7c3Rycz0xfDg6YWJjZGVmZ2g7YWRkVD0xO2FkZEY9MTthZGRSPTE7YWRkTz0xO2FkZEE9MTtvYmo9eyJrIjp0cnVlLCJrIjpmYWxzZSwiayI6eCwiayI6e30sImsiOltdfQ==",
+      "stdin_preview": "2\tk\tx\nabcdefgh",
+      "stdout_preview": "false=1;bool=2;raw=1:x;ints=0;flts=1|2147483647,450ceccca0000000;dbls=0;strs=1|8\u2026"
+    },
+    {
+      "id": "construct-raw-empty",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MQlrCQphYmNk",
+      "note": "an EMPTY raw prints as nothing at all, so the object renders {\"k\":} -- invalid JSON that cJSON emits happily. The C writes strlen+1 bytes then advances by strlen, so the value contributes zero bytes",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTA6O2ludHM9MDtmbHRzPTA7ZGJscz0wO3N0cnM9MXw0OmFiY2Q7YWRkVD0xO2FkZEY9MTthZGRSPTE7YWRkTz0xO2FkZEE9MTtvYmo9eyJrIjp0cnVlLCJrIjpmYWxzZSwiayI6LCJrIjp7fSwiayI6W119",
+      "stdin_preview": "1\tk\t\nabcd",
+      "stdout_preview": "false=1;bool=2;raw=0:;ints=0;flts=0;dbls=0;strs=1|4:abcd;addT=1;addF=1;addR=1;ad\u2026"
+    },
+    {
+      "id": "construct-raw-json",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MQlrCXsiYSI6MX0KYWJjZA==",
+      "note": "raw content passes through VERBATIM with none of the escaping a String gets -- the whole point of a Raw node, and why the printer's Raw arm (previously unimplemented, on the reasoning that no mode could reach it) had to become real for this module",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTc6eyJhIjoxfTtpbnRzPTA7Zmx0cz0wO2RibHM9MDtzdHJzPTF8NDphYmNkO2FkZFQ9MTthZGRGPTE7YWRkUj0xO2FkZE89MTthZGRBPTE7b2JqPXsiayI6dHJ1ZSwiayI6ZmFsc2UsImsiOnsiYSI6MX0sImsiOnt9LCJrIjpbXX0=",
+      "stdin_preview": "1\tk\t{\"a\":1}\nabcd",
+      "stdout_preview": "false=1;bool=2;raw=7:{\"a\":1};ints=0;flts=0;dbls=0;strs=1|4:abcd;addT=1;addF=1;ad\u2026"
+    },
+    {
+      "id": "construct-raw-garbage",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MQlrCX17bm90IGpzb24KYWJjZA==",
+      "note": "raw passthrough does not validate: the printer emits structurally broken output without complaint. This is the escaping bypass, stated plainly",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTEwOn17bm90IGpzb247aW50cz0wO2ZsdHM9MDtkYmxzPTA7c3Rycz0xfDQ6YWJjZDthZGRUPTE7YWRkRj0xO2FkZFI9MTthZGRPPTE7YWRkQT0xO29iaj17ImsiOnRydWUsImsiOmZhbHNlLCJrIjp9e25vdCBqc29uLCJrIjp7fSwiayI6W119",
+      "stdin_preview": "1\tk\t}{not json\nabcd",
+      "stdout_preview": "false=1;bool=2;raw=10:}{not json;ints=0;flts=0;dbls=0;strs=1|4:abcd;addT=1;addF=\u2026"
+    },
+    {
+      "id": "construct-raw-quotes",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MQlrCWhhcyAicXVvdGVzIiBhbmQgXCBiYWNrc2xhc2gKYWJjZA==",
+      "note": "quotes and backslashes inside a Raw are NOT escaped, unlike a String",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTI4OmhhcyAicXVvdGVzIiBhbmQgXCBiYWNrc2xhc2g7aW50cz0wO2ZsdHM9MDtkYmxzPTA7c3Rycz0xfDQ6YWJjZDthZGRUPTE7YWRkRj0xO2FkZFI9MTthZGRPPTE7YWRkQT0xO29iaj17ImsiOnRydWUsImsiOmZhbHNlLCJrIjpoYXMgInF1b3RlcyIgYW5kIFwgYmFja3NsYXNoLCJrIjp7fSwiayI6W119",
+      "stdin_preview": "1\tk\thas \"quotes\" and \\ backslash\nabcd",
+      "stdout_preview": "false=1;bool=2;raw=28:has \"quotes\" and \\ backslash;ints=0;flts=0;dbls=0;strs=1|4\u2026"
+    },
+    {
+      "id": "construct-key-empty",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MQkJeAphYmNk",
+      "note": "an empty key is accepted (only a NULL key is refused), giving five entries all keyed \"\"",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTE6eDtpbnRzPTA7Zmx0cz0wO2RibHM9MDtzdHJzPTF8NDphYmNkO2FkZFQ9MTthZGRGPTE7YWRkUj0xO2FkZE89MTthZGRBPTE7b2JqPXsiIjp0cnVlLCIiOmZhbHNlLCIiOngsIiI6e30sIiI6W119",
+      "stdin_preview": "1\t\tx\nabcd",
+      "stdout_preview": "false=1;bool=2;raw=1:x;ints=0;flts=0;dbls=0;strs=1|4:abcd;addT=1;addF=1;addR=1;a\u2026"
+    },
+    {
+      "id": "construct-dupkey-appends",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MQlzYW1lCXgKYWJjZA==",
+      "note": "all five Add*ToObject calls use the SAME key: cJSON APPENDS a duplicate key rather than replacing it, so one input covers both paths",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTE6eDtpbnRzPTA7Zmx0cz0wO2RibHM9MDtzdHJzPTF8NDphYmNkO2FkZFQ9MTthZGRGPTE7YWRkUj0xO2FkZE89MTthZGRBPTE7b2JqPXsic2FtZSI6dHJ1ZSwic2FtZSI6ZmFsc2UsInNhbWUiOngsInNhbWUiOnt9LCJzYW1lIjpbXX0=",
+      "stdin_preview": "1\tsame\tx\nabcd",
+      "stdout_preview": "false=1;bool=2;raw=1:x;ints=0;flts=0;dbls=0;strs=1|4:abcd;addT=1;addF=1;addR=1;a\u2026"
+    },
+    {
+      "id": "construct-key-nul-truncates",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MQlhAGIJeAphYmNk",
+      "note": "a NUL inside the key: the C driver NUL-splits the line and hands cJSON a char*, so the key truncates to `a` before add_item_to_object copies it (LESSONS #29 -- this has to hold at EVERY boundary, not just the printer)",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTE6eDtpbnRzPTA7Zmx0cz0wO2RibHM9MDtzdHJzPTF8NDphYmNkO2FkZFQ9MTthZGRGPTE7YWRkUj0xO2FkZE89MTthZGRBPTE7b2JqPXsiYSI6dHJ1ZSwiYSI6ZmFsc2UsImEiOngsImEiOnt9LCJhIjpbXX0=",
+      "stdin_preview": "1\ta\u0000b\tx\nabcd",
+      "stdout_preview": "false=1;bool=2;raw=1:x;ints=0;flts=0;dbls=0;strs=1|4:abcd;addT=1;addF=1;addR=1;a\u2026"
+    },
+    {
+      "id": "construct-raw-nul-truncates",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MQlrCXkAegphYmNk",
+      "note": "the same truncation for the raw text, via cJSON_strdup's strlen",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTE6eTtpbnRzPTA7Zmx0cz0wO2RibHM9MDtzdHJzPTF8NDphYmNkO2FkZFQ9MTthZGRGPTE7YWRkUj0xO2FkZE89MTthZGRBPTE7b2JqPXsiayI6dHJ1ZSwiayI6ZmFsc2UsImsiOnksImsiOnt9LCJrIjpbXX0=",
+      "stdin_preview": "1\tk\ty\u0000z\nabcd",
+      "stdout_preview": "false=1;bool=2;raw=1:y;ints=0;flts=0;dbls=0;strs=1|4:abcd;addT=1;addF=1;addR=1;a\u2026"
+    },
+    {
+      "id": "construct-no-newline",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MQlrCXg=",
+      "note": "no newline: rc 2, nothing on stdout, on both sides",
+      "rc": 2,
+      "stdout_b64": "",
+      "stdin_preview": "1\tk\tx",
+      "stdout_preview": ""
+    },
+    {
+      "id": "construct-no-tab",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MSBrIHgKcGF5bG9hZA==",
+      "note": "no tab at all: rc 2",
+      "rc": 2,
+      "stdout_b64": "",
+      "stdin_preview": "1 k x\npayload",
+      "stdout_preview": ""
+    },
+    {
+      "id": "construct-one-tab",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MQlrCnBheWxvYWQ=",
+      "note": "only ONE tab: the raw field is missing, rc 2",
+      "rc": 2,
+      "stdout_b64": "",
+      "stdin_preview": "1\tk\npayload",
+      "stdout_preview": ""
+    },
+    {
+      "id": "construct-tab-in-payload-doesnt-rescue",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MQlrCnBheQlsb2Fk",
+      "note": "the same malformed header with a tab in the PAYLOAD: still rc 2, which proves the second-tab search is bounded by the newline rather than scanning the whole input",
+      "rc": 2,
+      "stdout_b64": "",
+      "stdin_preview": "1\tk\npay\tload",
+      "stdout_preview": ""
+    },
+    {
+      "id": "construct-empty-input",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "",
+      "note": "empty stdin: rc 2",
+      "rc": 2,
+      "stdout_b64": "",
+      "stdin_preview": "",
+      "stdout_preview": ""
+    },
+    {
+      "id": "construct-partial-group-3-bytes",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "OQlrCXgKYWJj",
+      "note": "3 bytes: no whole int/float/double group, so those arrays are EMPTY -- but the pointer is non-NULL, so they are empty ARRAYS, not NULL. The string array still sees one field",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTE6eDtpbnRzPTA7Zmx0cz0wO2RibHM9MDtzdHJzPTF8MzphYmM7YWRkVD0xO2FkZEY9MTthZGRSPTE7YWRkTz0xO2FkZEE9MTtvYmo9eyJrIjp0cnVlLCJrIjpmYWxzZSwiayI6eCwiayI6e30sImsiOltdfQ==",
+      "stdin_preview": "9\tk\tx\nabc",
+      "stdout_preview": "false=1;bool=2;raw=1:x;ints=0;flts=0;dbls=0;strs=1|3:abc;addT=1;addF=1;addR=1;ad\u2026"
+    },
+    {
+      "id": "construct-partial-group-7-bytes",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "OQlrCXgKYWJjZGVmZw==",
+      "note": "7 bytes: one whole int and one whole float, but no whole double -- a trailing partial group is DROPPED, never zero-padded",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTE6eDtpbnRzPTA7Zmx0cz0wO2RibHM9MDtzdHJzPTF8NzphYmNkZWZnO2FkZFQ9MTthZGRGPTE7YWRkUj0xO2FkZE89MTthZGRBPTE7b2JqPXsiayI6dHJ1ZSwiayI6ZmFsc2UsImsiOngsImsiOnt9LCJrIjpbXX0=",
+      "stdin_preview": "9\tk\tx\nabcdefg",
+      "stdout_preview": "false=1;bool=2;raw=1:x;ints=0;flts=0;dbls=0;strs=1|7:abcdefg;addT=1;addF=1;addR=\u2026"
+    },
+    {
+      "id": "construct-cap-20-elements",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MjAJawl4CgAAAAABAAAAAgAAAAMAAAAEAAAABQAAAAYAAAAHAAAACAAAAAkAAAAKAAAACwAAAAwAAAANAAAADgAAAA8AAAAQAAAAEQAAABIAAAATAAAA",
+      "note": "20 whole ints against the 16-element cap: both sides must clamp to 16 identically. The cap bounds the descriptor; it is not a cJSON limit",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTE6eDtpbnRzPTZ8MCwwMDAwMDAwMDAwMDAwMDAwfDEsM2ZmMDAwMDAwMDAwMDAwMHwyLDQwMDAwMDAwMDAwMDAwMDB8Myw0MDA4MDAwMDAwMDAwMDAwfDQsNDAxMDAwMDAwMDAwMDAwMHw1LDQwMTQwMDAwMDAwMDAwMDA7Zmx0cz03fDAsMzZkYTAwMDAwMDAwMDAwMHwwLDM2ZGMwMDAwMDAwMDAwMDB8MCwzNmRlMDAwMDAwMDAwMDAwfDAsMzZlMDAwMDAwMDAwMDAwMHwwLDM2ZTEwMDAwMDAwMDAwMDB8MCwzNmUyMDAwMDAwMDAwMDAwfDAsMzZlMzAwMDAwMDAwMDAwMDtkYmxzPTN8MCwwMDA4MDAwMDAwMDcwMDAwfDAsMDAwYTAwMDAwMDA5MDAwMHwwLDAwMGMwMDAwMDAwYjAwMDA7c3Rycz0xNnwwOnwwOnwwOnwwOnwxOgF8MDp8MDp8MToCfDA6fDA6fDE6A3wwOnwwOnwxOgR8MDp8MDo7YWRkVD0xO2FkZEY9MTthZGRSPTE7YWRkTz0xO2FkZEE9MTtvYmo9eyJrIjp0cnVlLCJrIjpmYWxzZSwiayI6eCwiayI6e30sImsiOltdfQ==",
+      "stdin_preview": "20\tk\tx\n\u0000\u0000\u0000\u0000\u0001\u0000\u0000\u0000\u0002\u0000\u0000\u0000\u0003\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u0005\u0000\u0000\u0000\u0006\u0000\u0000\u0000\u0007\u0000\u0000\u0000\b\u0000\u0000\u0000\t\u0000\u0000\u0000\n\u0000\u0000\u0000\u000b\u0000\u0000\u0000\f\u0000\u0000\u0000\r\u0000\u0000\u0000\u000e\u0000\u0000\u0000\u000f\u0000\u0000\u0000\u0010\u0000\u0000\u0000\u0011\u0000\u0000\u0000\u0012\u2026",
+      "stdout_preview": "false=1;bool=2;raw=1:x;ints=6|0,0000000000000000|1,3ff0000000000000|2,4000000000\u2026"
+    },
+    {
+      "id": "construct-high-bytes",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MwlrCXgKgIGCg4SFhoeIiYqLjI2Ojw==",
+      "note": "bytes 0x80-0x8F, none of which is valid UTF-8 on its own -- this probe is why the matrix format needed `stdin_b64` (LESSONS #36); it cannot be spelled as a JSON string at all",
+      "rc": 0,
+      "stdout_b64": "ZmFsc2U9MTtib29sPTI7cmF3PTE6eDtpbnRzPTF8LTIwODg1OTkxNjgsYzFkZjFmNWZhMDAwMDAwMDtmbHRzPTF8MCxiOWIxOTE3MTQwMDAwMDAwO2RibHM9MDtzdHJzPTF8MTY6gIGCg4SFhoeIiYqLjI2OjzthZGRUPTE7YWRkRj0xO2FkZFI9MTthZGRPPTE7YWRkQT0xO29iaj17ImsiOnRydWUsImsiOmZhbHNlLCJrIjp4LCJrIjp7fSwiayI6W119",
+      "stdin_preview": "3\tk\tx\n\\x80\\x81\\x82\\x83\\x84\\x85\\x86\\x87\\x88\\x89\\x8a\\x8b\\x8c\\x8d\\x8e\\x8f",
+      "stdout_preview": "false=1;bool=2;raw=1:x;ints=1|-2088599168,c1df1f5fa0000000;flts=1|0,b9b191714000\u2026"
+    }
+  ],
+  "fingerprint": "7843e9b391240859e874dd1f1eb9187acc55312e49977991e503893ed475f2c8"
+}

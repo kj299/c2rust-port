@@ -77,9 +77,16 @@ FIXED = """\
 
 def main():
     text = open(SRC, encoding="utf-8").read()
-    if PRISTINE not in text:
-        print("error: pristine decode_pointer_inplace body not found (did the "
-              "vendored source change?) — update make_fixed_utils.py",
+    # LESSONS #36: count, don't just test membership. `replace(..., 1)` patches
+    # the FIRST match, so N>1 would leave the others carrying the defect while
+    # the file still looked corrected — silent in the SAFE direction, in the one
+    # artifact whose whole job is being trustworthy. Same assertion as
+    # make_fixed_core.py.
+    found = text.count(PRISTINE)
+    if found != 1:
+        print(f"error: expected exactly 1 pristine decode_pointer_inplace body, "
+              f"found {found} (did the vendored source change?) — update "
+              f"make_fixed_utils.py",
               file=sys.stderr)
         return 1
     fixed = text.replace(PRISTINE, FIXED, 1)

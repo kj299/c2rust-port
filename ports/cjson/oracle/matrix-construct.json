@@ -1,0 +1,530 @@
+[
+ {
+  "name": "construct-empty-payload",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MwlrCXgK",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-count-negative",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "LTEJawl4CmFiY2RlZmdo",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-count-zero",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MAlrCXgKYWJjZGVmZ2g=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-count-past-avail",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "OTkJawl4CmFiY2RlZmdo",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-count-junk",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "enoJawl4CmFiY2Q=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-count-overflow",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "OTk5OTk5OTk5OTk5OTk5OTk5OTkJawl4CmFiY2RlZmdo",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-count-plus",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "KzIJawl4CmFiY2RlZmdo",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-count-leading-space",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "ICAgMglrCXgKYWJjZGVmZ2g=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-count-trailing-junk",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "Mnh5eglrCXgKYWJjZGVmZ2g=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-ints-basic",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MglrCXgKAQAAAAIAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-ints-extremes",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MglrCXgKAAAAgP///38AAAAAAAAAAAAAAAAAAAAA",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-double-inf",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MglrCXgKAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPB/AAAAAAAA8P8AAAAAAAAAAAAAAAAAAAAA",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-double-neg-zero",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MQlrCXgKAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAA",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-double-huge",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MQlrCXgKAAAAAAAAAACcdQCIPOQ3fgAAAAAAAAAA",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-double-int-boundary",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MglrCXgKAAAAAAAAAAAAAAAAAAAAAAAAwP///99BAACg////30EAAAAAAAAAAAAAAAAAAAAA",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-double-neg-boundary",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MglrCXgKAAAAAAAAAAAAAAAAAAAAAAAAAAAAAODBAAAQAAAA4MEAAAAAAAAAAAAAAAAAAAAA",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-double-subnormal",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MQlrCXgKAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAA",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-double-fraction",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MglrCXgKAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOA/AAAAAAAA4L8AAAAAAAAAAAAAAAAAAAAA",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-float-basic",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MglrCXgKAAAAAAAAAAAAAAAAAAAAAAAAwD8AACDA",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-float-inf",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MglrCXgKAAAAAAAAAAAAAAAAAAAAAAAAgH8AAID/",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-float-subnormal",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MglrCXgKAAAAAAAAAAAAAAAAAAAAAAEAAAABAAAA",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-float-huge",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MglrCXgKAAAAAAAAAAAAAAAAAAAAAJ7Jf3+eyX//",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-strings-split",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "NAlrCXgKYWIAY2QAAGVm",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-strings-trailing-nul",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MwlrCXgKYWIA",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-strings-all-nuls",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "NQlrCXgKAAAAAA==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-strings-no-nul",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MglrCXgKYWJjZGVmZ2g=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-raw-empty",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MQlrCQphYmNk",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-raw-json",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MQlrCXsiYSI6MX0KYWJjZA==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-raw-garbage",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MQlrCX17bm90IGpzb24KYWJjZA==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-raw-quotes",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MQlrCWhhcyAicXVvdGVzIiBhbmQgXCBiYWNrc2xhc2gKYWJjZA==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-key-empty",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MQkJeAphYmNk",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-dupkey-appends",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MQlzYW1lCXgKYWJjZA==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-key-nul-truncates",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MQlhAGIJeAphYmNk",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-raw-nul-truncates",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MQlrCXkAegphYmNk",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-no-newline",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MQlrCXg=",
+  "expect_rc": 2,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-no-tab",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MSBrIHgKcGF5bG9hZA==",
+  "expect_rc": 2,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-one-tab",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MQlrCnBheWxvYWQ=",
+  "expect_rc": 2,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-tab-in-payload-doesnt-rescue",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MQlrCnBheQlsb2Fk",
+  "expect_rc": 2,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-empty-input",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "",
+  "expect_rc": 2,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-partial-group-3-bytes",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "OQlrCXgKYWJj",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-partial-group-7-bytes",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "OQlrCXgKYWJjZGVmZw==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-cap-20-elements",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MjAJawl4CgAAAAABAAAAAgAAAAMAAAAEAAAABQAAAAYAAAAHAAAACAAAAAkAAAAKAAAACwAAAAwAAAANAAAADgAAAA8AAAAQAAAAEQAAABIAAAATAAAA",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-high-bytes",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MwlrCXgKgIGCg4SFhoeIiYqLjI2Ojw==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-nan-double-quiet",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MglrCXgKAAAAAAAAAAAAAAAAAAD4fwAAAAAAAAAA",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-nan-double-negative",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MglrCXgKAAAAAAAAAAABAAAAAAD4/wAAAAAAAAAA",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-nan-double-signalling",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MglrCXgKAAAAAAAAAAABAAAAAADwfwAAAAAAAAAA",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-nan-float",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MglrCXgKAAAAAAAAAAAAAMB/",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ },
+ {
+  "name": "construct-nan-float-negative",
+  "args": [
+   "construct"
+  ],
+  "stdin_b64": "MglrCXgKAAAAAAAAAAAAAMD/",
+  "expect_rc": 0,
+  "mods": [
+   "dom-construct"
+  ]
+ }
+]

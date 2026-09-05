@@ -115,6 +115,18 @@ MUTATIONS = [
      "why": "the unported ceiling never binds: the ungated API surface may grow",
      "cmd": ["harnesses/api-coverage/check_api.py", "--self-test"]},
 
+    # LESSONS #36: not a verdict — an INPUT path, and that is the point. If the
+    # `stdin_b64` resolution is dropped, a case carrying raw bytes feeds the
+    # child NOTHING, both sides answer identically to empty input, and the case
+    # reports MATCH. The test is silently narrowed rather than failed, which is
+    # the one failure shape a differential cannot report on itself. Two gates
+    # depend on it: the matrix and the fuzzer's seed corpus.
+    {"gate": "diff-matrix-bytes", "file": "harnesses/differential/diff_run.py",
+     "old": '                case["stdin_bytes"] = base64.b64decode(case["stdin_b64"], validate=True)',
+     "new": '                case["stdin_bytes"] = b""',
+     "why": "a matrix case's raw bytes silently become empty stdin: the case still MATCHes",
+     "cmd": ["harnesses/differential/diff_run.py", "--self-test"]},
+
     {"gate": "control-coverage", "file": "harnesses/control-coverage/check_controls.py",
      "old": "    base = os.path.basename(control)\n"
             "    return any((control in text) or (base in text) for text in gate_texts)",

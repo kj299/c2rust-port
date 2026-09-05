@@ -1,0 +1,352 @@
+{
+  "module": "dom-construct",
+  "modules": [
+    "dom-construct"
+  ],
+  "probes": [
+    {
+      "id": "construct-empty-payload",
+      "args": [
+        "construct"
+      ],
+      "stdin": "3\tk\tx\n",
+      "note": "EMPTY payload = the NULL element pointer, the only way to reach `numbers == NULL -> return NULL` in all four typed-array constructors. A Rust slice cannot be null, so this branch lives at the driver boundary"
+    },
+    {
+      "id": "construct-count-negative",
+      "args": [
+        "construct"
+      ],
+      "stdin": "-1\tk\tx\nabcdefgh",
+      "note": "count < 0 -> NULL in all four constructors (cJSON.c:2574). Distinct from count == 0, which returns an EMPTY array, not NULL"
+    },
+    {
+      "id": "construct-count-zero",
+      "args": [
+        "construct"
+      ],
+      "stdin": "0\tk\tx\nabcdefgh",
+      "note": "count == 0 with a non-NULL pointer: an empty array, and `a->child` stays NULL so the trailing prev-pointer fixup is skipped"
+    },
+    {
+      "id": "construct-count-past-avail",
+      "args": [
+        "construct"
+      ],
+      "stdin": "99\tk\tx\nabcdefgh",
+      "note": "count clamped to what the payload holds. Passing count > the buffer is the out-of-bounds read these APIs cannot detect -- UB in the oracle, so it is deliberately unreachable from this mode"
+    },
+    {
+      "id": "construct-count-junk",
+      "args": [
+        "construct"
+      ],
+      "stdin": "zz\tk\tx\nabcd",
+      "note": "a non-numeric count: strtol answers 0 and both sides must agree before cJSON ever sees an int"
+    },
+    {
+      "id": "construct-count-overflow",
+      "args": [
+        "construct"
+      ],
+      "stdin": "99999999999999999999\tk\tx\nabcdefgh",
+      "note": "20 digits overflow long; strtol saturates and the driver clamps to INT_MAX, then the element count clamps again -- two clamps that must compose identically"
+    },
+    {
+      "id": "construct-count-plus",
+      "args": [
+        "construct"
+      ],
+      "stdin": "+2\tk\tx\nabcdefgh",
+      "note": "a leading '+' is accepted by strtol; Rust's own integer parse is not, so the driver has to normalize it explicitly"
+    },
+    {
+      "id": "construct-count-leading-space",
+      "args": [
+        "construct"
+      ],
+      "stdin": "   2\tk\tx\nabcdefgh",
+      "note": "strtol skips leading whitespace"
+    },
+    {
+      "id": "construct-count-trailing-junk",
+      "args": [
+        "construct"
+      ],
+      "stdin": "2xyz\tk\tx\nabcdefgh",
+      "note": "strtol stops at the first non-digit and keeps the prefix"
+    },
+    {
+      "id": "construct-ints-basic",
+      "args": [
+        "construct"
+      ],
+      "stdin": "2\tk\tx\n\u0001\u0000\u0000\u0000\u0002\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
+      "note": "cJSON_CreateIntArray: (double)int is exact, so valueint round-trips"
+    },
+    {
+      "id": "construct-ints-extremes",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MglrCXgKAAAAgP///38AAAAAAAAAAAAAAAAAAAAA",
+      "note": "INT_MIN and INT_MAX. Both widen to doubles the C's guards catch BEFORE the cast, so the saturation branch runs even for values needing no saturating. Probeable only because the arrays now read disjoint regions: this byte pair reinterpreted as an f64 is 0x7FFFFFFF80000000 -- a NaN -- so it used to diverge through a sibling array rather than through anything it tested"
+    },
+    {
+      "id": "construct-double-inf",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MglrCXgKAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPB/AAAAAAAA8P8AAAAAAAAAAAAAAAAAAAAA",
+      "note": "+inf >= INT_MAX and -inf <= (double)INT_MIN, so both saturate through the guards -- DEFINED behavior, unlike NaN, which fails both comparisons and falls into the undefined cast"
+    },
+    {
+      "id": "construct-double-neg-zero",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MQlrCXgKAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAA",
+      "note": "-0.0: valueint 0, but the descriptor's raw bits carry the sign the printed form loses"
+    },
+    {
+      "id": "construct-double-huge",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MQlrCXgKAAAAAAAAAACcdQCIPOQ3fgAAAAAAAAAA",
+      "note": "1e300 saturates valueint to INT_MAX while valuedouble keeps full range"
+    },
+    {
+      "id": "construct-double-int-boundary",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MglrCXgKAAAAAAAAAAAAAAAAAAAAAAAAwP///99BAACg////30EAAAAAAAAAAAAAAAAAAAAA",
+      "note": "the >= INT_MAX guard is INCLUSIVE, so 2147483647.0 takes the guard rather than the cast; 2147483646.5 truncates toward zero"
+    },
+    {
+      "id": "construct-double-neg-boundary",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MglrCXgKAAAAAAAAAAAAAAAAAAAAAAAAAAAAAODBAAAQAAAA4MEAAAAAAAAAAAAAAAAAAAAA",
+      "note": "the <= (double)INT_MIN guard is inclusive too"
+    },
+    {
+      "id": "construct-double-subnormal",
+      "args": [
+        "construct"
+      ],
+      "stdin": "1\tk\tx\n\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
+      "note": "the smallest positive subnormal: valueint 0, valuedouble denormal"
+    },
+    {
+      "id": "construct-double-fraction",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MglrCXgKAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOA/AAAAAAAA4L8AAAAAAAAAAAAAAAAAAAAA",
+      "note": "truncation toward zero on both signs (not floor)"
+    },
+    {
+      "id": "construct-float-basic",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MglrCXgKAAAAAAAAAAAAAAAAAAAAAAAAwD8AACDA",
+      "note": "cJSON_CreateFloatArray widens f32 to f64 before CreateNumber, so valuedouble is the exact widening, never a re-rounded decimal"
+    },
+    {
+      "id": "construct-float-inf",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MglrCXgKAAAAAAAAAAAAAAAAAAAAAAAAgH8AAID/",
+      "note": "f32 infinities widen to f64 infinities and saturate the same way"
+    },
+    {
+      "id": "construct-float-subnormal",
+      "args": [
+        "construct"
+      ],
+      "stdin": "2\tk\tx\n\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000\u0000\u0001\u0000\u0000\u0000",
+      "note": "an f32 subnormal widens to a NORMAL f64 -- the widening has to be the hardware conversion on both sides, not a decimal round-trip"
+    },
+    {
+      "id": "construct-float-huge",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MglrCXgKAAAAAAAAAAAAAAAAAAAAAJ7Jf3+eyX//",
+      "note": "near +/-FLT_MAX: the widening is exact and valueint saturates both ways"
+    },
+    {
+      "id": "construct-strings-split",
+      "args": [
+        "construct"
+      ],
+      "stdin": "4\tk\tx\nab\u0000cd\u0000\u0000ef",
+      "note": "the payload split on NUL: fields are the maximal runs BETWEEN NULs, so a doubled NUL yields an EMPTY field, not a skipped one"
+    },
+    {
+      "id": "construct-strings-trailing-nul",
+      "args": [
+        "construct"
+      ],
+      "stdin": "3\tk\tx\nab\u0000",
+      "note": "a trailing NUL yields a final EMPTY field -- the C's private copy is NUL-terminated so that field is a valid C string too"
+    },
+    {
+      "id": "construct-strings-all-nuls",
+      "args": [
+        "construct"
+      ],
+      "stdin": "5\tk\tx\n\u0000\u0000\u0000\u0000",
+      "note": "every byte a separator: five empty strings, and the int/float arrays see a zeroed group"
+    },
+    {
+      "id": "construct-strings-no-nul",
+      "args": [
+        "construct"
+      ],
+      "stdin": "2\tk\tx\nabcdefgh",
+      "note": "no separator at all: exactly ONE field, the whole payload"
+    },
+    {
+      "id": "construct-raw-empty",
+      "args": [
+        "construct"
+      ],
+      "stdin": "1\tk\t\nabcd",
+      "note": "an EMPTY raw prints as nothing at all, so the object renders {\"k\":} -- invalid JSON that cJSON emits happily. The C writes strlen+1 bytes then advances by strlen, so the value contributes zero bytes"
+    },
+    {
+      "id": "construct-raw-json",
+      "args": [
+        "construct"
+      ],
+      "stdin": "1\tk\t{\"a\":1}\nabcd",
+      "note": "raw content passes through VERBATIM with none of the escaping a String gets -- the whole point of a Raw node, and why the printer's Raw arm (previously unimplemented, on the reasoning that no mode could reach it) had to become real for this module"
+    },
+    {
+      "id": "construct-raw-garbage",
+      "args": [
+        "construct"
+      ],
+      "stdin": "1\tk\t}{not json\nabcd",
+      "note": "raw passthrough does not validate: the printer emits structurally broken output without complaint. This is the escaping bypass, stated plainly"
+    },
+    {
+      "id": "construct-raw-quotes",
+      "args": [
+        "construct"
+      ],
+      "stdin": "1\tk\thas \"quotes\" and \\ backslash\nabcd",
+      "note": "quotes and backslashes inside a Raw are NOT escaped, unlike a String"
+    },
+    {
+      "id": "construct-key-empty",
+      "args": [
+        "construct"
+      ],
+      "stdin": "1\t\tx\nabcd",
+      "note": "an empty key is accepted (only a NULL key is refused), giving five entries all keyed \"\""
+    },
+    {
+      "id": "construct-dupkey-appends",
+      "args": [
+        "construct"
+      ],
+      "stdin": "1\tsame\tx\nabcd",
+      "note": "all five Add*ToObject calls use the SAME key: cJSON APPENDS a duplicate key rather than replacing it, so one input covers both paths"
+    },
+    {
+      "id": "construct-key-nul-truncates",
+      "args": [
+        "construct"
+      ],
+      "stdin": "1\ta\u0000b\tx\nabcd",
+      "note": "a NUL inside the key: the C driver NUL-splits the line and hands cJSON a char*, so the key truncates to `a` before add_item_to_object copies it (LESSONS #29 -- this has to hold at EVERY boundary, not just the printer)"
+    },
+    {
+      "id": "construct-raw-nul-truncates",
+      "args": [
+        "construct"
+      ],
+      "stdin": "1\tk\ty\u0000z\nabcd",
+      "note": "the same truncation for the raw text, via cJSON_strdup's strlen"
+    },
+    {
+      "id": "construct-no-newline",
+      "args": [
+        "construct"
+      ],
+      "stdin": "1\tk\tx",
+      "note": "no newline: rc 2, nothing on stdout, on both sides"
+    },
+    {
+      "id": "construct-no-tab",
+      "args": [
+        "construct"
+      ],
+      "stdin": "1 k x\npayload",
+      "note": "no tab at all: rc 2"
+    },
+    {
+      "id": "construct-one-tab",
+      "args": [
+        "construct"
+      ],
+      "stdin": "1\tk\npayload",
+      "note": "only ONE tab: the raw field is missing, rc 2"
+    },
+    {
+      "id": "construct-tab-in-payload-doesnt-rescue",
+      "args": [
+        "construct"
+      ],
+      "stdin": "1\tk\npay\tload",
+      "note": "the same malformed header with a tab in the PAYLOAD: still rc 2, which proves the second-tab search is bounded by the newline rather than scanning the whole input"
+    },
+    {
+      "id": "construct-empty-input",
+      "args": [
+        "construct"
+      ],
+      "stdin": "",
+      "note": "empty stdin: rc 2"
+    },
+    {
+      "id": "construct-partial-group-3-bytes",
+      "args": [
+        "construct"
+      ],
+      "stdin": "9\tk\tx\nabc",
+      "note": "3 bytes: no whole int/float/double group, so those arrays are EMPTY -- but the pointer is non-NULL, so they are empty ARRAYS, not NULL. The string array still sees one field"
+    },
+    {
+      "id": "construct-partial-group-7-bytes",
+      "args": [
+        "construct"
+      ],
+      "stdin": "9\tk\tx\nabcdefg",
+      "note": "7 bytes: one whole int and one whole float, but no whole double -- a trailing partial group is DROPPED, never zero-padded"
+    },
+    {
+      "id": "construct-cap-20-elements",
+      "args": [
+        "construct"
+      ],
+      "stdin": "20\tk\tx\n\u0000\u0000\u0000\u0000\u0001\u0000\u0000\u0000\u0002\u0000\u0000\u0000\u0003\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u0005\u0000\u0000\u0000\u0006\u0000\u0000\u0000\u0007\u0000\u0000\u0000\b\u0000\u0000\u0000\t\u0000\u0000\u0000\n\u0000\u0000\u0000\u000b\u0000\u0000\u0000\f\u0000\u0000\u0000\r\u0000\u0000\u0000\u000e\u0000\u0000\u0000\u000f\u0000\u0000\u0000\u0010\u0000\u0000\u0000\u0011\u0000\u0000\u0000\u0012\u0000\u0000\u0000\u0013\u0000\u0000\u0000",
+      "note": "20 whole ints against the 16-element cap: both sides must clamp to 16 identically. The cap bounds the descriptor; it is not a cJSON limit"
+    },
+    {
+      "id": "construct-high-bytes",
+      "args": [
+        "construct"
+      ],
+      "stdin_b64": "MwlrCXgKgIGCg4SFhoeIiYqLjI2Ojw==",
+      "note": "bytes 0x80-0x8F, none of which is valid UTF-8 on its own -- this probe is why the matrix format needed `stdin_b64` (LESSONS #36); it cannot be spelled as a JSON string at all"
+    }
+  ]
+}

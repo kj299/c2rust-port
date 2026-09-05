@@ -25,6 +25,21 @@ use crate::value::{Number, Value};
 
 /// Saturating `valuedouble` → `valueint`, the C's rule (cJSON.c:365) applied at
 /// construction so a built number prints like a parsed one.
+///
+/// **INTENTIONAL DIVERGENCE for NaN** (DIVERGENCES.md
+/// `create-number-nan-valueint`). Every comparison with a NaN is false, so a NaN
+/// falls past both saturation guards and reaches the cast. In C that cast is
+/// `(int)num` on a NaN — *undefined behavior* (C17 6.3.1.4p1), and undefined in
+/// a way that actually differs per target: x86-64's `cvttsd2si` yields INT_MIN,
+/// AArch64's `fcvtzs` yields 0. Rust's `as` is defined to saturate and to map
+/// NaN to 0, so the port answers 0 — the defined answer, and the one the C
+/// already gives on AArch64.
+///
+/// Reachable only through construction, never through parsing: `parse_number`
+/// has the identical cast but its character whitelist is `0-9 + - e E .`, so
+/// `strtod` there can return an infinity (which both guards catch) but never a
+/// NaN. That is why six green gates never saw it — until `dom-construct` put
+/// `cJSON_CreateDoubleArray` on the compared contract with arbitrary f64 bits.
 #[must_use]
 pub fn number(d: f64) -> Value {
     #[allow(clippy::cast_possible_truncation)] // guarded by the saturation
@@ -33,11 +48,13 @@ pub fn number(d: f64) -> Value {
     } else if d <= f64::from(i32::MIN) {
         i32::MIN
     } else {
+        // NaN lands here and `as` gives 0 — see the divergence note above.
         d as i32
     };
     Value::Number(Number { d, i })
 }
 
+/// cJSON.c:2441 `cJSON_CreateBool`.
 #[must_use]
 pub fn bool_value(b: bool) -> Value {
     if b {
@@ -45,6 +62,82 @@ pub fn bool_value(b: bool) -> Value {
     } else {
         Value::False
     }
+}
+
+/// cJSON.c:2430 `cJSON_CreateFalse`. Exported separately by the C even though
+/// `cJSON_CreateBool(0)` produces the same node, so it is carried separately
+/// here too — the api-coverage gate counts entry points, not behaviors.
+#[must_use]
+pub fn create_false() -> Value {
+    Value::False
+}
+
+/// C-string truncation: everything up to the first NUL. cJSON copies text with
+/// `cJSON_strdup`, which is `strlen` + `memcpy`, so an interior NUL ends the
+/// value regardless of how many bytes the caller thought it was passing
+/// (LESSONS #29 — this has to hold at EVERY boundary, not just the printer's).
+fn cstr(s: &[u8]) -> &[u8] {
+    &s[..s.iter().position(|&b| b == 0).unwrap_or(s.len())]
+}
+
+/// cJSON.c:2528 `cJSON_CreateRaw`. `None` for a NULL argument, mirroring the C:
+/// `cJSON_strdup(NULL)` returns NULL, and `cJSON_CreateRaw` then deletes the
+/// half-built node and returns NULL rather than a Raw item with a NULL
+/// `valuestring` (which the printer would refuse anyway).
+#[must_use]
+pub fn create_raw(raw: Option<&[u8]>) -> Option<Value> {
+    raw.map(|r| Value::Raw(cstr(r).to_vec()))
+}
+
+// ---- typed-array constructors (cJSON_Create*Array) -------------------------
+//
+// The C signatures are `(const T *numbers, int count)` — a pointer and a length
+// that the callee has NO way to reconcile. Passing a count larger than the
+// buffer is an out-of-bounds read the library cannot detect, and it is the only
+// memory-safety hazard these four functions have.
+//
+// The port takes a SLICE, so the pair cannot disagree: the hazard is designed
+// out rather than checked. That improvement is invisible to the differential by
+// construction — exercising it would make the C oracle undefined, so there is no
+// defined behavior to compare against (DIVERGENCES.md, "Structural
+// eliminations"). What the differential DOES compare is everything else: the
+// `count < 0` and NULL-pointer guards, the element-by-element saturation of
+// `valuedouble` into `valueint`, and the f32 -> f64 widening.
+//
+// These take a slice and are total; the C's two NULL-returning guards live at
+// the driver boundary (`modes::construct`), which is the layer that still has a
+// nullable pointer and a signed count to normalize.
+
+/// cJSON.c:2568 `cJSON_CreateIntArray`.
+#[must_use]
+pub fn create_int_array(numbers: &[i32]) -> Value {
+    Value::Array(numbers.iter().map(|&n| number(f64::from(n))).collect())
+}
+
+/// cJSON.c:2608 `cJSON_CreateFloatArray`. The C widens each `float` to `double`
+/// for `cJSON_CreateNumber`, so `valuedouble` holds the exactly-representable
+/// widening of the f32 — not a re-rounded decimal.
+#[must_use]
+pub fn create_float_array(numbers: &[f32]) -> Value {
+    Value::Array(numbers.iter().map(|&n| number(f64::from(n))).collect())
+}
+
+/// cJSON.c:2648 `cJSON_CreateDoubleArray`.
+#[must_use]
+pub fn create_double_array(numbers: &[f64]) -> Value {
+    Value::Array(numbers.iter().map(|&n| number(n)).collect())
+}
+
+/// cJSON.c:2688 `cJSON_CreateStringArray`. Each element goes through
+/// `cJSON_CreateString`, so each is NUL-truncated like `create_raw`.
+#[must_use]
+pub fn create_string_array(strings: &[&[u8]]) -> Value {
+    Value::Array(
+        strings
+            .iter()
+            .map(|s| Value::String(cstr(s).to_vec()))
+            .collect(),
+    )
 }
 
 // ---- accessors (cJSON_Get*/Has*) -------------------------------------------
@@ -247,8 +340,27 @@ pub fn is_invalid(_v: &Value) -> bool {
 
 // ---- builders (Add*) -------------------------------------------------------
 
-/// cJSON.c:1974 `add_item_to_array`. No-op on a non-array (the C returns false;
-/// here a non-array simply isn't mutated).
+/// cJSON.c:1974 `add_item_to_array`.
+///
+/// **The C does NOT check that `array` is an array.** Its only guards are
+/// `item == NULL`, `array == NULL` and `array == item`; after those it appends
+/// straight onto `array->child`, so `cJSON_AddItemToArray(number_node, item)`
+/// succeeds and hangs a child off a *scalar*. Probed against v1.7.18: the
+/// printer ignores that child (a number still prints `7`), but
+/// `cJSON_GetArraySize` then answers 1 and `cJSON_GetArrayItem(node, 0)` hands
+/// it back — so the malformed tree is observable, not inert.
+///
+/// This function used to claim the C "returns false" for a non-array. It does
+/// not. That was the third doc comment in this file to assert a type check the
+/// C never performs (`get_array_size` and `get_array_item` were the first two,
+/// and both shipped wrong because of it) — LESSONS #36: a doc comment stating a
+/// constraint is a claim, and an unreached claim never gets audited.
+///
+/// The port cannot reproduce it: `Value::Number` has nowhere to put a child, so
+/// a malformed tree is unrepresentable rather than merely rejected. Returning
+/// false here is the closest observable equivalent. Putting the non-container
+/// parent on the compared contract is its own increment — see DIVERGENCES.md
+/// `scalar-parent-child`.
 pub fn add_item_to_array(array: &mut Value, item: Value) -> bool {
     if let Value::Array(items) = array {
         items.push(item);
@@ -260,13 +372,56 @@ pub fn add_item_to_array(array: &mut Value, item: Value) -> bool {
 
 /// cJSON.c:2029 `add_item_to_object`. Duplicate keys are appended (not merged),
 /// exactly like the C's list — the parser does the same.
+///
+/// Same missing type check as `add_item_to_array`, which this delegates to in
+/// the C: `object` is never tested for being an object, so every
+/// `cJSON_Add*ToObject` helper succeeds on an array, a number, a string, even
+/// `null`. See `add_item_to_array` and DIVERGENCES.md `scalar-parent-child`.
 pub fn add_item_to_object(object: &mut Value, key: &[u8], item: Value) -> bool {
+    add_named(object, key, item).is_some()
+}
+
+/// Shared body of the `cJSON_Add*ToObject` family: append and hand back the
+/// item just added, which is what the C returns so a caller can keep building
+/// into a freshly-added container.
+fn add_named<'a>(object: &'a mut Value, key: &[u8], item: Value) -> Option<&'a mut Value> {
     if let Value::Object(entries) = object {
         entries.push((key.to_vec(), item));
-        true
+        entries.last_mut().map(|(_, v)| v)
     } else {
-        false
+        None
     }
+}
+
+/// cJSON.c:2109 `cJSON_AddTrueToObject`.
+pub fn add_true_to_object<'a>(object: &'a mut Value, key: &[u8]) -> Option<&'a mut Value> {
+    add_named(object, key, Value::True)
+}
+
+/// cJSON.c:2121 `cJSON_AddFalseToObject`.
+pub fn add_false_to_object<'a>(object: &'a mut Value, key: &[u8]) -> Option<&'a mut Value> {
+    add_named(object, key, create_false())
+}
+
+/// cJSON.c:2169 `cJSON_AddRawToObject`. A NULL `raw` makes `cJSON_CreateRaw`
+/// return NULL, and the C then adds NOTHING and answers NULL — so `None` here
+/// means the object is left untouched, not that an empty Raw was appended.
+pub fn add_raw_to_object<'a>(
+    object: &'a mut Value,
+    key: &[u8],
+    raw: Option<&[u8]>,
+) -> Option<&'a mut Value> {
+    add_named(object, key, create_raw(raw)?)
+}
+
+/// cJSON.c:2181 `cJSON_AddObjectToObject`.
+pub fn add_object_to_object<'a>(object: &'a mut Value, key: &[u8]) -> Option<&'a mut Value> {
+    add_named(object, key, Value::Object(Vec::new()))
+}
+
+/// cJSON.c:2193 `cJSON_AddArrayToObject`.
+pub fn add_array_to_object<'a>(object: &'a mut Value, key: &[u8]) -> Option<&'a mut Value> {
+    add_named(object, key, Value::Array(Vec::new()))
 }
 
 /// cJSON.c:2263+ `cJSON_AddStringToObject`.
@@ -476,10 +631,100 @@ mod tests {
         assert!(!compare(&dk, &duplicate(&dk), true));
     }
 
+    /// The port refuses a non-container parent. **The C does not** — probed
+    /// against v1.7.18, `cJSON_AddTrueToObject` succeeds on an array, a number,
+    /// a string, `true` and `null` alike, and `cJSON_GetArrayItem(node, 0)` then
+    /// hands the child back. See `add_item_to_array` and DIVERGENCES.md
+    /// `scalar-parent-child`: this is a refusal, not a match, and it is not yet
+    /// on the compared contract.
     #[test]
     fn add_to_wrong_type_is_noop() {
         let mut n = number(1.0);
         assert!(!add_item_to_array(&mut n, Value::Null));
         assert!(!add_item_to_object(&mut n, b"k", Value::Null));
+        assert!(add_true_to_object(&mut n, b"k").is_none());
+        assert!(add_array_to_object(&mut n, b"k").is_none());
+    }
+
+    /// The intentional divergence, pinned where it is made
+    /// (DIVERGENCES.md `create-number-nan-valueint`). The C's `(int)NaN` is
+    /// undefined and answers INT_MIN on x86-64, 0 on AArch64; the port always
+    /// answers 0.
+    #[test]
+    fn nan_valueint_is_zero_not_the_platform_s_undefined_answer() {
+        assert!(matches!(number(f64::NAN), Value::Number(n) if n.i == 0));
+        assert!(matches!(number(-f64::NAN), Value::Number(n) if n.i == 0));
+        // ...while the infinities take the C's guards and are perfectly defined.
+        assert!(matches!(number(f64::INFINITY), Value::Number(n) if n.i == i32::MAX));
+        assert!(matches!(number(f64::NEG_INFINITY), Value::Number(n) if n.i == i32::MIN));
+    }
+
+    #[test]
+    fn typed_array_constructors_saturate_per_element() {
+        let Value::Array(items) = create_double_array(&[2147483647.0, -1e300, 0.5]) else {
+            panic!("not an array");
+        };
+        let ints: Vec<i32> = items.iter().map(value_int).collect();
+        assert_eq!(ints, vec![i32::MAX, i32::MIN, 0]);
+        // (double)int is lossless, so an int array never actually saturates.
+        let Value::Array(items) = create_int_array(&[i32::MIN, i32::MAX]) else {
+            panic!("not an array");
+        };
+        assert_eq!(
+            items.iter().map(value_int).collect::<Vec<_>>(),
+            vec![i32::MIN, i32::MAX]
+        );
+        // ...but a float array does, because f32 -> f64 is exact and f32 can
+        // hold values far outside i32.
+        let Value::Array(items) = create_float_array(&[3.4e38, f32::NEG_INFINITY]) else {
+            panic!("not an array");
+        };
+        assert_eq!(
+            items.iter().map(value_int).collect::<Vec<_>>(),
+            vec![i32::MAX, i32::MIN]
+        );
+    }
+
+    /// LESSONS #29: C-string truncation has to hold at EVERY boundary. Both
+    /// `cJSON_CreateRaw` and `cJSON_CreateString` copy with `cJSON_strdup`,
+    /// which is `strlen` + `memcpy`.
+    #[test]
+    fn raw_and_string_elements_truncate_at_a_nul() {
+        assert_eq!(
+            create_raw(Some(b"ab\0cd")),
+            Some(Value::Raw(b"ab".to_vec()))
+        );
+        assert_eq!(create_raw(None), None);
+        let Value::Array(items) = create_string_array(&[b"x\0y", b"", b"z"]) else {
+            panic!("not an array");
+        };
+        let got: Vec<&[u8]> = items.iter().filter_map(value_string).collect();
+        assert_eq!(got, vec![&b"x"[..], &b""[..], &b"z"[..]]);
+    }
+
+    /// A NULL `raw` makes `cJSON_CreateRaw` return NULL, and the C then adds
+    /// NOTHING rather than an empty Raw — the object must be left untouched.
+    #[test]
+    fn add_raw_to_object_with_a_null_raw_adds_nothing() {
+        let mut root = Value::Object(Vec::new());
+        assert!(add_raw_to_object(&mut root, b"k", None).is_none());
+        assert_eq!(root, Value::Object(Vec::new()));
+        assert!(add_raw_to_object(&mut root, b"k", Some(b"")).is_some());
+        assert_eq!(get_array_size(&root), 1);
+    }
+
+    /// An empty Raw prints as nothing at all, so the object renders `{"k":}` —
+    /// invalid JSON that cJSON emits happily, and the port must too.
+    #[test]
+    fn empty_raw_prints_as_nothing() {
+        let mut root = Value::Object(Vec::new());
+        add_raw_to_object(&mut root, b"k", Some(b""));
+        assert_eq!(print_value(&root, false).unwrap(), br#"{"k":}"#.to_vec());
+        let mut root = Value::Object(Vec::new());
+        add_raw_to_object(&mut root, b"k", Some(br#"{"unescaped":"quotes"}"#));
+        assert_eq!(
+            print_value(&root, false).unwrap(),
+            br#"{"k":{"unescaped":"quotes"}}"#.to_vec()
+        );
     }
 }

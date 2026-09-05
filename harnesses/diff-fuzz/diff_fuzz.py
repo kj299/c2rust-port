@@ -104,6 +104,14 @@ def _seeds(seed_files, matrix_path):
         # allow_empty: a matrix with no cases is a legitimate (empty) seed set for
         # the fuzzer, unlike a differential where 0 cases is a misconfiguration.
         for case in D.load_matrix(matrix_path, allow_empty=True):
+            # `stdin_bytes` first: load_matrix resolves a case's `stdin_b64` into
+            # it, and those are exactly the seeds a UTF-8 string cannot spell
+            # (LESSONS #36). Dropping them would silently narrow the corpus for
+            # the modes that most need raw bytes.
+            b = case.get("stdin_bytes")
+            if isinstance(b, (bytes, bytearray)) and b:
+                seeds.append(bytes(b))
+                continue
             s = case.get("stdin")
             if isinstance(s, str) and s:
                 seeds.append(s.encode())
@@ -349,6 +357,21 @@ def _self_test():
         summary = fuzz(oracle, hang, opts_h)
         check("a rust-side hang is caught as a TIMEOUT finding",
               any(f["verdict"] == "TIMEOUT" for f in summary["findings"]))
+
+        # Seeding from a matrix must pick up `stdin_b64` cases (LESSONS #36).
+        # These are exactly the seeds a UTF-8 `stdin` string cannot spell, so
+        # silently dropping them would narrow the corpus for the modes that most
+        # need raw bytes — and nothing else in this file would notice.
+        import base64 as _b64
+        mpath = os.path.join(d, "seedmatrix.json")
+        raw = b"\x80\x00\xfe"
+        with open(mpath, "w") as fh:
+            json.dump([{"name": "txt", "args": [], "stdin": "plain"},
+                       {"name": "bin", "args": [],
+                        "stdin_b64": _b64.b64encode(raw).decode()}], fh)
+        got = _seeds(None, mpath)
+        check("matrix seeding picks up a `stdin_b64` case's raw bytes",
+              raw in got and b"plain" in got)
 
     print("\nself-test:", "OK" if ok else "FAILED")
     return 0 if ok else 1

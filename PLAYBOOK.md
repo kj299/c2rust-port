@@ -121,7 +121,22 @@ winlsof's phase order was sound; its one miss was not spiking the hang first.
   must also be hermetic** (LESSONS #11): it controls the child's stdin/env/cwd and
   inherits *nothing* ambient — a runner that lets a stdin-reading binary inherit the
   parent's stdin hangs or passes depending on who launched it (`run_one` feeds
-  `DEVNULL` when a case has no stdin, for exactly this reason).
+  `DEVNULL` when a case has no stdin, for exactly this reason). **A matrix case
+  must be able to spell any input the fuzzer can generate** (LESSONS #36): give
+  stdin as `stdin` (UTF-8 text) or `stdin_b64` (raw bytes) — without the latter,
+  a fuzz finding on a byte outside valid UTF-8 has nowhere to be pinned, and
+  "fix-forward, then immediately pin the regression test" quietly stops applying
+  to exactly the inputs the fuzzer is best at finding.
+- **A differential is silent wherever the C has no defined answer** (LESSONS
+  #36), and that silence has two shapes. If the C *does* answer but only by
+  accident of the target (converting a NaN to `int` gives INT_MIN on x86-64 and
+  0 on AArch64), put it on the contract and ledger the divergence — the port's
+  answer is the defined one, and matching the platform you happen to test on
+  would write undefined behavior into the port. If the C *cannot be asked* (an
+  unchecked `(pointer, count)` pair, where exercising the mismatch is UB in the
+  oracle), no differential can ever demonstrate the port's structural fix —
+  record it under "Structural eliminations" so "found nothing" is never read as
+  "checked it".
 - **Tag every corpus vector with the module(s) whose behavior decides it**, and
   run each increment's differential against the *ported subset* — the full matrix
   is the cutover gate (LESSONS #19). Write the corpus ONCE against the C (validate
