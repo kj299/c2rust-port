@@ -16,15 +16,15 @@ it down and lock the progress in).
 
 ## The headline number, stated before the tables
 
-**92 exported symbols across both headers: 49 ported, 8 out-of-scope, 35
+**92 exported symbols across both headers: 54 ported, 8 out-of-scope, 30
 unported.** This port covers cJSON_Utils completely and the base library's
-parse / print / minify / query / build surface; **it does not cover the base
-library's mutation API** (detach, delete, insert, replace, and most of the
-typed-array and setter constructors). Anything that reads "cJSON is ported"
-without that sentence is overclaiming, which is why the gate prints the
+parse / print / minify / query / build / **accessor** surface; **it does not
+cover the base library's mutation API** (detach, delete, insert, replace, and
+most of the typed-array and setter constructors). Anything that reads "cJSON is
+ported" without that sentence is overclaiming, which is why the gate prints the
 shortfall on every run rather than only on failure.
 
-api-coverage: max-unported = 35
+api-coverage: max-unported = 30
 
 Why it exists (LESSONS #34, mechanizing #26): module 9 (`cJSON_Utils`) shipped
 **"DONE" through all six green gates with two of these 14 symbols never ported and
@@ -98,7 +98,7 @@ wired into the gate. Two notes on getting the *number* right first:
   is precisely the rounding-up this gate exists to stop. Their own contract —
   NULL arguments, type mismatches, detached-item ownership — is never called.
 
-### Ported — 35
+### Ported — 40
 
 | Symbol | Status | Where it is gated |
 |---|---|---|
@@ -137,6 +137,11 @@ wired into the gate. Two notes on getting the *number* right first:
 | `cJSON_AddBoolToObject` | ported | `cjson_modes_build` — driver mode `build` |
 | `cJSON_AddNumberToObject` | ported | `cjson_modes_build` — driver mode `build` |
 | `cJSON_AddStringToObject` | ported | `cjson_modes_build` — driver mode `build` |
+| `cJSON_GetArrayItem` | ported | `dom::get_array_item` — driver mode `access` (`iarr=`) |
+| `cJSON_GetObjectItem` | ported | `dom::get_object_item(.., case_sensitive=false)` — driver mode `access` (`kobj=`) |
+| `cJSON_HasObjectItem` | ported | `dom::has_object_item` — driver mode `access` (`has=`) |
+| `cJSON_GetStringValue` | ported | `dom::get_string_value` — driver mode `access` (`kstr=`/`istr=`) |
+| `cJSON_GetNumberValue` | ported | `dom::get_number_value` — driver mode `access` (`knum=`/`inum=`) |
 
 ### Out of scope — 8, each a deliberate refusal under the Prime Directive
 
@@ -157,7 +162,27 @@ cannot be expressed there without reintroducing exactly what the port removes.
 | `cJSON_AddItemReferenceToObject` | out-of-scope | same. |
 | `cJSON_AddItemToObjectCS` | out-of-scope | stores a borrowed key and sets `cJSON_StringIsConst`; cJSON's own header carries a WARNING that callers must test that flag before writing to `item->string`. A safety-critical invariant enforced by a comment is the shape this port exists to delete. |
 
-### Unported — 35, against the ceiling declared at the top
+### High-budget sweep on the `access` mode (LESSONS #33)
+
+Same discipline as the two utils entry points above — the gate's 2000-iteration
+budget is a regression floor, so the sweep was run before calling these five
+done:
+
+| Mode | Seed | Iterations | Findings |
+|---|---|---|---|
+| `access` | 0 | 25 000 | 0 |
+| `access` | 12345 | 25 000 | 0 |
+| `access` | 777 | 25 000 | 0 |
+
+75 000 generated inputs, zero divergences (executed 2026-09-05). Three seeds
+rather than two because this mode's input has **two** grammars the fuzzer can
+mutate independently — the `<key>\t<index>` framing and the JSON document — and
+the index field alone has to survive junk, a leading `+`, whitespace, INT_MIN
+and a 20-digit overflow with both sides normalizing identically. That is a wider
+space than `findptr`'s single pointer, and narrower than `patch`'s two-document
+op grammar, where 2000 was demonstrably insufficient.
+
+### Unported — 30, against the ceiling declared at the top
 
 Real work not done, recorded as such. Grouped by what would be needed.
 
@@ -167,11 +192,6 @@ Real work not done, recorded as such. Grouped by what would be needed.
 | `cJSON_ParseWithLengthOpts` | unported | same options surface, length-delimited |
 | `cJSON_PrintBuffered` | unported | the prebuffer growth strategy; only the default printer is compared |
 | `cJSON_PrintPreallocated` | unported | caller-owned output buffer. Needs a mode that compares the truncation/failure boundary, which is the interesting part — the header warns the estimate is not exact ("allocate 5 bytes more than you actually need") |
-| `cJSON_GetArrayItem` | unported | index-based lookup; `cjson_modes_query` only looks up by key |
-| `cJSON_GetObjectItem` | unported | the case-INsensitive lookup. Reached transitively (cJSON_Utils' `get_object_item` calls it for every non-`-cs` utils mode, and that path found the NUL-truncation bug in LESSONS #29), but no mode calls it directly |
-| `cJSON_HasObjectItem` | unported | trivial over `GetObjectItem`, but ungated is ungated |
-| `cJSON_GetStringValue` | unported | typed accessor; the query mode reports a descriptor, never this |
-| `cJSON_GetNumberValue` | unported | typed accessor; same |
 | `cJSON_CreateFalse` | unported | `cjson_modes_build` builds `true` but never `false` |
 | `cJSON_CreateBool` | unported | the bool-dispatching constructor |
 | `cJSON_CreateRaw` | unported | raw passthrough nodes — worth a mode of their own, since raw content bypasses the printer's escaping |

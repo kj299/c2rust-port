@@ -13,6 +13,8 @@
  * all (LESSONS #26): a gate judges only the surface the driver exposes, and an
  * accessor no mode calls is ungated whatever the matrix says.
  */
+#include <math.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -94,6 +96,72 @@ char *cjson_modes_build(const char *variant) {
      * of which allocator cJSON was built with */
     char *out = strdup(printed);
     cJSON_free(printed);
+    return out;
+}
+
+/* A double, encoded so the two sides cannot disagree for FORMATTING reasons.
+ * printf("%g"/"%.17g") is a portability trap between C and Rust — the compared
+ * contract would then be "libc's float formatter", not the accessor. The raw
+ * IEEE-754 bits are exact and identical on both sides. NaN is spelled out
+ * because cJSON_GetNumberValue RETURNS NaN for every non-number (including
+ * NULL), so it is the common answer here, not an edge case — and NaN has many
+ * bit patterns but only one meaning. */
+static void append_double(char *buf, size_t cap, double d) {
+    char t[32];
+    if (isnan(d)) {
+        snprintf(t, sizeof t, "nan");
+    } else {
+        uint64_t bits;
+        memcpy(&bits, &d, sizeof bits);
+        snprintf(t, sizeof t, "%016llx", (unsigned long long)bits);
+    }
+    strncat(buf, t, cap - strlen(buf) - 1);
+}
+
+char *cjson_modes_access(const char *key, int index,
+                         const char *json, size_t json_len) {
+    cJSON *root = cJSON_ParseWithLength(json, json_len);
+    if (root == NULL) return NULL;
+
+    /* CASE-INSENSITIVE by definition (cJSON.c: get_object_item(.., false)) —
+     * that is the whole difference from the `query` mode's lookup. */
+    cJSON *by_key = cJSON_GetObjectItem(root, key);
+    int has = cJSON_HasObjectItem(root, key) ? 1 : 0;
+    /* index < 0 short-circuits to NULL inside cJSON_GetArrayItem; the driver
+     * passes the fuzzer's int straight through so that branch is reachable. */
+    cJSON *by_idx = cJSON_GetArrayItem(root, index);
+
+    /* Fed the lookup results deliberately, NULL included: both accessors route
+     * through cJSON_IsString/cJSON_IsNumber, which answer false for NULL, so
+     * NULL-tolerance is contract and belongs on the compared surface. */
+    const char *skey = cJSON_GetStringValue(by_key);
+    const char *sidx = cJSON_GetStringValue(by_idx);
+    double nkey = cJSON_GetNumberValue(by_key);
+    double nidx = cJSON_GetNumberValue(by_idx);
+
+    char *pkey = by_key ? cJSON_PrintUnformatted(by_key) : NULL;
+    char *pidx = by_idx ? cJSON_PrintUnformatted(by_idx) : NULL;
+
+    size_t cap = 256
+               + (pkey ? strlen(pkey) : 1) + (pidx ? strlen(pidx) : 1)
+               + (skey ? strlen(skey) : 1) + (sidx ? strlen(sidx) : 1);
+    char *out = (char *)malloc(cap);
+    if (out != NULL) {
+        int n = snprintf(out, cap, "has=%d;kobj=%s;kstr=%s;knum=", has,
+                         pkey ? pkey : "-", skey ? skey : "-");
+        if (n < 0 || (size_t)n >= cap) { free(out); out = NULL; }
+    }
+    if (out != NULL) {
+        append_double(out, cap, nkey);
+        size_t n = strlen(out);
+        snprintf(out + n, cap - n, ";iarr=%s;istr=%s;inum=",
+                 pidx ? pidx : "-", sidx ? sidx : "-");
+        append_double(out, cap, nidx);
+    }
+
+    cJSON_free(pkey);
+    cJSON_free(pidx);
+    cJSON_Delete(root);
     return out;
 }
 

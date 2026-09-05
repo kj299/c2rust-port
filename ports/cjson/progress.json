@@ -3,6 +3,7 @@
     "alloc-node": "unsafe_audited",
     "buffer-plumbing": "unsafe_audited",
     "dom": "unsafe_audited",
+    "dom-access": "unsafe_audited",
     "entry-minify": "unsafe_audited",
     "ffi-builder": "unsafe_audited",
     "recursive-core": "unsafe_audited",

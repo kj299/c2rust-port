@@ -1,0 +1,417 @@
+{
+  "probe_transcript": 1,
+  "module": "dom-access",
+  "oracle_sha256": "af735fc5c12c32e02c36a6648f7cf17ef05770fc18c3ef4915f948766361183c",
+  "generated_by": "harnesses/probe/probe.py run",
+  "entries": [
+    {
+      "id": "access-key-case-insensitive",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "QUJDCTAKeyJhYmMiOiJoaSJ9",
+      "note": "cJSON_GetObjectItem is the CASE-INSENSITIVE lookup (cJSON.c: get_object_item(.., false)) -- that is its whole difference from GetObjectItemCaseSensitive, which the `query` mode already gates",
+      "rc": 0,
+      "stdout_b64": "aGFzPTE7a29iaj0iaGkiO2tzdHI9aGk7a251bT1uYW47aWFycj0iaGkiO2lzdHI9aGk7aW51bT1uYW4=",
+      "stdin_preview": "ABC\t0\n{\"abc\":\"hi\"}",
+      "stdout_preview": "has=1;kobj=\"hi\";kstr=hi;knum=nan;iarr=\"hi\";istr=hi;inum=nan"
+    },
+    {
+      "id": "access-key-exact",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "YWJjCTAKeyJhYmMiOiJoaSJ9",
+      "note": "the exact-case key finds the same item, so case-insensitivity is a widening, not a replacement",
+      "rc": 0,
+      "stdout_b64": "aGFzPTE7a29iaj0iaGkiO2tzdHI9aGk7a251bT1uYW47aWFycj0iaGkiO2lzdHI9aGk7aW51bT1uYW4=",
+      "stdin_preview": "abc\t0\n{\"abc\":\"hi\"}",
+      "stdout_preview": "has=1;kobj=\"hi\";kstr=hi;knum=nan;iarr=\"hi\";istr=hi;inum=nan"
+    },
+    {
+      "id": "access-key-missing",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "enoJMAp7ImFiYyI6ImhpIn0=",
+      "note": "absent key: HasObjectItem 0, GetObjectItem NULL, and both value accessors answer for NULL rather than crashing",
+      "rc": 0,
+      "stdout_b64": "aGFzPTA7a29iaj0tO2tzdHI9LTtrbnVtPW5hbjtpYXJyPSJoaSI7aXN0cj1oaTtpbnVtPW5hbg==",
+      "stdin_preview": "zz\t0\n{\"abc\":\"hi\"}",
+      "stdout_preview": "has=0;kobj=-;kstr=-;knum=nan;iarr=\"hi\";istr=hi;inum=nan"
+    },
+    {
+      "id": "access-index-on-object-root",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "YQkwCnsiYSI6MX0=",
+      "note": "THE QUIRK: cJSON_GetArrayItem is NOT array-only. cJSON.c:1869 walks `array->child` with no type check, so index 0 of an OBJECT returns its first VALUE. The port's get_array_item asserted array-only in its own doc comment and answered None; nothing disagreed for six gates because no mode called it",
+      "rc": 0,
+      "stdout_b64": "aGFzPTE7a29iaj0xO2tzdHI9LTtrbnVtPTNmZjAwMDAwMDAwMDAwMDA7aWFycj0xO2lzdHI9LTtpbnVtPTNmZjAwMDAwMDAwMDAwMDA=",
+      "stdin_preview": "a\t0\n{\"a\":1}",
+      "stdout_preview": "has=1;kobj=1;kstr=-;knum=3ff0000000000000;iarr=1;istr=-;inum=3ff0000000000000"
+    },
+    {
+      "id": "access-index-nested-object",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "awkwCnsiYSI6eyJiIjoxfX0=",
+      "note": "the same child-list walk hands back a whole nested object, printed",
+      "rc": 0,
+      "stdout_b64": "aGFzPTA7a29iaj0tO2tzdHI9LTtrbnVtPW5hbjtpYXJyPXsiYiI6MX07aXN0cj0tO2ludW09bmFu",
+      "stdin_preview": "k\t0\n{\"a\":{\"b\":1}}",
+      "stdout_preview": "has=0;kobj=-;kstr=-;knum=nan;iarr={\"b\":1};istr=-;inum=nan"
+    },
+    {
+      "id": "access-index-object-third",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "awkyCnsiYSI6MSwiYiI6MiwiYyI6M30=",
+      "note": "index 2 of an object is its third value -- insertion order, the C's sibling chain",
+      "rc": 0,
+      "stdout_b64": "aGFzPTA7a29iaj0tO2tzdHI9LTtrbnVtPW5hbjtpYXJyPTM7aXN0cj0tO2ludW09NDAwODAwMDAwMDAwMDAwMA==",
+      "stdin_preview": "k\t2\n{\"a\":1,\"b\":2,\"c\":3}",
+      "stdout_preview": "has=0;kobj=-;kstr=-;knum=nan;iarr=3;istr=-;inum=4008000000000000"
+    },
+    {
+      "id": "access-key-on-array-root",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "awkwClsxLDJd",
+      "note": "the mirror case: an object lookup on an array root answers NULL, because get_object_item DOES type-check",
+      "rc": 0,
+      "stdout_b64": "aGFzPTA7a29iaj0tO2tzdHI9LTtrbnVtPW5hbjtpYXJyPTE7aXN0cj0tO2ludW09M2ZmMDAwMDAwMDAwMDAwMA==",
+      "stdin_preview": "k\t0\n[1,2]",
+      "stdout_preview": "has=0;kobj=-;kstr=-;knum=nan;iarr=1;istr=-;inum=3ff0000000000000"
+    },
+    {
+      "id": "access-index-in-range",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "awkxClsxMCwidHdvIix0cnVlXQ==",
+      "note": "ordinary array indexing, plus GetStringValue returning the element's text",
+      "rc": 0,
+      "stdout_b64": "aGFzPTA7a29iaj0tO2tzdHI9LTtrbnVtPW5hbjtpYXJyPSJ0d28iO2lzdHI9dHdvO2ludW09bmFu",
+      "stdin_preview": "k\t1\n[10,\"two\",true]",
+      "stdout_preview": "has=0;kobj=-;kstr=-;knum=nan;iarr=\"two\";istr=two;inum=nan"
+    },
+    {
+      "id": "access-index-out-of-range",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "awk5ClsxMCwidHdvIix0cnVlXQ==",
+      "note": "walking off the end of the child list yields NULL, not UB",
+      "rc": 0,
+      "stdout_b64": "aGFzPTA7a29iaj0tO2tzdHI9LTtrbnVtPW5hbjtpYXJyPS07aXN0cj0tO2ludW09bmFu",
+      "stdin_preview": "k\t9\n[10,\"two\",true]",
+      "stdout_preview": "has=0;kobj=-;kstr=-;knum=nan;iarr=-;istr=-;inum=nan"
+    },
+    {
+      "id": "access-index-negative",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "awktMQpbMTAsInR3byIsdHJ1ZV0=",
+      "note": "cJSON_GetArrayItem returns NULL for index < 0 BEFORE the cast to size_t -- the guard that stops a negative index becoming a huge unsigned one",
+      "rc": 0,
+      "stdout_b64": "aGFzPTA7a29iaj0tO2tzdHI9LTtrbnVtPW5hbjtpYXJyPS07aXN0cj0tO2ludW09bmFu",
+      "stdin_preview": "k\t-1\n[10,\"two\",true]",
+      "stdout_preview": "has=0;kobj=-;kstr=-;knum=nan;iarr=-;istr=-;inum=nan"
+    },
+    {
+      "id": "access-index-int-min",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "awktMjE0NzQ4MzY0OApbMSwyXQ==",
+      "note": "INT_MIN: the negative guard holds at the extreme, where a naive abs() would overflow",
+      "rc": 0,
+      "stdout_b64": "aGFzPTA7a29iaj0tO2tzdHI9LTtrbnVtPW5hbjtpYXJyPS07aXN0cj0tO2ludW09bmFu",
+      "stdin_preview": "k\t-2147483648\n[1,2]",
+      "stdout_preview": "has=0;kobj=-;kstr=-;knum=nan;iarr=-;istr=-;inum=nan"
+    },
+    {
+      "id": "access-index-int-max",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "awkyMTQ3NDgzNjQ3ClsxLDJd",
+      "note": "INT_MAX walks the list to its end and answers NULL",
+      "rc": 0,
+      "stdout_b64": "aGFzPTA7a29iaj0tO2tzdHI9LTtrbnVtPW5hbjtpYXJyPS07aXN0cj0tO2ludW09bmFu",
+      "stdin_preview": "k\t2147483647\n[1,2]",
+      "stdout_preview": "has=0;kobj=-;kstr=-;knum=nan;iarr=-;istr=-;inum=nan"
+    },
+    {
+      "id": "access-index-overflowing",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "awk5OTk5OTk5OTk5OTk5OTk5OTk5OQpbMSwyXQ==",
+      "note": "DRIVER contract, not cJSON contract: strtol saturates to LONG_MAX and the driver clamps to INT_MAX. Pinned because both sides must normalize a fuzzed index identically before cJSON ever sees it",
+      "rc": 0,
+      "stdout_b64": "aGFzPTA7a29iaj0tO2tzdHI9LTtrbnVtPW5hbjtpYXJyPS07aXN0cj0tO2ludW09bmFu",
+      "stdin_preview": "k\t99999999999999999999\n[1,2]",
+      "stdout_preview": "has=0;kobj=-;kstr=-;knum=nan;iarr=-;istr=-;inum=nan"
+    },
+    {
+      "id": "access-index-non-numeric",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "awlhYmMKWzEsMl0=",
+      "note": "driver contract: strtol reads no digits and answers 0, so junk selects element 0 rather than failing",
+      "rc": 0,
+      "stdout_b64": "aGFzPTA7a29iaj0tO2tzdHI9LTtrbnVtPW5hbjtpYXJyPTE7aXN0cj0tO2ludW09M2ZmMDAwMDAwMDAwMDAwMA==",
+      "stdin_preview": "k\tabc\n[1,2]",
+      "stdout_preview": "has=0;kobj=-;kstr=-;knum=nan;iarr=1;istr=-;inum=3ff0000000000000"
+    },
+    {
+      "id": "access-index-plus-signed",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "awkrMQpbNyw4LDld",
+      "note": "driver contract: strtol accepts a leading '+'",
+      "rc": 0,
+      "stdout_b64": "aGFzPTA7a29iaj0tO2tzdHI9LTtrbnVtPW5hbjtpYXJyPTg7aXN0cj0tO2ludW09NDAyMDAwMDAwMDAwMDAwMA==",
+      "stdin_preview": "k\t+1\n[7,8,9]",
+      "stdout_preview": "has=0;kobj=-;kstr=-;knum=nan;iarr=8;istr=-;inum=4020000000000000"
+    },
+    {
+      "id": "access-index-space-padded",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "awkgIDIKWzcsOCw5XQ==",
+      "note": "driver contract: strtol skips leading whitespace",
+      "rc": 0,
+      "stdout_b64": "aGFzPTA7a29iaj0tO2tzdHI9LTtrbnVtPW5hbjtpYXJyPTk7aXN0cj0tO2ludW09NDAyMjAwMDAwMDAwMDAwMA==",
+      "stdin_preview": "k\t  2\n[7,8,9]",
+      "stdout_preview": "has=0;kobj=-;kstr=-;knum=nan;iarr=9;istr=-;inum=4022000000000000"
+    },
+    {
+      "id": "access-scalar-root",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "awkwCjQy",
+      "note": "a scalar has no child, so the child-list walk answers NULL -- the type check the C never makes is not needed here",
+      "rc": 0,
+      "stdout_b64": "aGFzPTA7a29iaj0tO2tzdHI9LTtrbnVtPW5hbjtpYXJyPS07aXN0cj0tO2ludW09bmFu",
+      "stdin_preview": "k\t0\n42",
+      "stdout_preview": "has=0;kobj=-;kstr=-;knum=nan;iarr=-;istr=-;inum=nan"
+    },
+    {
+      "id": "access-string-root",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "awkwCiJoZWxsbyI=",
+      "note": "same for a string root: no child list",
+      "rc": 0,
+      "stdout_b64": "aGFzPTA7a29iaj0tO2tzdHI9LTtrbnVtPW5hbjtpYXJyPS07aXN0cj0tO2ludW09bmFu",
+      "stdin_preview": "k\t0\n\"hello\"",
+      "stdout_preview": "has=0;kobj=-;kstr=-;knum=nan;iarr=-;istr=-;inum=nan"
+    },
+    {
+      "id": "access-empty-array",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "awkwCltd",
+      "note": "empty container, index 0 -> NULL",
+      "rc": 0,
+      "stdout_b64": "aGFzPTA7a29iaj0tO2tzdHI9LTtrbnVtPW5hbjtpYXJyPS07aXN0cj0tO2ludW09bmFu",
+      "stdin_preview": "k\t0\n[]",
+      "stdout_preview": "has=0;kobj=-;kstr=-;knum=nan;iarr=-;istr=-;inum=nan"
+    },
+    {
+      "id": "access-empty-object",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "awkwCnt9",
+      "note": "empty object, index 0 -> NULL",
+      "rc": 0,
+      "stdout_b64": "aGFzPTA7a29iaj0tO2tzdHI9LTtrbnVtPW5hbjtpYXJyPS07aXN0cj0tO2ludW09bmFu",
+      "stdin_preview": "k\t0\n{}",
+      "stdout_preview": "has=0;kobj=-;kstr=-;knum=nan;iarr=-;istr=-;inum=nan"
+    },
+    {
+      "id": "access-duplicate-keys",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "awkwCnsiayI6MSwiayI6Mn0=",
+      "note": "duplicate keys resolve to the FIRST match, matching the C's list walk (the parser accepts such a document, per the builder probes)",
+      "rc": 0,
+      "stdout_b64": "aGFzPTE7a29iaj0xO2tzdHI9LTtrbnVtPTNmZjAwMDAwMDAwMDAwMDA7aWFycj0xO2lzdHI9LTtpbnVtPTNmZjAwMDAwMDAwMDAwMDA=",
+      "stdin_preview": "k\t0\n{\"k\":1,\"k\":2}",
+      "stdout_preview": "has=1;kobj=1;kstr=-;knum=3ff0000000000000;iarr=1;istr=-;inum=3ff0000000000000"
+    },
+    {
+      "id": "access-duplicate-keys-case",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "SwkwCnsiayI6MSwiSyI6Mn0=",
+      "note": "case-INSENSITIVE lookup for \"K\" returns the FIRST case-insensitive match -- the lowercase entry -- not the exactly-matching later one",
+      "rc": 0,
+      "stdout_b64": "aGFzPTE7a29iaj0xO2tzdHI9LTtrbnVtPTNmZjAwMDAwMDAwMDAwMDA7aWFycj0xO2lzdHI9LTtpbnVtPTNmZjAwMDAwMDAwMDAwMDA=",
+      "stdin_preview": "K\t0\n{\"k\":1,\"K\":2}",
+      "stdout_preview": "has=1;kobj=1;kstr=-;knum=3ff0000000000000;iarr=1;istr=-;inum=3ff0000000000000"
+    },
+    {
+      "id": "access-empty-key",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "CTAKeyIiOjd9",
+      "note": "the empty key is a real key and is findable",
+      "rc": 0,
+      "stdout_b64": "aGFzPTE7a29iaj03O2tzdHI9LTtrbnVtPTQwMWMwMDAwMDAwMDAwMDA7aWFycj03O2lzdHI9LTtpbnVtPTQwMWMwMDAwMDAwMDAwMDA=",
+      "stdin_preview": "\t0\n{\"\":7}",
+      "stdout_preview": "has=1;kobj=7;kstr=-;knum=401c000000000000;iarr=7;istr=-;inum=401c000000000000"
+    },
+    {
+      "id": "access-string-interior-nul",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "awkwCnsiayI6ImFcdTAwMDBiIn0=",
+      "note": "valuestring is a C string: GetStringValue's result truncates at the interior NUL, and so does the printed form (LESSONS #29)",
+      "rc": 0,
+      "stdout_b64": "aGFzPTE7a29iaj0iYSI7a3N0cj1hO2tudW09bmFuO2lhcnI9ImEiO2lzdHI9YTtpbnVtPW5hbg==",
+      "stdin_preview": "k\t0\n{\"k\":\"a\\u0000b\"}",
+      "stdout_preview": "has=1;kobj=\"a\";kstr=a;knum=nan;iarr=\"a\";istr=a;inum=nan"
+    },
+    {
+      "id": "access-number-fractional",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "bgkwCnsibiI6My41fQ==",
+      "note": "GetNumberValue returns valuedouble; the descriptor encodes raw IEEE-754 bits so no float FORMATTER sits on the compared contract",
+      "rc": 0,
+      "stdout_b64": "aGFzPTE7a29iaj0zLjU7a3N0cj0tO2tudW09NDAwYzAwMDAwMDAwMDAwMDtpYXJyPTMuNTtpc3RyPS07aW51bT00MDBjMDAwMDAwMDAwMDAw",
+      "stdin_preview": "n\t0\n{\"n\":3.5}",
+      "stdout_preview": "has=1;kobj=3.5;kstr=-;knum=400c000000000000;iarr=3.5;istr=-;inum=400c00000000000\u2026"
+    },
+    {
+      "id": "access-number-integral",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "bgkwCnsibiI6NDJ9",
+      "note": "an integral number still answers as a double",
+      "rc": 0,
+      "stdout_b64": "aGFzPTE7a29iaj00Mjtrc3RyPS07a251bT00MDQ1MDAwMDAwMDAwMDAwO2lhcnI9NDI7aXN0cj0tO2ludW09NDA0NTAwMDAwMDAwMDAwMA==",
+      "stdin_preview": "n\t0\n{\"n\":42}",
+      "stdout_preview": "has=1;kobj=42;kstr=-;knum=4045000000000000;iarr=42;istr=-;inum=4045000000000000"
+    },
+    {
+      "id": "access-number-huge",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "awkwCnsiayI6MWUzMDh9",
+      "note": "near-DBL_MAX survives to valuedouble bit-exactly",
+      "rc": 0,
+      "stdout_b64": "aGFzPTE7a29iaj0xZSszMDg7a3N0cj0tO2tudW09N2ZlMWNjZjM4NWViYzhhMDtpYXJyPTFlKzMwODtpc3RyPS07aW51bT03ZmUxY2NmMzg1ZWJjOGEw",
+      "stdin_preview": "k\t0\n{\"k\":1e308}",
+      "stdout_preview": "has=1;kobj=1e+308;kstr=-;knum=7fe1ccf385ebc8a0;iarr=1e+308;istr=-;inum=7fe1ccf38\u2026"
+    },
+    {
+      "id": "access-number-negative-zero",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "awkwCnsiayI6LTAuMH0=",
+      "note": "-0.0 prints as \"0\" but carries the sign bit (8000000000000000). The bit encoding gates what the printed form cannot show",
+      "rc": 0,
+      "stdout_b64": "aGFzPTE7a29iaj0wO2tzdHI9LTtrbnVtPTgwMDAwMDAwMDAwMDAwMDA7aWFycj0wO2lzdHI9LTtpbnVtPTgwMDAwMDAwMDAwMDAwMDA=",
+      "stdin_preview": "k\t0\n{\"k\":-0.0}",
+      "stdout_preview": "has=1;kobj=0;kstr=-;knum=8000000000000000;iarr=0;istr=-;inum=8000000000000000"
+    },
+    {
+      "id": "access-bool-value",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "awkwCnsiayI6dHJ1ZX0=",
+      "note": "GetStringValue and GetNumberValue on a bool: NULL and NaN, the wrong-type answers",
+      "rc": 0,
+      "stdout_b64": "aGFzPTE7a29iaj10cnVlO2tzdHI9LTtrbnVtPW5hbjtpYXJyPXRydWU7aXN0cj0tO2ludW09bmFu",
+      "stdin_preview": "k\t0\n{\"k\":true}",
+      "stdout_preview": "has=1;kobj=true;kstr=-;knum=nan;iarr=true;istr=-;inum=nan"
+    },
+    {
+      "id": "access-null-value",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "awkwCnsiayI6bnVsbH0=",
+      "note": "a JSON null is a present key: has=1 with both typed accessors declining",
+      "rc": 0,
+      "stdout_b64": "aGFzPTE7a29iaj1udWxsO2tzdHI9LTtrbnVtPW5hbjtpYXJyPW51bGw7aXN0cj0tO2ludW09bmFu",
+      "stdin_preview": "k\t0\n{\"k\":null}",
+      "stdout_preview": "has=1;kobj=null;kstr=-;knum=nan;iarr=null;istr=-;inum=nan"
+    },
+    {
+      "id": "access-deep-nest",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "awkwCltbW1sxXV1dXQ==",
+      "note": "the child walk hands back a nested array, printed in full",
+      "rc": 0,
+      "stdout_b64": "aGFzPTA7a29iaj0tO2tzdHI9LTtrbnVtPW5hbjtpYXJyPVtbWzFdXV07aXN0cj0tO2ludW09bmFu",
+      "stdin_preview": "k\t0\n[[[[1]]]]",
+      "stdout_preview": "has=0;kobj=-;kstr=-;knum=nan;iarr=[[[1]]];istr=-;inum=nan"
+    },
+    {
+      "id": "access-parse-failure",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "awkwCntiYWQ=",
+      "note": "an unparseable document is rc=1 with empty stdout, matching every other parsing mode's contract",
+      "rc": 1,
+      "stdout_b64": "",
+      "stdin_preview": "k\t0\n{bad",
+      "stdout_preview": ""
+    },
+    {
+      "id": "access-missing-tab",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "azAKWzFd",
+      "note": "malformed driver input (no tab) is rc=2 usage, distinct from a parse failure",
+      "rc": 2,
+      "stdout_b64": "",
+      "stdin_preview": "k0\n[1]",
+      "stdout_preview": ""
+    },
+    {
+      "id": "access-missing-newline",
+      "args": [
+        "access"
+      ],
+      "stdin_b64": "awkw",
+      "note": "malformed driver input (no newline) is rc=2 usage",
+      "rc": 2,
+      "stdout_b64": "",
+      "stdin_preview": "k\t0",
+      "stdout_preview": ""
+    }
+  ],
+  "fingerprint": "8ac28f75e16f53e8244fdc901605989734afafb7279581db5976ddd6a907b72a"
+}

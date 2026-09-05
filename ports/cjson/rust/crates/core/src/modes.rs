@@ -91,6 +91,121 @@ pub fn build_variant(variant: &str) -> Option<Value> {
     Some(root)
 }
 
+/// A double as the `access` descriptor spells it: `nan`, else the raw IEEE-754
+/// bits in lowercase hex. Never a formatted float — `%g` vs Rust's `{}` would
+/// make the compared contract "libc's float formatter" rather than the accessor,
+/// and the bits also preserve the sign of `-0.0`, which the printed form loses.
+fn encode_double(d: f64) -> String {
+    if d.is_nan() {
+        "nan".to_string()
+    } else {
+        format!("{:016x}", d.to_bits())
+    }
+}
+
+/// The driver's index normalization, matching `driver.c`'s `strtol` + clamp:
+/// leading spaces, an optional sign, then decimal digits; junk reads as 0 and an
+/// out-of-range value saturates. This is DRIVER contract, not cJSON contract —
+/// the fuzzer sends non-numeric and overflowing indices, and both sides have to
+/// turn them into the same `int` before `cJSON_GetArrayItem` ever sees them.
+fn parse_index(field: &[u8]) -> i32 {
+    let s = field.split(|&b| b == 0).next().unwrap_or(field);
+    let text = String::from_utf8_lossy(s);
+    let t = text.trim_start_matches([' ', '\t', '\n', '\r', '\x0b', '\x0c']);
+    let (neg, digits) = match t.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, t.strip_prefix('+').unwrap_or(t)),
+    };
+    let end = digits
+        .find(|c: char| !c.is_ascii_digit())
+        .unwrap_or(digits.len());
+    // i64 then clamp: parsing straight to i32 would make an overflowing literal
+    // an Err (→ 0), where C's strtol saturates to LONG_MAX and the driver clamps
+    // that to INT_MAX. Same reason the digit run is capped before parsing.
+    let run = digits.get(..end.min(18)).unwrap_or("");
+    let magnitude: i64 = run.parse().unwrap_or(0);
+    // `checked_neg` and `try_from`, not `-x` and `as i32`: the workspace denies
+    // arithmetic_side_effects and cast_possible_truncation, and a silent
+    // wraparound here would turn a fuzzed index into a valid one — the exact
+    // class of C bug this port exists to remove. The clamp makes try_from
+    // total, so the fallback is unreachable rather than a swallowed error.
+    let signed = if neg {
+        magnitude.checked_neg().unwrap_or(i64::MIN)
+    } else {
+        magnitude
+    };
+    i32::try_from(signed.clamp(i64::from(i32::MIN), i64::from(i32::MAX))).unwrap_or(0)
+}
+
+/// `access`: stdin is `<key>\t<index>\n<json>` — the five accessor entry points
+/// in one shot (`cJSON_GetObjectItem` case-INsensitive, `cJSON_HasObjectItem`,
+/// `cJSON_GetArrayItem`, `cJSON_GetStringValue`, `cJSON_GetNumberValue`).
+///
+/// The string/number accessors are fed the lookup RESULTS, `None` included,
+/// because tolerating a NULL item is part of their contract in the C.
+fn access(input: &[u8]) -> (i32, Vec<u8>) {
+    let Some(nl) = input.iter().position(|&b| b == b'\n') else {
+        return (RC_USAGE, Vec::new());
+    };
+    let (head, rest) = input.split_at(nl);
+    let json = rest.get(1..).unwrap_or(&[]);
+    let Some(tab) = head.iter().position(|&b| b == b'\t') else {
+        return (RC_USAGE, Vec::new());
+    };
+    let (key, idx_field) = head.split_at(tab);
+    let index = parse_index(idx_field.get(1..).unwrap_or(&[]));
+
+    let Ok((value, _)) = crate::parse_with_length(json) else {
+        return (RC_PARSE, Vec::new());
+    };
+
+    let by_key = dom::get_object_item(&value, key, false);
+    let has = dom::has_object_item(&value, key);
+    // `index < 0` answers None before the child walk (cJSON.c:1889), so the
+    // cast is only ever reached for a non-negative value.
+    let by_idx = if index < 0 {
+        None
+    } else {
+        dom::get_array_item(&value, index.unsigned_abs() as usize)
+    };
+
+    let mut out = Vec::new();
+    out.extend_from_slice(format!("has={};kobj=", i32::from(has)).as_bytes());
+    push_printed(&mut out, by_key);
+    out.extend_from_slice(b";kstr=");
+    push_cstr(&mut out, dom::get_string_value(by_key));
+    out.extend_from_slice(
+        format!(
+            ";knum={};iarr=",
+            encode_double(dom::get_number_value(by_key))
+        )
+        .as_bytes(),
+    );
+    push_printed(&mut out, by_idx);
+    out.extend_from_slice(b";istr=");
+    push_cstr(&mut out, dom::get_string_value(by_idx));
+    out.extend_from_slice(
+        format!(";inum={}", encode_double(dom::get_number_value(by_idx))).as_bytes(),
+    );
+    (0, out)
+}
+
+/// `cJSON_PrintUnformatted(item)` for the descriptor, or `-` for a NULL item.
+fn push_printed(out: &mut Vec<u8>, item: Option<&Value>) {
+    match item.and_then(|v| crate::print_value(v, false)) {
+        Some(p) => out.extend_from_slice(&p),
+        None => out.push(b'-'),
+    }
+}
+
+/// `valuestring` as the C driver's `%s` renders it: NUL-truncated, `-` for NULL.
+fn push_cstr(out: &mut Vec<u8>, s: Option<&[u8]>) {
+    match s {
+        Some(s) => out.extend_from_slice(&s[..s.iter().position(|&b| b == 0).unwrap_or(s.len())]),
+        None => out.push(b'-'),
+    }
+}
+
 /// `query`: stdin is `<key>\n<json>`. Emits the C driver's fixed-order
 /// description, built from the `Is*` predicates and the struct-field views
 /// (`type` / `valueint` / `valuestring`) that a C caller reads straight off the
@@ -178,6 +293,9 @@ pub fn run(mode: &str, input: &[u8]) -> (i32, Vec<u8>) {
     }
     if mode == "query" {
         return query(input);
+    }
+    if mode == "access" {
+        return access(input);
     }
 
     // cJSON_Utils modes (JSON Pointer / Patch / Merge / Sort) — one dispatch,

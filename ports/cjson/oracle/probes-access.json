@@ -1,0 +1,210 @@
+{
+  "module": "dom-access",
+  "modules": ["dom-access"],
+  "probes": [
+    {
+      "id": "access-key-case-insensitive",
+      "args": ["access"],
+      "stdin": "ABC\t0\n{\"abc\":\"hi\"}",
+      "note": "cJSON_GetObjectItem is the CASE-INSENSITIVE lookup (cJSON.c: get_object_item(.., false)) -- that is its whole difference from GetObjectItemCaseSensitive, which the `query` mode already gates"
+    },
+    {
+      "id": "access-key-exact",
+      "args": ["access"],
+      "stdin": "abc\t0\n{\"abc\":\"hi\"}",
+      "note": "the exact-case key finds the same item, so case-insensitivity is a widening, not a replacement"
+    },
+    {
+      "id": "access-key-missing",
+      "args": ["access"],
+      "stdin": "zz\t0\n{\"abc\":\"hi\"}",
+      "note": "absent key: HasObjectItem 0, GetObjectItem NULL, and both value accessors answer for NULL rather than crashing"
+    },
+    {
+      "id": "access-index-on-object-root",
+      "args": ["access"],
+      "stdin": "a\t0\n{\"a\":1}",
+      "note": "THE QUIRK: cJSON_GetArrayItem is NOT array-only. cJSON.c:1869 walks `array->child` with no type check, so index 0 of an OBJECT returns its first VALUE. The port's get_array_item asserted array-only in its own doc comment and answered None; nothing disagreed for six gates because no mode called it"
+    },
+    {
+      "id": "access-index-nested-object",
+      "args": ["access"],
+      "stdin": "k\t0\n{\"a\":{\"b\":1}}",
+      "note": "the same child-list walk hands back a whole nested object, printed"
+    },
+    {
+      "id": "access-index-object-third",
+      "args": ["access"],
+      "stdin": "k\t2\n{\"a\":1,\"b\":2,\"c\":3}",
+      "note": "index 2 of an object is its third value -- insertion order, the C's sibling chain"
+    },
+    {
+      "id": "access-key-on-array-root",
+      "args": ["access"],
+      "stdin": "k\t0\n[1,2]",
+      "note": "the mirror case: an object lookup on an array root answers NULL, because get_object_item DOES type-check"
+    },
+    {
+      "id": "access-index-in-range",
+      "args": ["access"],
+      "stdin": "k\t1\n[10,\"two\",true]",
+      "note": "ordinary array indexing, plus GetStringValue returning the element's text"
+    },
+    {
+      "id": "access-index-out-of-range",
+      "args": ["access"],
+      "stdin": "k\t9\n[10,\"two\",true]",
+      "note": "walking off the end of the child list yields NULL, not UB"
+    },
+    {
+      "id": "access-index-negative",
+      "args": ["access"],
+      "stdin": "k\t-1\n[10,\"two\",true]",
+      "note": "cJSON_GetArrayItem returns NULL for index < 0 BEFORE the cast to size_t -- the guard that stops a negative index becoming a huge unsigned one"
+    },
+    {
+      "id": "access-index-int-min",
+      "args": ["access"],
+      "stdin": "k\t-2147483648\n[1,2]",
+      "note": "INT_MIN: the negative guard holds at the extreme, where a naive abs() would overflow"
+    },
+    {
+      "id": "access-index-int-max",
+      "args": ["access"],
+      "stdin": "k\t2147483647\n[1,2]",
+      "note": "INT_MAX walks the list to its end and answers NULL"
+    },
+    {
+      "id": "access-index-overflowing",
+      "args": ["access"],
+      "stdin": "k\t99999999999999999999\n[1,2]",
+      "note": "DRIVER contract, not cJSON contract: strtol saturates to LONG_MAX and the driver clamps to INT_MAX. Pinned because both sides must normalize a fuzzed index identically before cJSON ever sees it"
+    },
+    {
+      "id": "access-index-non-numeric",
+      "args": ["access"],
+      "stdin": "k\tabc\n[1,2]",
+      "note": "driver contract: strtol reads no digits and answers 0, so junk selects element 0 rather than failing"
+    },
+    {
+      "id": "access-index-plus-signed",
+      "args": ["access"],
+      "stdin": "k\t+1\n[7,8,9]",
+      "note": "driver contract: strtol accepts a leading '+'"
+    },
+    {
+      "id": "access-index-space-padded",
+      "args": ["access"],
+      "stdin": "k\t  2\n[7,8,9]",
+      "note": "driver contract: strtol skips leading whitespace"
+    },
+    {
+      "id": "access-scalar-root",
+      "args": ["access"],
+      "stdin": "k\t0\n42",
+      "note": "a scalar has no child, so the child-list walk answers NULL -- the type check the C never makes is not needed here"
+    },
+    {
+      "id": "access-string-root",
+      "args": ["access"],
+      "stdin": "k\t0\n\"hello\"",
+      "note": "same for a string root: no child list"
+    },
+    {
+      "id": "access-empty-array",
+      "args": ["access"],
+      "stdin": "k\t0\n[]",
+      "note": "empty container, index 0 -> NULL"
+    },
+    {
+      "id": "access-empty-object",
+      "args": ["access"],
+      "stdin": "k\t0\n{}",
+      "note": "empty object, index 0 -> NULL"
+    },
+    {
+      "id": "access-duplicate-keys",
+      "args": ["access"],
+      "stdin": "k\t0\n{\"k\":1,\"k\":2}",
+      "note": "duplicate keys resolve to the FIRST match, matching the C's list walk (the parser accepts such a document, per the builder probes)"
+    },
+    {
+      "id": "access-duplicate-keys-case",
+      "args": ["access"],
+      "stdin": "K\t0\n{\"k\":1,\"K\":2}",
+      "note": "case-INSENSITIVE lookup for \"K\" returns the FIRST case-insensitive match -- the lowercase entry -- not the exactly-matching later one"
+    },
+    {
+      "id": "access-empty-key",
+      "args": ["access"],
+      "stdin": "\t0\n{\"\":7}",
+      "note": "the empty key is a real key and is findable"
+    },
+    {
+      "id": "access-string-interior-nul",
+      "args": ["access"],
+      "stdin": "k\t0\n{\"k\":\"a\\u0000b\"}",
+      "note": "valuestring is a C string: GetStringValue's result truncates at the interior NUL, and so does the printed form (LESSONS #29)"
+    },
+    {
+      "id": "access-number-fractional",
+      "args": ["access"],
+      "stdin": "n\t0\n{\"n\":3.5}",
+      "note": "GetNumberValue returns valuedouble; the descriptor encodes raw IEEE-754 bits so no float FORMATTER sits on the compared contract"
+    },
+    {
+      "id": "access-number-integral",
+      "args": ["access"],
+      "stdin": "n\t0\n{\"n\":42}",
+      "note": "an integral number still answers as a double"
+    },
+    {
+      "id": "access-number-huge",
+      "args": ["access"],
+      "stdin": "k\t0\n{\"k\":1e308}",
+      "note": "near-DBL_MAX survives to valuedouble bit-exactly"
+    },
+    {
+      "id": "access-number-negative-zero",
+      "args": ["access"],
+      "stdin": "k\t0\n{\"k\":-0.0}",
+      "note": "-0.0 prints as \"0\" but carries the sign bit (8000000000000000). The bit encoding gates what the printed form cannot show"
+    },
+    {
+      "id": "access-bool-value",
+      "args": ["access"],
+      "stdin": "k\t0\n{\"k\":true}",
+      "note": "GetStringValue and GetNumberValue on a bool: NULL and NaN, the wrong-type answers"
+    },
+    {
+      "id": "access-null-value",
+      "args": ["access"],
+      "stdin": "k\t0\n{\"k\":null}",
+      "note": "a JSON null is a present key: has=1 with both typed accessors declining"
+    },
+    {
+      "id": "access-deep-nest",
+      "args": ["access"],
+      "stdin": "k\t0\n[[[[1]]]]",
+      "note": "the child walk hands back a nested array, printed in full"
+    },
+    {
+      "id": "access-parse-failure",
+      "args": ["access"],
+      "stdin": "k\t0\n{bad",
+      "note": "an unparseable document is rc=1 with empty stdout, matching every other parsing mode's contract"
+    },
+    {
+      "id": "access-missing-tab",
+      "args": ["access"],
+      "stdin": "k0\n[1]",
+      "note": "malformed driver input (no tab) is rc=2 usage, distinct from a parse failure"
+    },
+    {
+      "id": "access-missing-newline",
+      "args": ["access"],
+      "stdin": "k\t0",
+      "note": "malformed driver input (no newline) is rc=2 usage"
+    }
+  ]
+}

@@ -62,12 +62,64 @@ fn eq_ci(a: &[u8], b: &[u8]) -> bool {
     a[..ca].eq_ignore_ascii_case(&b[..cb])
 }
 
-/// cJSON.c:1869 `cJSON_GetArrayItem` — None if not an array or out of range.
+/// cJSON.c:1869 `cJSON_GetArrayItem` — the index-th entry of the CHILD LIST,
+/// whatever the container is.
+///
+/// It is not array-only, despite the name. The C (cJSON.c:1869) walks
+/// `array->child` `index` times with **no type check at all**, so
+/// `cJSON_GetArrayItem(obj, 0)` returns an object's first VALUE
+/// (`{"a":{"b":1}}` → `{"b":1}`), and a scalar answers NULL only because its
+/// `child` is NULL. Reproduced faithfully: it is surprising, but it is
+/// memory-safe and it is the contract callers get, so the Prime Directive's
+/// fix-the-C clause does not apply.
+///
+/// This function previously read `Value::Array(items) => items.get(index), _ =>
+/// None` — the array-only reading its own doc comment asserted — and no gate
+/// disagreed, because nothing called it outside its unit test. The `access`
+/// driver mode put it on the compared contract and the C answered differently
+/// on the first probe (LESSONS #26/#34: an entry point no mode reaches is
+/// ungated, and an assumption no oracle contradicts survives indefinitely).
+/// Negative indices never arrive here: `cJSON_GetArrayItem` returns NULL for
+/// `index < 0` before calling this, which the caller reproduces.
 #[must_use]
 pub fn get_array_item(v: &Value, index: usize) -> Option<&Value> {
     match v {
         Value::Array(items) => items.get(index),
+        Value::Object(entries) => entries.get(index).map(|(_, value)| value),
         _ => None,
+    }
+}
+
+/// cJSON.c:1898 `cJSON_HasObjectItem` — `cJSON_GetObjectItem(..) != NULL`, i.e.
+/// the CASE-INSENSITIVE lookup, so `has` and a case-sensitive `get` can disagree.
+#[must_use]
+pub fn has_object_item(v: &Value, name: &[u8]) -> bool {
+    get_object_item(v, name, false).is_some()
+}
+
+/// cJSON.c `cJSON_GetStringValue` — `valuestring` for strings, NULL otherwise.
+///
+/// NOT the same as [`value_string`], which also answers for `Raw` (both set the
+/// C's `valuestring` field, but this accessor gates on `cJSON_IsString` alone).
+/// Tolerates a "NULL" item — the C checks `cJSON_IsString(NULL)`, which is
+/// false — which is why the driver mode feeds it lookup results directly.
+#[must_use]
+pub fn get_string_value(v: Option<&Value>) -> Option<&[u8]> {
+    match v {
+        Some(Value::String(s)) => Some(s),
+        _ => None,
+    }
+}
+
+/// cJSON.c `cJSON_GetNumberValue` — `valuedouble`, or **NaN** for anything that
+/// is not a number, NULL included. Returning NaN rather than an error means a
+/// caller that skips the type check silently propagates NaN, so the driver mode
+/// spells NaN out rather than encoding its bits (many patterns, one meaning).
+#[must_use]
+pub fn get_number_value(v: Option<&Value>) -> f64 {
+    match v {
+        Some(Value::Number(n)) => n.d,
+        _ => f64::NAN,
     }
 }
 
@@ -328,6 +380,57 @@ mod tests {
         assert_eq!(get_array_size(&arr), 3);
         assert!(matches!(get_array_item(&arr, 1), Some(Value::Number(n)) if n.d == 20.0));
         assert!(get_array_item(&arr, 9).is_none());
+    }
+
+    #[test]
+    fn get_array_item_walks_an_objects_children_too() {
+        // THE REGRESSION for the `access` module's first finding (LESSONS #26):
+        // cJSON_GetArrayItem is not array-only. The C walks `->child` with no
+        // type check, so an OBJECT answers by position. This function used to
+        // return None here — matching its own doc comment and not the C — and
+        // no gate disagreed for six gates, because nothing outside this test
+        // ever called it. Pinned in the same change that fixed it.
+        let obj = parse(br#"{"a":1,"b":{"c":2},"d":3}"#);
+        assert!(matches!(get_array_item(&obj, 0), Some(Value::Number(n)) if n.d == 1.0));
+        assert!(matches!(get_array_item(&obj, 1), Some(Value::Object(_))));
+        assert!(matches!(get_array_item(&obj, 2), Some(Value::Number(n)) if n.d == 3.0));
+        assert!(get_array_item(&obj, 3).is_none());
+        // a scalar has no child list at all, which is the only reason the C's
+        // missing type check is safe
+        assert!(get_array_item(&parse(b"42"), 0).is_none());
+        assert!(get_array_item(&parse(br#""hi""#), 0).is_none());
+    }
+
+    #[test]
+    fn typed_accessors_tolerate_a_null_item() {
+        // cJSON_GetStringValue/GetNumberValue route through cJSON_IsString/
+        // IsNumber, which answer false for NULL — so a caller that skips the
+        // lookup's NULL check gets NULL/NaN rather than a crash. That
+        // tolerance is contract, which is why the driver mode feeds them
+        // lookup results directly.
+        assert!(get_string_value(None).is_none());
+        assert!(get_number_value(None).is_nan());
+        let s = parse(br#""text""#);
+        let n = parse(b"2.5");
+        assert_eq!(get_string_value(Some(&s)), Some(&b"text"[..]));
+        assert!(get_string_value(Some(&n)).is_none()); // wrong type -> NULL
+        assert!((get_number_value(Some(&n)) - 2.5).abs() < f64::EPSILON);
+        assert!(get_number_value(Some(&s)).is_nan()); // wrong type -> NaN
+                                                      // Raw sets the C's `valuestring` field, but GetStringValue gates on
+                                                      // cJSON_IsString alone, so it declines — unlike `value_string`.
+        let raw = Value::Raw(b"{}".to_vec());
+        assert!(get_string_value(Some(&raw)).is_none());
+        assert!(value_string(&raw).is_some());
+    }
+
+    #[test]
+    fn has_object_item_is_the_case_insensitive_lookup() {
+        let v = parse(br#"{"Key":1}"#);
+        assert!(has_object_item(&v, b"key"));
+        assert!(has_object_item(&v, b"KEY"));
+        // ...so `has` and a case-SENSITIVE get legitimately disagree
+        assert!(get_object_item(&v, b"key", true).is_none());
+        assert!(!has_object_item(&v, b"nope"));
     }
 
     #[test]
