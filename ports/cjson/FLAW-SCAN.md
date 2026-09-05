@@ -108,10 +108,39 @@ sizing arithmetic — and the CWE-120 class with it — does not exist there. No
 `DIVERGENCES.md` entry: the generated paths are byte-identical (the differential
 and the 25k-iteration `genpatch` fuzz both confirm).
 
+## Live defects found by PROBING, not by the scanner (added 2026-09-05)
+
+The scanner greps for copy sinks. None of the three below is a copy sink, and
+none was found by reading either — each turned up when a module put the relevant
+entry point on the compared contract, or when its spike ran the C under
+sanitizers. Recorded here because this file is the port's flaw record, and a
+flaw record that only contains what a regex can see is measuring the regex.
+
+| # | Where | Class | Status |
+|---|---|---|---|
+| L1 | `cJSON_CreateNumber` (cJSON.c:2471) | **CWE-758**, reliance on undefined behavior: `(int)num` on a NaN. C17 6.3.1.4p1 — and target-dependent in fact (INT_MIN on x86-64, 0 on AArch64), not merely in theory | **Found + ledgered**, module 11. Port takes the defined answer (0). `DIVERGENCES.md create-number-nan-valueint`, 5 pinned rows |
+| L2 | `cJSON_DetachItemViaPointer` (cJSON.c:2231) | **CWE-476**, NULL-pointer WRITE. No check that `item` is a child of `parent`; an empty parent plus a last-of-another-list item writes through `parent->child` | **Found + reproduced** (`spikes/detach_null_write.c`, ASan SEGV). Not yet ported — see `MUTATION-API-SPIKE.md` |
+| L3 | same | **CWE-787**-adjacent silent state corruption: the same write splices a pointer from one document's list into another's last-item cache. No error; the damage appears on a *later, unrelated* call, which then appends to the wrong document | **Found + reproduced** (`spikes/detach_cross_document.c`, `detach_corruption_cashes_in.c`). Drives the mutation module's design |
+
+L2/L3 are in a currently-shipping MIT library. They are characterized here solely
+to keep them out of the port (the Prime Directive's *"do not faithfully
+re-implement a vulnerability"*). Nothing has been reported anywhere; see
+`MUTATION-API-SPIKE.md` §6 — that is a deliberate decision to leave to the repo's
+owner, not an oversight.
+
 ## Net Phase-0 security posture
 
-The port is **preserve-and-harden**, not fix-a-live-bug. The threat model
-(`THREAT-MODEL.md`) and the port plan (`PORT-PLAN.md`) are built around the two
-guards Rust does **not** give for free — **recursion depth** (must be replicated)
-and **output byte-fidelity** (the oracle's job) — and the several classes it
-**does** eliminate structurally (UAF, dangling-realloc, OOB read/write, NULL-deref).
+Phase 0 concluded **preserve-and-harden, not fix-a-live-bug**, and that was an
+accurate reading *of what Phase 0 could see*. Three modules later it is no longer
+true: L1 above is a live UB defect the port deliberately diverges from, and
+L2/L3 are live memory-safety defects in code the port has not reached yet. The
+correction matters more than the conclusion did — **"no live bugs" was a
+statement about the scan's reach, and it survived as a statement about the
+library** until something actually exercised the code.
+
+The threat model (`THREAT-MODEL.md`) and the port plan (`PORT-PLAN.md`) remain
+built around the two guards Rust does **not** give for free — **recursion depth**
+(must be replicated) and **output byte-fidelity** (the oracle's job) — and the
+several classes it **does** eliminate structurally (UAF, dangling-realloc, OOB
+read/write, NULL-deref). L2 and L3 fall squarely in that last group, which is why
+the port's answer to them is structural rather than a patch.

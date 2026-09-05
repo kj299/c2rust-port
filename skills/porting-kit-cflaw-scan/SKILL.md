@@ -27,11 +27,30 @@ directive "the C may be buggy — don't re-port a CVE" (RETROSPECTIVE §9).
    policy, mechanized.
 4. Feed confirmed flaws into `THREAT-MODEL.md` §6 and into the module's test vectors
    (add a boundary/hostile-input case that exercises the fix).
+5. **Write the record from `skeleton/FLAW-SCAN.md`, keeping both of its
+   overclaim guards** (LESSONS #37):
+   - a **reach statement** — what was scanned, by what method, and what that
+     method cannot see. "No flaws found" is meaningless without it, and an
+     unqualified version survives as a statement about the *library* rather than
+     about the *scan*, with the port plan and threat model built on top of it;
+   - a **"live defects found by probing, not by the scanner"** table, present
+     even when empty. Every live defect found in the kit's real ports came from
+     *running* the C — under sanitizers, or the moment a module put an entry
+     point on the compared contract — not from this scanner and not from reading.
+     Commit a reproducer under the port's `spikes/` so the claim outlives the
+     session (LESSONS #32), and say explicitly whether an upstream defect has
+     been reported: silence must not look like a decision.
+
+   Revisit the posture conclusion whenever that table gains a row. A Phase-0
+   conclusion can become false later, and correcting it in place is worth more
+   than the original was.
 
 ## Note
 This is a fast heuristic, not a full SAST pass — it bootstraps the flaw inventory in
 minutes. For depth, add clang-analyzer / CodeQL / cppcheck; this skill just makes
 sure the hunt *happens* before translation, not after a CVE is faithfully reproduced.
+Treat it as a **floor, not a survey**: the scan is what runs every gate, but
+probing is where the findings come from.
 
 ## Integrity
 Paths/flags/categories must match `scan_c_flaws.py`. If they drift, fix the reference

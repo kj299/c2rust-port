@@ -1404,3 +1404,53 @@ the emphasized half.
   unimplemented on the reasoning that no mode could reach it);
   ports/cjson/rust/crates/core/src/dom.rs (12 constructors, 4 corrected doc
   comments); ports/cjson/DIVERGENCES.md (5 pinned NaN rows + 2 notes).
+
+## 037. A flaw record that only contains what a regex can see is measuring the regex
+
+*(2026-09-05, cJSON — spiking the mutation API before scheduling it.)*
+
+- **What happened:** the spike found two live memory-safety defects in the
+  vendored C, neither of which the Phase-0 flaw scan could ever have reported.
+  `cJSON_DetachItemViaPointer` never checks that `item` is a child of `parent`.
+  With an empty parent and a last-of-another-list item, it writes through NULL
+  (ASan SEGV, cJSON.c:2231). With a non-empty parent it splices a pointer from
+  one document's list into another's last-item cache — silently, returning
+  success — and the damage surfaces on a **later, unrelated** call, where an
+  append to document A lands in document B.
+- **What FLAW-SCAN.md said before this:** *"The port is preserve-and-harden, not
+  fix-a-live-bug."* That was an accurate reading **of what the scanner could
+  see** — it greps for copy sinks, and none of this is a copy sink. It then
+  survived, unqualified, as a statement about the library. Same shape as LESSONS
+  #35 (a control's scope argument is unverified input) and LESSONS #32 (a claim
+  outliving its evidence), landing this time on the Phase-0 artifact that the
+  threat model and port plan are both built on.
+- **The generalization:** *every finding-shaped document needs a stated reach.*
+  "No flaws found" is meaningless without "by this method, over this code". The
+  fix is not a better scanner — it is a sentence that survives being wrong:
+  record what the method **cannot** see, next to what it did.
+- **The other half: probing is a flaw-finding method, and the strongest one
+  here.** All three live defects in this port (the NaN→`int` UB of #36, and
+  these two) were found by *running the C*, not by reading it or scanning it —
+  each surfaced the moment a module put the entry point on the compared contract
+  or ran it under sanitizers. The scan is cheap and runs every gate; probing is
+  where the findings actually came from. Phase 0's scan is a floor, not a survey.
+- **Kit change:** two.
+  1. `skeleton/FLAW-SCAN.md` gains a mandatory **"Live defects found by probing,
+     not by the scanner"** section and a **reach statement** on the posture
+     conclusion, so a port cannot inherit a bare "no live bugs" line. The cJSON
+     record is corrected in place rather than appended to, because the old
+     sentence was wrong, not merely incomplete.
+  2. **Spike reproducers are committed** (`ports/cjson/spikes/`, `run.sh`
+     rebuilds all three under ASan+UBSan). A spike document makes claims about a
+     dependency's behavior; evidence that lives only in the session that produced
+     it is evidence nobody can re-check (LESSONS #32 again). They are explicitly
+     NOT gates — `check.sh` does not run them and two are expected to abort.
+- **A decision deliberately left to a human:** these are live defects in a
+  currently-shipping MIT library. They are characterized here only to keep them
+  out of the port. Nothing was reported anywhere, and the spike says so in a
+  numbered section rather than leaving silence to look like a choice.
+- **Section amended:** ports/cjson/FLAW-SCAN.md (live-defect table + reach
+  statement); ports/cjson/MUTATION-API-SPIKE.md (new);
+  ports/cjson/spikes/ (new, 3 reproducers + run.sh);
+  ports/cjson/API-COVERAGE.md (the mutation rows point at the spike);
+  skeleton/FLAW-SCAN.md.
