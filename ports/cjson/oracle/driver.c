@@ -62,7 +62,7 @@ static char *read_all_stdin(size_t *out_len) {
 
 int main(int argc, char **argv) {
     if (argc < 2) {
-        fprintf(stderr, "usage: driver <print|...|build|query|access|construct|set|ptr|patch|merge|genmerge|genpatch|findptr|addpatch|sort (+ -cs)>\n");
+        fprintf(stderr, "usage: driver <print|...|build|query|access|construct|set|seq|ptr|patch|merge|genmerge|genpatch|findptr|addpatch|sort (+ -cs)>\n");
         return 2;
     }
     const char *mode = argv[1];
@@ -201,6 +201,24 @@ int main(int argc, char **argv) {
         char *out = cjson_modes_set(num, t1 + 1, t2 + 1, json, json_len);
         free(input);
         if (out == NULL) { fprintf(stderr, "set failed\n"); return 1; }
+        fputs(out, stdout);
+        free(out);
+        return 0;
+    }
+
+    if (strcmp(mode, "seq") == 0) {
+        /* stdin is "<json>\n<op>\t<sel>\t<arg>\n...". Self-contained early
+         * return like `set` above (LESSONS #27). Valid compact JSON never
+         * carries a raw newline, so the first one ends the document
+         * unambiguously; everything after it is the op program. */
+        char *nl = memchr(input, '\n', len);
+        const char *json = input;
+        size_t json_len = nl ? (size_t)(nl - input) : len;
+        const char *ops = nl ? nl + 1 : "";
+        size_t ops_len = nl ? len - (size_t)(ops - input) : 0;
+        char *out = cjson_modes_seq(json, json_len, ops, ops_len);
+        free(input);
+        if (out == NULL) { fprintf(stderr, "seq: parse error\n"); return 1; }
         fputs(out, stdout);
         free(out);
         return 0;

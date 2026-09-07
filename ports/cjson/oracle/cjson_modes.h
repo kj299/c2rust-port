@@ -88,4 +88,57 @@ char *cjson_modes_construct(long count, const char *name, const char *raw,
 char *cjson_modes_set(double num, const char *key, const char *newstr,
                       const char *json, size_t json_len);
 
+/* The REMOVAL surface -- cJSON_DetachItemFrom{Array,Object,ObjectCaseSensitive}
+ * and cJSON_DeleteItemFrom{Array,Object,ObjectCaseSensitive} -- driven as a
+ * PROGRAM rather than a single shot.
+ *
+ * `ops` is a newline-separated list of `<opcode>\t<selector>\t<arg>` lines, at
+ * most CJSON_SEQ_MAX_OPS of them; the rest are ignored so the descriptor stays
+ * bounded whatever the fuzzer sends. The descriptor is emitted after EVERY step,
+ * not only at the end, which is the whole reason this mode exists: cJSON's
+ * detach rewires a doubly-linked child list whose `child->prev` doubles as the
+ * last-item cache, and a corruption there is invisible until some LATER,
+ * unrelated operation uses it (MUTATION-API-SPIKE.md H1b). A mode that compared
+ * only the final state would report MATCH on exactly the bug it exists to find.
+ *
+ *   opcode  entry point
+ *   ------  ---------------------------------------------------
+ *   da      cJSON_DetachItemFromArray(target, <arg as index>)
+ *   xa      cJSON_DeleteItemFromArray(target, <arg as index>)
+ *   do      cJSON_DetachItemFromObject(target, <arg>)             case-INsensitive
+ *   dos     cJSON_DetachItemFromObjectCaseSensitive(target, <arg>)
+ *   xo      cJSON_DeleteItemFromObject(target, <arg>)             case-INsensitive
+ *   xos     cJSON_DeleteItemFromObjectCaseSensitive(target, <arg>)
+ *   app     cJSON_AddItemToArray(target, cJSON_CreateNumber(<arg>))
+ *
+ * `app` is the WITNESS op, not a ported entry point -- it is how a corrupted
+ * last-item cache becomes visible, since an append is what CONSUMES it
+ * (LESSONS #39: a value-comparing differential never touches state no output
+ * depends on, so the mode has to contain the operation that reads it). Probed:
+ * detaching the first, middle, last or only element all leave a list whose next
+ * append still lands at the end.
+ *
+ * `selector` is empty for the root, else a case-sensitive key of the root
+ * object, so ops can reach one level down. Deliberate limits, both stated rather
+ * than left to be discovered:
+ *   - deeper nesting is not directly addressable. Adding a path grammar would
+ *     put the port's own tree walk on trial instead of the C's list surgery,
+ *     which is what this module is for.
+ *   - `app` runs only when the target is an ARRAY. The C has no such check and
+ *     will happily hang a child off a scalar or give an object a NULL-keyed
+ *     member; the port can represent neither. That is the `scalar-parent-child`
+ *     divergence class, which belongs to cJSON_AddItemTo* and is tracked as its
+ *     own increment -- see DIVERGENCES.md. Refusing it HERE keeps this module's
+ *     ledger to the removal surface; it is a scope decision, and it is written
+ *     down because an unstated one is indistinguishable from an oversight.
+ *
+ * The detach entry points hand the caller OWNERSHIP of the removed node, so
+ * every one printed here is cJSON_Delete'd immediately afterwards.
+ *
+ * Returns NULL when `json` does not parse (there is nothing to mutate) or on
+ * allocation failure. */
+#define CJSON_SEQ_MAX_OPS 8
+char *cjson_modes_seq(const char *json, size_t json_len,
+                      const char *ops, size_t ops_len);
+
 #endif /* CJSON_MODES_H */

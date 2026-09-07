@@ -16,16 +16,16 @@ it down and lock the progress in).
 
 ## The headline number, stated before the tables
 
-**92 exported symbols across both headers: 68 ported, 8 out-of-scope, 16
+**92 exported symbols across both headers: 74 ported, 9 out-of-scope, 9
 unported.** This port covers cJSON_Utils completely and the base library's
 parse / print / minify / query / build / **accessor** / **constructor** /
-**setter** surface; **it does not cover the rest of the base library's mutation
-API** (detach, delete, insert, replace), nor the parse/print *options* surface.
+**setter** / **removal** surface; **it does not cover the base library's
+insert/replace API**, nor the parse/print *options* surface.
 Anything that reads "cJSON is ported" without that sentence is overclaiming,
 which is why the gate prints the shortfall on every run rather than only on
 failure.
 
-api-coverage: max-unported = 16
+api-coverage: max-unported = 9
 
 Why it exists (LESSONS #34, mechanizing #26): module 9 (`cJSON_Utils`) shipped
 **"DONE" through all six green gates with two of these 14 symbols never ported and
@@ -99,7 +99,7 @@ wired into the gate. Two notes on getting the *number* right first:
   is precisely the rounding-up this gate exists to stop. Their own contract —
   NULL arguments, type mismatches, detached-item ownership — is never called.
 
-### Ported — 54
+### Ported — 60
 
 | Symbol | Status | Where it is gated |
 |---|---|---|
@@ -158,8 +158,14 @@ wired into the gate. Two notes on getting the *number* right first:
 | `cJSON_AddArrayToObject` | ported | driver mode `construct` (`addA`) |
 | `cJSON_SetValuestring` | ported | driver mode `set` (`sv`/`sv2`/`svnull`/`svnum`); its `object == NULL`, non-string and NULL-replacement guards are each reached by a probe, and both sides of the `strlen(new) <= strlen(old)` branch are crossed. The overlapping-`strcpy` hazard at cJSON.c:418 is designed out, not compared — see DIVERGENCES.md, "Structural eliminations" |
 | `cJSON_SetNumberHelper` | ported | driver mode `set` (`sn`/`sn2`); saturation boundaries probed inclusive on both ends, NaN and the missing type check both ledgered. Called only for a non-NULL target: the exported symbol has no NULL check (only the `cJSON_SetNumberValue` macro does), and a segfault is not an answer to compare against |
+| `cJSON_DetachItemFromArray` | ported | driver mode `seq`, op `da`; the negative/out-of-range/junk index guards each have a probe, and the not-array-only behaviour (index 0 of an OBJECT takes its first member, key retained) is pinned |
+| `cJSON_DeleteItemFromArray` | ported | driver mode `seq`, op `xa`; returns void, so the descriptor compares the container's size and the whole document after the step |
+| `cJSON_DetachItemFromObject` | ported | driver mode `seq`, op `do` — the CASE-INSENSITIVE lookup |
+| `cJSON_DetachItemFromObjectCaseSensitive` | ported | driver mode `seq`, op `dos`; the case flag is the only difference between the pair and is pinned in both directions |
+| `cJSON_DeleteItemFromObject` | ported | driver mode `seq`, op `xo`; a missing key is `cJSON_Delete(NULL)`, probed rather than assumed safe |
+| `cJSON_DeleteItemFromObjectCaseSensitive` | ported | driver mode `seq`, op `xos` |
 
-### Out of scope — 8, each a deliberate refusal under the Prime Directive
+### Out of scope — 9, each a deliberate refusal under the Prime Directive
 
 These are not backlog. The C's contract for each one is *"the caller guarantees a
 lifetime the library cannot check"*, and re-exporting that contract would carry
@@ -177,6 +183,7 @@ cannot be expressed there without reintroducing exactly what the port removes.
 | `cJSON_AddItemReferenceToArray` | out-of-scope | grafts a node into a second tree without copying; either tree's `cJSON_Delete` can leave the other holding freed memory. |
 | `cJSON_AddItemReferenceToObject` | out-of-scope | same. |
 | `cJSON_AddItemToObjectCS` | out-of-scope | stores a borrowed key and sets `cJSON_StringIsConst`; cJSON's own header carries a WARNING that callers must test that flag before writing to `item->string`. A safety-critical invariant enforced by a comment is the shape this port exists to delete. |
+| `cJSON_DetachItemViaPointer` | out-of-scope | takes `(cJSON *parent, cJSON *item)` and **never checks that `item` is a child of `parent`**. `MUTATION-API-SPIKE.md` H1 reproduces, from two valid public-API pointers, a NULL-pointer WRITE (`spikes/detach_null_write.c`, ASan SEGV at cJSON.c:2231) and a silent cross-document corruption whose damage surfaces on a later, unrelated call (`spikes/detach_cross_document.c`, `detach_corruption_cashes_in.c`). The port cannot express the contract at all: `Value` is an owned tree with no parent pointers and no sibling list, so a child cannot be held while its parent is separately named — the borrow checker refusing to let that state exist IS the answer. A Prime Directive refusal, not backlog; the four entry points that reach it are ported, and they are safe in the C because each looks the item up inside the parent first. |
 
 ### High-budget sweep on the `access` mode (LESSONS #33)
 
@@ -198,7 +205,7 @@ and a 20-digit overflow with both sides normalizing identically. That is a wider
 space than `findptr`'s single pointer, and narrower than `patch`'s two-document
 op grammar, where 2000 was demonstrably insufficient.
 
-### Unported — 16, against the ceiling declared at the top
+### Unported — 9, against the ceiling declared at the top
 
 Real work not done, recorded as such. Grouped by what would be needed.
 
@@ -208,13 +215,6 @@ Real work not done, recorded as such. Grouped by what would be needed.
 | `cJSON_ParseWithLengthOpts` | unported | same options surface, length-delimited |
 | `cJSON_PrintBuffered` | unported | the prebuffer growth strategy; only the default printer is compared |
 | `cJSON_PrintPreallocated` | unported | caller-owned output buffer. Needs a mode that compares the truncation/failure boundary, which is the interesting part — the header warns the estimate is not exact ("allocate 5 bytes more than you actually need") |
-| `cJSON_DetachItemViaPointer` | unported | the whole detach/delete/insert/replace mutation API is absent from the compared surface. It is the part of cJSON that rewires the sibling/child list in place — i.e. the part where a use-after-free would actually live. **Spiked, not guessed: see MUTATION-API-SPIKE.md.** This symbol never checks that `item` is a child of `parent`; the spike reproduces a NULL-pointer WRITE (cJSON.c:2231, ASan SEGV) and a silent cross-document corruption whose damage only appears on a later, unrelated call. The spike's conclusion is that the *ViaPointer pair becomes `out-of-scope` (a Prime Directive refusal — the port cannot express that aliasing contract) and the rest splits into three modules behind a mutation-SEQUENCE mode |
-| `cJSON_DetachItemFromArray` | unported | as above |
-| `cJSON_DeleteItemFromArray` | unported | as above |
-| `cJSON_DetachItemFromObject` | unported | as above; reached transitively via cJSON_Utils' patch `move`/`remove` ops |
-| `cJSON_DetachItemFromObjectCaseSensitive` | unported | as above; reached transitively via the `-cs` utils modes |
-| `cJSON_DeleteItemFromObject` | unported | as above; reached transitively via merge-patch's null-deletes (the "removes only the FIRST duplicate" fix came from that path) |
-| `cJSON_DeleteItemFromObjectCaseSensitive` | unported | as above; reached transitively via the `-cs` utils modes |
 | `cJSON_InsertItemInArray` | unported | as above |
 | `cJSON_ReplaceItemViaPointer` | unported | as above |
 | `cJSON_ReplaceItemInArray` | unported | as above |
@@ -260,6 +260,28 @@ both sides before any `double` exists, a `<key>\t<newstr>` pair the C reads as C
 strings, and the JSON document. The seed corpus includes the matrix's
 `stdin_b64` rows, whose replacement strings carry an interior NUL and lone
 0x80-0xFF bytes — inputs no UTF-8 seed string could spell (LESSONS #36).
+
+### High-budget sweep on the `seq` mode (LESSONS #33)
+
+The widest input space this port has fuzzed, so it gets the largest budget yet:
+
+| Mode | Seed | Iterations | Findings |
+|---|---|---|---|
+| `seq` | 0 | 25 000 | 0 |
+| `seq` | 12345 | 25 000 | 0 |
+| `seq` | 777 | 25 000 | 0 |
+| `seq` | 31337 | 25 000 | 0 |
+
+100 000 generated inputs, zero divergences (executed 2026-09-07, against the
+PRISTINE oracle — this module has no intentional divergence, so every finding
+would have been a real port bug). Four seeds rather than three because `seq` has
+**three** independently mutable grammars stacked on each other: the JSON
+document, the op program (seven opcodes × a selector × an argument, up to eight
+steps), and the `<op>\t<sel>\t<arg>` framing itself. It is also the only mode
+whose inputs compose — step *n* runs against whatever step *n-1* left behind — so
+the reachable state space is larger than the input space, which is precisely the
+property the mode exists for and precisely why the gate's 2 000 floor is not an
+argument here.
 
 ### What this table changed
 

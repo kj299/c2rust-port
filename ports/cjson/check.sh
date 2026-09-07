@@ -61,7 +61,7 @@ echo "===== 1b. probe-then-port — transcripts pinned, tests generated ====="
 # fails closed on oracle drift, a tampered transcript, or a hand-edited/stale
 # generated test file. The generated tests themselves run under `cargo test`
 # in step 2.
-PROBE_SETS=(quirks plumbing builder utils access construct set)
+PROBE_SETS=(quirks plumbing builder utils access construct set seq)
 PROBE_FILES=()
 for set in "${PROBE_SETS[@]}"; do
   PROBE_FILES+=("$HERE/oracle/probes-$set.json")
@@ -182,6 +182,23 @@ echo "----- module 12 (dom-mutate-set): the two in-place setters -----"
     --matrix "$HERE/oracle/matrix-set.json" --ledger "$HERE/DIVERGENCES.md" \
     --json > "$HERE/reports/dom-mutate-set.json"
 
+echo "----- module 13 (dom-mutate-remove): Detach + Delete, as a PROGRAM -----"
+# The six removal entry points, driven by the `seq` mode: stdin is a document
+# plus a list of ops, and the descriptor is emitted after EVERY step. That is
+# the point. cJSON's detach rewires a doubly-linked child list whose
+# `child->prev` is its last-item cache; a bad relink is invisible until a LATER
+# operation consumes it (MUTATION-API-SPIKE.md H1b), so a single-shot mode would
+# report MATCH on exactly the bug this module exists to rule out. The `app` op is
+# that later operation, and it is in the mode because an append is the only thing
+# that CONSUMES the cache (LESSONS #39).
+#
+# No ledgered rows: unlike modules 11 and 12 this port matches shipped cJSON on
+# every one of these entry points, so the fuzzer below uses the PRISTINE oracle.
+"$PY" "$KIT/harnesses/differential/diff_run.py" \
+    --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
+    --matrix "$HERE/oracle/matrix-seq.json" --ledger "$HERE/DIVERGENCES.md" \
+    --json > "$HERE/reports/dom-mutate-remove.json"
+
 echo "----- module 9 (cJSON_Utils): pointer / patch / merge / sort differentials -----"
 # JSON Pointer (RFC 6901), Patch (6902), Merge-Patch (7396), object sort. The 3
 # utils-tilde-* rows in the matrix ASSERT the ledgered decode fix still diverges
@@ -261,6 +278,15 @@ bash "$HERE/oracle/build_fixed.sh" > /dev/null
     --args set --matrix "$HERE/oracle/matrix-set.json" \
     --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
     --json > "$HERE/reports/fuzz/dom-mutate-set.json"
+# seq mode: fuzz the removal surface against the PRISTINE oracle -- this module
+# has no intentional divergence, so every finding would be a real port bug. Its
+# own matrix seeds the corpus, so the fuzzer mutates the document, the op
+# grammar and the "<op>\t<sel>\t<arg>" framing independently.
+"$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
+    --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
+    --args seq --matrix "$HERE/oracle/matrix-seq.json" \
+    --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
+    --json > "$HERE/reports/fuzz/dom-mutate-remove.json"
 for m in scalar-parse string-parse buffer-plumbing recursive-core; do
   cp "$HERE/reports/fuzz/alloc-node.json" "$HERE/reports/fuzz/$m.json"
 done

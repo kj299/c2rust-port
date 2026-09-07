@@ -51,6 +51,16 @@ reference.
    A divergence is a *triage*: fix the Rust, OR record an intentional fix-of-C-defect
    in `DIVERGENCES.md`. Verdict = stdout AND exit code; a timeout = a design smell
    (design the blocking call out, don't wrap it).
+
+   **Ask what state the C keeps that no output depends on** before designing the
+   mode (LESSONS #39): a last-item cache, a length beside a pointer, a memoized
+   count, a free list, a dirty flag. A value-comparing differential never reads
+   any of it. cJSON's `parent->child->prev` is a last-item cache — a detach
+   rewrites it, nothing printable depends on it, and only an *append* reads it
+   back, so the `seq` mode carries an append op for no other reason. Name the
+   operation that consumes each such field and put it in the mode; if the mode is
+   multi-step, emit the descriptor after **every** step, since a corruption at
+   step 2 that step 5 masks is invisible to a final-state comparison.
 3. **Fuzz** the input surface:
    `bash porting-kit/harnesses/fuzz/gen_fuzz_target.sh <module> --crate <crate>`
    then `cargo fuzz run <module> -- -max_total_time=60`. Any panic/crash blocks.

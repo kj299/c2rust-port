@@ -6,14 +6,21 @@ what are the hazards, how should the work be split, and does it need a
 mutation-*sequence* fuzzer rather than the single-shot modes every other module
 uses.
 
-> **Progress against §4's split (updated 2026-09-07).** Module 3 of 3,
-> **`dom-mutate-set`**, has LANDED: `cJSON_SetValuestring` and
-> `cJSON_SetNumberHelper` are on the compared contract via the `set` driver mode,
-> and API-COVERAGE.md's ceiling ratcheted 18 → 16. `dom-mutate-remove` and
-> `dom-mutate-place` are still queued, so everything below about H1/H2/H3 and the
-> sequence mode stands unchanged. The one thing the module CHANGED in this
-> document is H6, which was wrong about where the danger in
-> `cJSON_SetValuestring` is — see H7.
+> **Progress against §4's split (updated 2026-09-07).** Two of the three
+> modules have LANDED and the ceiling has ratcheted 18 → 16 → 9.
+>
+> * **`dom-mutate-set`** (§4.3): `cJSON_SetValuestring` and
+>   `cJSON_SetNumberHelper`, via the `set` driver mode. It also corrected this
+>   document — H6 was wrong about where the danger in `cJSON_SetValuestring` is;
+>   see **H7**.
+> * **`dom-mutate-remove`** (§4.1): the six Detach/Delete entry points, via the
+>   `seq` mode — the mutation-SEQUENCE harness §3 argued for, now built.
+>   `cJSON_DetachItemViaPointer` moved to `out-of-scope` exactly as §2 proposed.
+>   Zero divergences: the port matches shipped cJSON on all six.
+>
+> **`dom-mutate-place`** (§4.2, Insert + Replace) is the one still queued, and it
+> reuses the `seq` mode rather than building anything new — which was the whole
+> reason for putting the harness in the expensive module.
 
 Written because the kit's most expensive lesson says so — *"spike the scary
 module before scheduling it"* (the winlsof hang: 7 reactive commits vs ~1 day up
@@ -50,6 +57,7 @@ row that made a safety claim, was the one that was wrong.
 | H5 | `SetNumberHelper` carries the same NaN→`int` UB | `ran` (as of module 12): pinned by `matrix-set.json`'s `set-nan-*` rows |
 | H6 | `SetValuestring`'s length branch | `read`, **and it called the line memory-safe** — see H7 |
 | H7 | the same `strcpy` is an OVERLAPPING copy | `ran: spikes/setvaluestring_alias.c` |
+| H1-safe | the four index/key detach entry points cannot reach H1's state | `ran: spikes/detach_relink.c` — and it is the one spike here that exits 0, because it documents correct behavior rather than a defect |
 
 Reproducers are in the spike scripts described in §5.
 
@@ -269,6 +277,16 @@ module and the reason it should not be bolted onto another one.
 
 ## 3. Does it need a mutation-sequence fuzzer? — Yes, and H1b is the proof
 
+> **Built, 2026-09-07** (`seq` driver mode, module `dom-mutate-remove`). The four
+> design constraints below all survived contact: the mode is a self-contained
+> early return in `driver.c`, the op list is capped at 8, the ops are index/key
+> based so the H1 state is unspellable — and the corrected-oracle expectation was
+> the one thing that did NOT materialise, because module 12 had already patched
+> H5 and this module produced no divergence of its own. One constraint the list
+> missed: an append is not merely a nice trailing observation, it is the **only**
+> operation that consumes the last-item cache, so without it the mode compares
+> the normalized view of the tree and nothing else (LESSONS #39).
+
 Every mode so far is single-shot: one input, one operation, compare. That would
 report **MATCH** on the H1b detach — both sides "succeed" and A prints unchanged.
 The divergence only appears on a *later, unrelated* operation.
@@ -314,6 +332,15 @@ Not one module. Three, in dependency order, each independently gateable:
 1. **`dom-mutate-remove`** — Detach + Delete (7 symbols, minus the 1 refused).
    Carries the sequence-mode harness itself, so it is the expensive one. Land
    the mode with the smallest op set that can demonstrate H1b's absence.
+   **LANDED 2026-09-07**, and the estimate held in both directions: the harness
+   was the work, and the port itself needed no ledger entry at all — 48 matrix
+   rows, 48 MATCH. The op set is six removal ops plus one witness (`app`), which
+   is the smallest set that can show a corrupted last-item cache, since only an
+   append consumes it. Two things this list did not anticipate: `get_array_item`
+   has no type check, so `cJSON_DetachItemFromArray` takes the *n*-th member of
+   an OBJECT and hands back a node still carrying that member's key; and the
+   witness op forced a scope decision about `scalar-parent-child` (the `app` op
+   refuses a non-array target on both sides — see DIVERGENCES.md).
 2. **`dom-mutate-place`** — Insert + Replace (5 symbols, minus the 1 refused).
    Reuses the mode; adds ops. H3's corruption guard and H2's free-on-replace are
    the interesting behaviors.
@@ -347,6 +374,7 @@ re-check later (LESSONS #32).
 | `spikes/detach_cross_document.c` | H1b: cross-document detach, immediate view | B silently modified, A "fine" |
 | `spikes/detach_corruption_cashes_in.c` | H1b one op later | append to A lands in B |
 | `spikes/setvaluestring_alias.c` | H7: in-place prefix strip via `SetValuestring` | ASan strcpy-param-overlap, cJSON.c:418 |
+| `spikes/detach_relink.c` | the SAFE detach entry points: relink, key retention, case flags, index guards | clean exit 0 — the behavior the port reproduces |
 
 They are **not** gates — `check.sh` does not run them and three are expected to
 abort. When the module lands, each behavior becomes either a probe (for what the

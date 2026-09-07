@@ -55,6 +55,19 @@ New driver mode? Sequence rather than single-shot? A corrected reference oracle
 (LESSONS #28) because a divergence class is predicate-defined? Decide here, not
 mid-module.
 
+**Ask what state the C keeps that no output depends on** (LESSONS #39). A
+last-item cache, a length beside a pointer, a memoized count, a free list, a
+dirty flag, a cached hash — a value-comparing differential never reads any of
+it, so a mode can be green over a field it never touched. For each such field,
+name the operation that CONSUMES it and put that operation in the mode; without
+one, you are comparing the normalized view very thoroughly and nothing else.
+cJSON's `parent->child->prev` is exactly this: nothing printable depends on it,
+a detach rewrites it, and only an append reads it back.
+
+If the mode is multi-step, **emit the descriptor after every step, not only at
+the end** — a bug that corrupts state at step 2 and is masked by step 5 is
+invisible to a final-state comparison.
+
 ## Module split
 
 Not one module if it can be several. Give each one its symbols, its dependency

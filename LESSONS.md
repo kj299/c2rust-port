@@ -1529,3 +1529,70 @@ the emphasized half.
   NUL-truncating to match its C counterpart); ports/cjson/check.sh;
   ports/cjson/API-COVERAGE.md (ratchet 18 -> 16); skeleton/SPIKE.md (new);
   skills/porting-kit-module/SKILL.md; PLAYBOOK.md.
+
+## 039. A value-comparing differential never touches the C's redundant state
+
+*(2026-09-07, cJSON — module `dom-mutate-remove`, the six Detach/Delete entry points.)*
+
+- **The structure.** cJSON's child list is doubly linked, and
+  `parent->child->prev` does double duty as a **last-item cache** so
+  `add_item_to_array` can append in O(1). It is denormalized state: nothing you
+  can print depends on it, and every accessor answers correctly whether or not it
+  is right.
+- **What that does to a differential.** Every mode this port had was single-shot
+  — one input, one operation, compare the bytes. Detach is precisely an operation
+  that *rewrites* that cache, and a wrong rewrite changes no printed byte. The
+  spike had already reproduced the shape (H1b): a corrupted cache returns
+  success, prints an unchanged document, and cashes in on a **later, unrelated**
+  call, where an append to document A lands in document B. A differential that
+  compares only after the operation reports MATCH on exactly that.
+- **The fix is not "compare harder", it is an op whose job is to CONSUME the
+  cache.** The `seq` mode's input is a *program*, the descriptor is emitted after
+  **every** step, and one of its seven ops — `app`, an append — exists for no
+  other reason than that appending is the only operation that reads the last-item
+  cache. Drop it and the mode compares the normalized view of the tree and
+  nothing else, very thoroughly, forever.
+- **The generalization:** *before designing a mode, ask what state the C keeps
+  that no output depends on.* A last-item cache, a length stored beside a
+  pointer, a memoized count, a free list, a dirty flag, a cached hash. For each,
+  name the operation that consumes it and put that operation in the mode.
+  Otherwise the gate is green over a field it never read — the LESSONS #26
+  shape ("a gate judges only the surface the driver exposes") one level down,
+  inside a data structure rather than across an API.
+- **Corollary for any multi-step mode: emit the descriptor after every step, not
+  only at the end.** A bug that corrupts state at step 2 and is masked by step 5
+  is invisible to a final-state comparison — and masking is not hypothetical
+  here: cJSON's own `cJSON_InsertItemInArray` carries an explicit
+  *"return false if after_inserted is a corrupted array item"* guard, which is
+  evidence this area has silently repaired itself before.
+- **What it cost and what it bought.** The harness was the entire expense. The
+  port itself needed no ledger entry at all — 48 matrix rows, 48 MATCH, the first
+  module in four that diverges from shipped cJSON nowhere. That asymmetry is the
+  argument for putting a new harness in the *scariest* module rather than the
+  smallest one: `dom-mutate-place` now inherits it for free, which is exactly
+  what MUTATION-API-SPIKE.md §4 predicted when it refused to bolt the sequence
+  mode onto a cheaper increment.
+- **Also worth keeping:** `cJSON_DetachItemFromArray` is **not array-only** — the
+  index walk has no type check, so it takes the *n*-th member of an OBJECT and
+  hands back a node still carrying that member's key. That is the fourth time a
+  `dom.rs` doc comment has asserted a type check the C never performs
+  (`get_array_size`, `get_array_item`, `add_item_to_array` were the first three).
+  It was probed before a line of Rust was written this time, which is the only
+  reason it did not become the fourth to ship wrong.
+- **Kit change:** `skeleton/SPIKE.md`'s "Harness machinery the module will need"
+  section now asks the redundant-state question by name, and `PLAYBOOK.md`
+  Phase 4 and `skills/porting-kit-module/SKILL.md` carry the rule next to the
+  differential gate.
+- **Section amended:** skills/porting-kit-module/SKILL.md;
+  ports/cjson/oracle/cjson_modes.h (the `seq` contract, incl. why `app` exists);
+  ports/cjson/oracle/cjson_modes.c (`sb_step`, emitted per step);
+  ports/cjson/rust/crates/core/src/modes.rs (`seq`);
+  ports/cjson/rust/crates/core/src/dom.rs (the removal family);
+  ports/cjson/check.sh (the module-13 block); skeleton/SPIKE.md; PLAYBOOK.md.
+- **The rest of the increment**, which this lesson did not drive: `oracle/driver.c`
+  (the `seq` dispatch), `spikes/detach_relink.c` + `spikes/run.sh` (the evidence
+  that the four reachable detach entry points are safe), `oracle/probes-seq.json`
+  and `oracle/matrix-seq.json` (48 each), `API-COVERAGE.md` (ratchet 16 → 9, and
+  `cJSON_DetachItemViaPointer` moved to `out-of-scope`), `DIVERGENCES.md` (two
+  structural eliminations and the `app` scope refusal), `MUTATION-API-SPIKE.md`,
+  `README.md`, `progress.json`.

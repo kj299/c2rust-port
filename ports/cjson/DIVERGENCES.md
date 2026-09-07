@@ -167,6 +167,20 @@ Format:
   `ffi-builder` modules own, not to the twelve constructors this module gates.
   Putting it on the contract is its own increment, tracked as such.
 
+  **`dom-mutate-remove` came within one line of dragging it in, and declined
+  (2026-09-07).** The `seq` mode needs an *append* op — that is how a corrupted
+  last-item cache becomes visible at all — and an append whose target is
+  fuzzer-chosen will sooner or later name a scalar or an object. The C accepts
+  both and produces trees the port cannot represent: a child hung off a number,
+  and an object member whose key is NULL (which prints as `""` but which
+  `get_object_item` can never find, so it is not the same as an empty key). So
+  the `seq` mode's `app` op refuses any target that is not an ARRAY, on **both**
+  sides. That is a scope decision, not a correctness dodge, and the difference
+  matters: the C has a defined answer here, so declining to compare it is
+  declining, where `construct`'s clamped counts were avoiding undefined
+  behaviour. It is written into `cjson_modes.h`, into `modes::seq`, and here,
+  because an unstated refusal is indistinguishable from an oversight.
+
 Beyond those three JSON-Patch escape fixes and the NaN cast above, every ported module matches the C
 byte-for-byte (the `dom` module's Compare/Duplicate quirks — inf never equals
 itself, dup-keys never compare equal — are REPRODUCED, so they are matches, not
@@ -255,6 +269,29 @@ the port diverges and the divergence is judged an intentional fix-of-C-defect.
   says so here rather than letting "the matrix covers both sides" imply the
   differential can tell them apart. The port has one path: replace the owned
   `Vec<u8>`.
+
+- **`cJSON_DetachItemViaPointer`'s missing membership check.** The C takes
+  `(parent, item)` and never verifies that `item` is a child of `parent`; from
+  two valid public-API pointers that yields a NULL-pointer WRITE and a silent
+  cross-document corruption (MUTATION-API-SPIKE.md H1, three committed
+  reproducers). The port has no analogue and API-COVERAGE.md marks the symbol
+  **out-of-scope**: `Value` is an owned tree with no parent pointers and no
+  sibling list, so a child cannot be held while its parent is separately named.
+  Invisible to the differential because the state cannot be *reached* from the
+  port's API to be compared — the `seq` mode's ops are index/key based, which
+  makes the offending sequence unspellable rather than merely untested.
+
+  The four entry points that reach it in the C **are** ported, and they are safe
+  there for a reason worth recording: each looks the item up inside the parent
+  first, so the absent check is satisfied by construction. Probed rather than
+  assumed (`spikes/detach_relink.c`).
+
+- **The detached node's ownership.** `cJSON_Detach*` hands back a pointer the
+  caller must `cJSON_Delete`, and forgetting to is a leak the compiler cannot
+  see; `cJSON_DeleteItemFrom*` is literally `cJSON_Delete(cJSON_Detach…(…))`.
+  The port returns an owned `Detached`, so the value is either bound or dropped
+  and the leak is not expressible. No output difference, so no ledger row — but
+  it is half the reason this family is worth porting.
 
 - **`cJSON_SetValuestring`'s `IsReference` and NULL-`valuestring` guards.** Both
   need a node built by `cJSON_CreateStringReference`, which API-COVERAGE.md

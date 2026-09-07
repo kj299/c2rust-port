@@ -502,6 +502,165 @@ fn set_mode(input: &[u8]) -> (i32, Vec<u8>) {
     (0, out)
 }
 
+/// Op cap for `seq`, matching `CJSON_SEQ_MAX_OPS` in `cjson_modes.h`. It bounds
+/// the descriptor whatever the fuzzer sends; the C's list surgery is per
+/// operation, so a longer program buys no new code path.
+const SEQ_MAX_OPS: usize = 8;
+
+/// `seq`: stdin is `<json>\n<op>\t<selector>\t<arg>\n…` — the removal surface
+/// (`cJSON_DetachItemFrom{Array,Object,ObjectCaseSensitive}` and the three
+/// `cJSON_DeleteItemFrom*`) driven as a PROGRAM.
+///
+/// Every other mode is single-shot, and a single-shot differential cannot see
+/// this module's whole reason for existing. cJSON's detach rewires a
+/// doubly-linked child list whose `child->prev` doubles as the last-item cache;
+/// corrupt it and both sides still print the same document, with the divergence
+/// appearing only when some LATER operation consumes the cache
+/// (MUTATION-API-SPIKE.md H1b). So the descriptor is emitted after EVERY step,
+/// and `app` exists to be that later operation — LESSONS #39: ask what state the
+/// C keeps that no output depends on, then put the op that consumes it in the
+/// mode, or the gate is green over a field it never read.
+///
+/// The op grammar is index/key based, which is what makes the H1 state
+/// unreachable rather than merely untested: there is no way to name an item
+/// belonging to one parent while naming a different parent, so the sequence
+/// that would trigger the C's missing membership check cannot be spelled.
+fn seq(input: &[u8]) -> (i32, Vec<u8>) {
+    let (json, ops) = match input.iter().position(|&b| b == b'\n') {
+        Some(i) => (&input[..i], input.get(i.saturating_add(1)..).unwrap_or(&[])),
+        None => (input, &[][..]),
+    };
+    let Ok((mut root, _)) = crate::parse_with_length(json) else {
+        return (RC_PARSE, Vec::new());
+    };
+
+    let mut out = b"init=".to_vec();
+    push_printed(&mut out, Some(&root));
+
+    // The C copies the op region into a NUL-terminated buffer and walks it with
+    // `strchr`, so everything past an interior NUL is invisible to it
+    // (LESSONS #29).
+    let mut rest = cstr_prefix(ops);
+    for _ in 0..SEQ_MAX_OPS {
+        if rest.is_empty() {
+            break;
+        }
+        let (line, next) = match rest.iter().position(|&b| b == b'\n') {
+            Some(i) => (&rest[..i], rest.get(i.saturating_add(1)..).unwrap_or(&[])),
+            None => (rest, &[][..]),
+        };
+        rest = next;
+
+        // `<opcode>\t<selector>\t<arg>`; a missing field reads as empty, exactly
+        // as the C's two `strchr` calls leave it.
+        let (opcode, after) = split_tab(line);
+        let (sel, arg) = split_tab(after);
+
+        // `-1` renders as `-`: the three Delete entry points return void, so
+        // there is no answer to compare, and pretending otherwise would invent
+        // a result the C never produced.
+        let (name, mut r): (&str, i32) = match opcode {
+            b"da" | b"do" | b"dos" | b"app" => (core_name(opcode), 0),
+            b"xa" | b"xo" | b"xos" => (core_name(opcode), -1),
+            _ => ("?", -1),
+        };
+        let mut got: Option<dom::Detached> = None;
+        let mut sz: i64 = -1;
+
+        {
+            // Empty selector = the root, else a case-sensitive key of it. One
+            // level down, deliberately — see `cjson_modes.h`.
+            let target = if sel.is_empty() {
+                Some(&mut root)
+            } else {
+                dom::get_object_item_mut(&mut root, sel, true)
+            };
+            if let Some(t) = target {
+                let index = parse_index(arg);
+                // A negative index is the C's own guard in
+                // cJSON_DetachItemFromArray, kept here because this is the layer
+                // that still has a signed index to reject.
+                let at = if index < 0 {
+                    None
+                } else {
+                    Some(index.unsigned_abs() as usize)
+                };
+                match opcode {
+                    b"da" => got = at.and_then(|i| dom::detach_from_array(t, i)),
+                    b"xa" => {
+                        if let Some(i) = at {
+                            dom::delete_from_array(t, i);
+                        }
+                    }
+                    b"do" => got = dom::detach_from_object(t, arg, false),
+                    b"dos" => got = dom::detach_from_object(t, arg, true),
+                    b"xo" => dom::delete_from_object(t, arg, false),
+                    b"xos" => dom::delete_from_object(t, arg, true),
+                    b"app" => {
+                        // ARRAY targets only. The C accepts any parent and
+                        // produces a tree the port cannot represent — a child
+                        // hung off a scalar, or an object member with a NULL
+                        // key. That is `scalar-parent-child`, which belongs to
+                        // cJSON_AddItemTo* and is its own increment; refusing it
+                        // here is a scope decision, stated rather than silent.
+                        if matches!(t, Value::Array(_)) {
+                            r = i32::from(dom::add_item_to_array(t, dom::number(f64::from(index))));
+                        }
+                    }
+                    _ => {}
+                }
+                if got.is_some() {
+                    r = 1;
+                }
+                sz = i64::try_from(dom::get_array_size(t)).unwrap_or(i64::MAX);
+            }
+        }
+
+        out.extend_from_slice(b"|");
+        out.extend_from_slice(name.as_bytes());
+        out.extend_from_slice(b":r=");
+        if r < 0 {
+            out.push(b'-');
+        } else {
+            out.extend_from_slice(format!("{r}").as_bytes());
+        }
+        out.extend_from_slice(b",got=");
+        push_printed(&mut out, got.as_ref().map(|d| &d.value));
+        out.extend_from_slice(b",key=");
+        push_bytes(&mut out, got.as_ref().and_then(|d| d.key.as_deref()));
+        out.extend_from_slice(format!(",sz={sz},doc=").as_bytes());
+        push_printed(&mut out, Some(&root));
+        // `got` drops here — the C's matching `cJSON_Delete(got)`, except that
+        // forgetting it would be a leak there and is not expressible here.
+    }
+    (0, out)
+}
+
+/// The opcode echoed back in its canonical spelling. Only recognized opcodes
+/// reach this; everything else renders as `?`, so a fuzzed opcode cannot put
+/// arbitrary bytes into the descriptor.
+fn core_name(opcode: &[u8]) -> &'static str {
+    match opcode {
+        b"da" => "da",
+        b"xa" => "xa",
+        b"do" => "do",
+        b"dos" => "dos",
+        b"xo" => "xo",
+        b"xos" => "xos",
+        b"app" => "app",
+        _ => "?",
+    }
+}
+
+/// Split at the first tab, mirroring the C's `strchr(line, '\t')`: no tab means
+/// the whole slice is the first field and the second is empty.
+fn split_tab(s: &[u8]) -> (&[u8], &[u8]) {
+    match s.iter().position(|&b| b == b'\t') {
+        Some(i) => (&s[..i], s.get(i.saturating_add(1)..).unwrap_or(&[])),
+        None => (s, &[][..]),
+    }
+}
+
 /// Everything up to the first NUL — the C driver hands `cjson_modes_construct`
 /// pointers into a NUL-split buffer, so both fields are C strings.
 fn cstr_prefix(s: &[u8]) -> &[u8] {
@@ -675,6 +834,9 @@ pub fn run(mode: &str, input: &[u8]) -> (i32, Vec<u8>) {
     }
     if mode == "set" {
         return set_mode(input);
+    }
+    if mode == "seq" {
+        return seq(input);
     }
 
     // cJSON_Utils modes (JSON Pointer / Patch / Merge / Sort) — one dispatch,

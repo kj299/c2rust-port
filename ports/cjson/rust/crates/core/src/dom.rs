@@ -485,6 +485,135 @@ pub fn set_number(v: &mut Value, d: f64) -> f64 {
     d
 }
 
+// ---- removal (cJSON_Detach* / cJSON_DeleteItemFrom*) -----------------------
+//
+// **`cJSON_DetachItemViaPointer` is not here, and that is a refusal, not a gap**
+// (API-COVERAGE.md lists it `out-of-scope`). Its signature is
+// `(cJSON *parent, cJSON *item)` and it never checks that `item` is a child of
+// `parent`; MUTATION-API-SPIKE.md H1 reproduces a NULL-pointer WRITE and a
+// silent cross-document corruption from two valid public-API pointers. The port
+// cannot express that contract at all: `Value` is an owned tree with no parent
+// pointers and no sibling list, so you cannot hold a child while separately
+// naming its parent. The borrow checker refusing to let the H1 state exist IS
+// the port's answer.
+//
+// This family is also where the C's REDUNDANT state lives: `parent->child->prev`
+// is a last-item cache, nothing printable depends on it, and a detach is exactly
+// what rewrites it. That is why the `seq` driver mode carries an append op
+// (LESSONS #39) — without one, the differential compares the normalized tree
+// very thoroughly and never reads the cache at all.
+//
+// The four entry points below are the ones the C reaches THROUGH that function,
+// and they are safe in the C for a reason worth stating: each looks the item up
+// inside the parent first (`get_array_item` / `get_object_item`), so the missing
+// membership check is satisfied by construction. Probed, not assumed — detaching
+// the first, middle, last and only element each leave a list whose next append
+// still lands at the end (`spikes/detach_relink.c`).
+
+/// What the C's detach entry points hand back: the removed node, plus the key it
+/// still carries.
+///
+/// cJSON leaves `item->string` set on a detached object member — the node
+/// remembers the key it used to be filed under, and a caller that re-adds it
+/// elsewhere carries that key along. Modelling it explicitly is what lets the
+/// `seq` driver mode show it; a bare `Value` would have silently dropped it and
+/// no gate would have noticed.
+///
+/// `key` is `None` when the parent was an array (its children have no key), and
+/// `Some` when it was an object — including for [`detach_from_array`], because
+/// the C's index walk has no type check and will happily take the *n*-th member
+/// of an object.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Detached {
+    /// C `item->string`, retained on the detached node.
+    pub key: Option<Vec<u8>>,
+    /// The node itself. Owning it here is the difference from the C, where the
+    /// caller gets a pointer it must remember to `cJSON_Delete`.
+    pub value: Value,
+}
+
+/// First index whose key matches, by the same rule the C's `get_object_item`
+/// uses — `strcmp` or `tolower`-insensitive, both C-string compares.
+fn find_object_index(
+    entries: &[(Vec<u8>, Value)],
+    name: &[u8],
+    case_sensitive: bool,
+) -> Option<usize> {
+    entries.iter().position(|(k, _)| {
+        if case_sensitive {
+            strcmp_eq(k, name)
+        } else {
+            eq_ci(k, name)
+        }
+    })
+}
+
+/// cJSON.c:2246 `cJSON_DetachItemFromArray`. `None` for a negative index (the
+/// C's own guard, applied at the driver boundary where a signed index still
+/// exists), an out-of-range one, or a parent with no children.
+///
+/// **Not array-only**, exactly like [`get_array_item`]: the C walks
+/// `parent->child` `index` times with no type check, so index 0 of an OBJECT
+/// detaches its first member — and the returned node keeps that member's key.
+/// Probed against v1.7.18 (`{"a":1,"b":2}` index 0 → the node `1` with
+/// `string == "a"`, leaving `{"b":2}`), because this file has shipped the
+/// array-only reading wrong three times before by asserting it in a doc comment
+/// nothing exercised.
+pub fn detach_from_array(container: &mut Value, index: usize) -> Option<Detached> {
+    match container {
+        Value::Array(items) if index < items.len() => Some(Detached {
+            key: None,
+            value: items.remove(index),
+        }),
+        Value::Object(entries) if index < entries.len() => {
+            let (key, value) = entries.remove(index);
+            Some(Detached {
+                key: Some(key),
+                value,
+            })
+        }
+        _ => None,
+    }
+}
+
+/// cJSON.c:2251 `cJSON_DeleteItemFromArray` — detach, then free. Here the free
+/// is the drop, so the "detached but never deleted" leak the C invites is not
+/// expressible: the value is either bound or gone.
+pub fn delete_from_array(container: &mut Value, index: usize) {
+    drop(detach_from_array(container, index));
+}
+
+/// cJSON.c:2256 `cJSON_DetachItemFromObject` (`case_sensitive == false`) and
+/// :2262 `cJSON_DetachItemFromObjectCaseSensitive` (`true`).
+///
+/// Duplicate keys resolve to the FIRST match, like the C's list walk, so
+/// detaching twice removes both in order (probed). A non-object parent answers
+/// `None`: the C's `get_object_item` compares `->string`, and an array's
+/// children have none.
+pub fn detach_from_object(
+    container: &mut Value,
+    name: &[u8],
+    case_sensitive: bool,
+) -> Option<Detached> {
+    let Value::Object(entries) = container else {
+        return None;
+    };
+    let at = find_object_index(entries, name, case_sensitive)?;
+    let (key, value) = entries.remove(at);
+    Some(Detached {
+        key: Some(key),
+        value,
+    })
+}
+
+/// cJSON.c:2268 `cJSON_DeleteItemFromObject` (`case_sensitive == false`) and
+/// :2273 `cJSON_DeleteItemFromObjectCaseSensitive` (`true`). The C's version is
+/// `cJSON_Delete(cJSON_DetachItemFromObject(...))`, and `cJSON_Delete(NULL)` is
+/// a no-op — so deleting a missing key is silently fine on both sides (probed).
+pub fn delete_from_object(container: &mut Value, name: &[u8], case_sensitive: bool) {
+    drop(detach_from_object(container, name, case_sensitive));
+}
+
 // ---- builders (Add*) -------------------------------------------------------
 
 /// cJSON.c:1974 `add_item_to_array`.
@@ -982,6 +1111,131 @@ mod tests {
         let mut eq = Value::String(b"xy".to_vec());
         assert_eq!(set_valuestring(&mut eq, Some(b"ab")), Some(&b"ab"[..]));
         assert_eq!(eq, long);
+    }
+
+    /// The C's index walk has NO type check, so `cJSON_DetachItemFromArray` on
+    /// an object takes its *n*-th member — and the detached node keeps that
+    /// member's key. Probed against v1.7.18 (`spikes/detach_relink.c` Q1); this
+    /// file has asserted the array-only reading in a doc comment and shipped it
+    /// wrong three times, so it is pinned rather than described.
+    #[test]
+    fn detach_from_array_is_not_array_only_and_keeps_the_key() {
+        let mut obj = Value::Object(vec![
+            (b"a".to_vec(), number(1.0)),
+            (b"b".to_vec(), number(2.0)),
+        ]);
+        let got = detach_from_array(&mut obj, 0).unwrap();
+        assert_eq!(got.key.as_deref(), Some(&b"a"[..]));
+        assert_eq!(got.value, number(1.0));
+        assert_eq!(print_value(&obj, false).unwrap(), br#"{"b":2}"#.to_vec());
+
+        // an array element has no key to keep
+        let mut arr = Value::Array(vec![number(1.0), number(2.0)]);
+        assert_eq!(detach_from_array(&mut arr, 1).unwrap().key, None);
+    }
+
+    /// Every guard `cJSON_DetachItemFromArray` has, and the fact that a refused
+    /// call leaves the container alone.
+    #[test]
+    fn detach_from_array_guards() {
+        let before = Value::Array(vec![number(1.0), number(2.0)]);
+        let mut v = before.clone();
+        assert!(detach_from_array(&mut v, 2).is_none()); // past the end
+        assert!(detach_from_array(&mut v, usize::MAX).is_none());
+        assert_eq!(v, before);
+        // no children at all: a scalar, and an empty container
+        assert!(detach_from_array(&mut number(7.0), 0).is_none());
+        assert!(detach_from_array(&mut Value::Array(Vec::new()), 0).is_none());
+        assert!(detach_from_array(&mut Value::Object(Vec::new()), 0).is_none());
+    }
+
+    /// The case flag is the *only* difference between the two exported detach
+    /// entry points, so it is pinned in both directions.
+    #[test]
+    fn detach_from_object_case_flag_is_the_whole_difference() {
+        let mut v = Value::Object(vec![(b"K".to_vec(), number(1.0))]);
+        assert!(detach_from_object(&mut v, b"k", true).is_none());
+        let got = detach_from_object(&mut v, b"k", false).unwrap();
+        assert_eq!(got.key.as_deref(), Some(&b"K"[..]));
+        assert_eq!(v, Value::Object(Vec::new()));
+    }
+
+    /// Duplicate keys resolve to the first match, so detaching twice removes
+    /// both in order — the C walks a list and stops at the first hit.
+    #[test]
+    fn detach_from_object_takes_duplicates_in_order() {
+        let mut v = Value::Object(vec![
+            (b"k".to_vec(), number(1.0)),
+            (b"k".to_vec(), number(2.0)),
+        ]);
+        assert_eq!(
+            detach_from_object(&mut v, b"k", true).unwrap().value,
+            number(1.0)
+        );
+        assert_eq!(
+            detach_from_object(&mut v, b"k", true).unwrap().value,
+            number(2.0)
+        );
+        assert!(detach_from_object(&mut v, b"k", true).is_none());
+    }
+
+    /// A non-object parent answers None: the C compares `->string`, and an
+    /// array's children have none. An EMPTY key, by contrast, is a real key the
+    /// lookup can find — the distinction the C draws between "" and NULL.
+    #[test]
+    fn detach_from_object_on_an_array_and_on_an_empty_key() {
+        let mut arr = Value::Array(vec![number(1.0)]);
+        assert!(detach_from_object(&mut arr, b"k", true).is_none());
+        assert!(detach_from_object(&mut arr, b"", true).is_none());
+
+        let mut v = Value::Object(vec![(b"".to_vec(), number(9.0))]);
+        assert_eq!(
+            detach_from_object(&mut v, b"", true).unwrap().value,
+            number(9.0)
+        );
+    }
+
+    /// Delete is detach-then-drop, and deleting something absent is a silent
+    /// no-op on both sides (the C's `cJSON_Delete(NULL)`).
+    #[test]
+    fn delete_is_detach_then_drop_and_tolerates_absence() {
+        let mut v = Value::Array(vec![number(1.0), number(2.0), number(3.0)]);
+        delete_from_array(&mut v, 1);
+        assert_eq!(print_value(&v, false).unwrap(), b"[1,3]".to_vec());
+        delete_from_array(&mut v, 99); // out of range: nothing happens
+        assert_eq!(print_value(&v, false).unwrap(), b"[1,3]".to_vec());
+
+        let mut o = Value::Object(vec![(b"a".to_vec(), number(1.0))]);
+        delete_from_object(&mut o, b"zz", true);
+        assert_eq!(get_array_size(&o), 1);
+        delete_from_object(&mut o, b"a", true);
+        assert_eq!(get_array_size(&o), 0);
+    }
+
+    /// The invariant the whole `seq` mode exists to watch: after a detach from
+    /// any position, the container still appends at the END. In the C that is
+    /// `child->prev` — a last-item cache a bad relink corrupts silently, with
+    /// the damage only visible on the next append (MUTATION-API-SPIKE.md H1b).
+    /// A `Vec` has no such cache, which is why the port cannot have the bug;
+    /// pinned anyway, because "cannot have it" is a claim about a
+    /// representation someone may later change.
+    #[test]
+    fn detaching_from_any_position_leaves_a_container_that_still_appends_last() {
+        for (at, want) in [
+            (0usize, &b"[20,30,99]"[..]),
+            (1, &b"[10,30,99]"[..]),
+            (2, &b"[10,20,99]"[..]),
+        ] {
+            let mut v = Value::Array(vec![number(10.0), number(20.0), number(30.0)]);
+            detach_from_array(&mut v, at);
+            add_item_to_array(&mut v, number(99.0));
+            assert_eq!(print_value(&v, false).unwrap(), want.to_vec(), "at {at}");
+        }
+        // and the single-element case, where the C's list goes empty entirely
+        let mut v = Value::Array(vec![number(42.0)]);
+        detach_from_array(&mut v, 0);
+        add_item_to_array(&mut v, number(99.0));
+        assert_eq!(print_value(&v, false).unwrap(), b"[99]".to_vec());
     }
 
     /// `get_object_item_mut` must resolve duplicate keys the way the C's list

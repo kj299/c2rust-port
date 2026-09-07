@@ -247,6 +247,14 @@ Then the loop — each step is a CI-enforced gate:
    `<<TIMEOUT>>` and fails it. Treat a timeout as a design smell (an unbounded
    blocking call on the hot path) — the winlsof fix was to *avoid* the blocking
    call, not wrap it.
+
+   **Before writing the mode, ask what state the C keeps that no output depends
+   on** (LESSONS #39) — a last-item cache, a length beside a pointer, a memoized
+   count, a free list, a dirty flag. A value-comparing differential never reads
+   any of it, so the mode must contain the operation that *consumes* it, or the
+   gate goes green over a field nothing touched. If the mode is multi-step, emit
+   the descriptor after every step: a corruption at step 2 that step 5 masks is
+   invisible to a final-state comparison.
 3. **Fuzz** the module's parse/input surface (`harnesses/fuzz/gen_fuzz_target.sh`
    scaffolds a `cargo-fuzz` target). Any crash/panic on untrusted input is a
    release blocker. Where a C oracle exists, also run **differential fuzzing**

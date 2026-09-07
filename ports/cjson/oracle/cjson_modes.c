@@ -13,6 +13,7 @@
  * all (LESSONS #26): a gate judges only the surface the driver exposes, and an
  * accessor no mode calls is ungated whatever the matrix says.
  */
+#include <limits.h>
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -530,6 +531,151 @@ char *cjson_modes_set(double num, const char *key, const char *newstr,
     cJSON_Delete(s2);
     cJSON_Delete(root);
 
+    if (!b.ok) {
+        free(b.p);
+        return NULL;
+    }
+    return b.p;
+}
+
+/* ---- `seq` mode: the removal surface, driven as a program ----------------- */
+
+/* The driver's index rule, identical to `access`'s: strtol base 10 with the
+ * result clamped into int, so junk reads as 0 and an overflowing literal
+ * saturates instead of wrapping. Both sides must agree on this before
+ * cJSON_DetachItemFromArray ever sees an int. */
+static int seq_index(const char *s) {
+    long v = strtol(s, NULL, 10);
+    if (v > INT_MAX) v = INT_MAX;
+    if (v < INT_MIN) v = INT_MIN;
+    return (int)v;
+}
+
+/* One step's record. `r` is the op's own answer (`-` where the C returns void),
+ * `got`/`key` the detached node and the key it still carries, `sz` the target's
+ * child count AFTER the op, and `doc` the whole document. `doc` is what makes a
+ * later-surfacing corruption visible (LESSONS #39 -- after EVERY step, because
+ * a bug that corrupts state at step 2 and is masked at step 5 is invisible to a
+ * final-state comparison); `sz` is what makes it visible even when
+ * the printer hides it (the printer ignores a child hung off a scalar, but
+ * cJSON_GetArraySize does not). */
+static void sb_step(struct sbuf *b, const char *name, int r,
+                    cJSON *got, cJSON *target, cJSON *root) {
+    char *pgot = (got != NULL) ? cJSON_PrintUnformatted(got) : NULL;
+    char *pdoc = (root != NULL) ? cJSON_PrintUnformatted(root) : NULL;
+    sb_str(b, "|");
+    sb_str(b, name);
+    sb_str(b, ":r=");
+    if (r < 0) sb_str(b, "-"); else sb_int(b, r);
+    sb_str(b, ",got=");
+    sb_str(b, pgot ? pgot : "-");
+    sb_str(b, ",key=");
+    sb_bytes(b, (got != NULL) ? got->string : NULL);
+    sb_str(b, ",sz=");
+    sb_int(b, (target != NULL) ? cJSON_GetArraySize(target) : -1);
+    sb_str(b, ",doc=");
+    sb_str(b, pdoc ? pdoc : "-");
+    cJSON_free(pgot);
+    cJSON_free(pdoc);
+}
+
+char *cjson_modes_seq(const char *json, size_t json_len,
+                      const char *ops, size_t ops_len) {
+    cJSON *root = cJSON_ParseWithLength(json, json_len);
+    if (root == NULL) return NULL;
+
+    /* A private, NUL-terminated copy: the fields are split in place with NULs so
+     * every one reaches cJSON as a C string, and the caller's buffer is left
+     * alone. */
+    char *buf = (char *)malloc(ops_len + 1);
+    if (buf == NULL) { cJSON_Delete(root); return NULL; }
+    memcpy(buf, ops, ops_len);
+    buf[ops_len] = '\0';
+
+    char *proot = cJSON_PrintUnformatted(root);
+    size_t p = (proot != NULL) ? strlen(proot) : 0;
+    /* Every step prints at most the document, the detached node and its key,
+     * and only `app` can GROW the document (by one small number per step). */
+    size_t cap = 4096 + (size_t)(CJSON_SEQ_MAX_OPS + 1) * (3 * (p + 256) + 192);
+    struct sbuf b;
+    b.p = (char *)malloc(cap);
+    b.cap = cap;
+    b.len = 0;
+    b.ok = (b.p != NULL);
+    if (b.p != NULL) b.p[0] = '\0';
+
+    sb_str(&b, "init=");
+    sb_str(&b, proot ? proot : "-");
+    cJSON_free(proot);
+
+    char *line = buf;
+    for (int n = 0; n < CJSON_SEQ_MAX_OPS && line != NULL && *line != '\0'; n++) {
+        char *nl = strchr(line, '\n');
+        if (nl != NULL) *nl = '\0';
+        char *next = (nl != NULL) ? nl + 1 : NULL;
+
+        /* <opcode>\t<selector>\t<arg>; a missing field reads as empty */
+        char *sel = strchr(line, '\t');
+        char *arg = NULL;
+        if (sel != NULL) {
+            *sel++ = '\0';
+            arg = strchr(sel, '\t');
+            if (arg != NULL) *arg++ = '\0';
+        }
+        if (sel == NULL) sel = (char *)"";
+        if (arg == NULL) arg = (char *)"";
+
+        /* Empty selector = the root; otherwise a case-sensitive key of it. One
+         * level, on purpose -- see cjson_modes.h. */
+        cJSON *target = (*sel == '\0')
+                            ? root
+                            : cJSON_GetObjectItemCaseSensitive(root, sel);
+
+        cJSON *got = NULL;
+        int r = -1;
+        const char *name = "?";
+        if (strcmp(line, "da") == 0) {
+            name = "da";
+            got = cJSON_DetachItemFromArray(target, seq_index(arg));
+            r = (got != NULL);
+        } else if (strcmp(line, "xa") == 0) {
+            name = "xa";
+            cJSON_DeleteItemFromArray(target, seq_index(arg));
+        } else if (strcmp(line, "do") == 0) {
+            name = "do";
+            got = cJSON_DetachItemFromObject(target, arg);
+            r = (got != NULL);
+        } else if (strcmp(line, "dos") == 0) {
+            name = "dos";
+            got = cJSON_DetachItemFromObjectCaseSensitive(target, arg);
+            r = (got != NULL);
+        } else if (strcmp(line, "xo") == 0) {
+            name = "xo";
+            cJSON_DeleteItemFromObject(target, arg);
+        } else if (strcmp(line, "xos") == 0) {
+            name = "xos";
+            cJSON_DeleteItemFromObjectCaseSensitive(target, arg);
+        } else if (strcmp(line, "app") == 0) {
+            name = "app";
+            /* ARRAY targets only -- the C would accept any parent, and the two
+             * malformed trees that produces (a child hung off a scalar, an
+             * object member with a NULL key) are the `scalar-parent-child`
+             * class this module deliberately does not own. */
+            if (cJSON_IsArray(target)) {
+                r = cJSON_AddItemToArray(target, cJSON_CreateNumber(seq_index(arg))) ? 1 : 0;
+            } else {
+                r = 0;
+            }
+        }
+
+        sb_step(&b, name, r, got, target, root);
+        /* the detach entry points transfer OWNERSHIP to the caller */
+        cJSON_Delete(got);
+        line = next;
+    }
+
+    free(buf);
+    cJSON_Delete(root);
     if (!b.ok) {
         free(b.p);
         return NULL;
