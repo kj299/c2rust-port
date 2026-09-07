@@ -169,7 +169,7 @@ directions, and the returned pointer's *identity* differs between the two paths
 is worth stating rather than assuming away.
 
 Note the interaction with interior NULs: a **parsed** string may contain a
-NUL (` ` parses), so `strlen(object->valuestring)` measures the truncated prefix while
+NUL (`\u0000` parses), so `strlen(object->valuestring)` measures the truncated prefix while
 the allocation is longer. The length comparison therefore uses a length that is
 not the buffer's length. Memory-safe as written (the buffer is always at least as
 long), but it is the kind of "two different notions of length" seam that
