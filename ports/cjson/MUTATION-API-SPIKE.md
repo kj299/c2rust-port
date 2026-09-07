@@ -146,11 +146,16 @@ it must be *recorded* as one, not silently absent.
 ### H5 — `cJSON_SetNumberHelper` carries the same NaN→`int` UB already ledgered
 
 Identical saturation block to `cJSON_CreateNumber` (cJSON.c:396 vs :2471).
-`DIVERGENCES.md create-number-nan-valueint` covers the construction site and
-explicitly defers this one; `oracle/make_fixed_core.py` deliberately does **not**
+`DIVERGENCES.md create-number-nan-valueint` covered the construction site and
+explicitly deferred this one; `oracle/make_fixed_core.py` deliberately did **not**
 patch it, because patching code no module exercises adds an unverified branch to
-the reference oracle (LESSONS #31). **This module patches that site and pins it**,
-using the same corrected-oracle mechanism.
+the reference oracle (LESSONS #31).
+
+**Done as predicted (module 12).** `make_fixed_core.py` now carries a LIST of
+corrections and patches this site too, and `matrix-set.json`'s four `set-nan-*`
+rows pin the divergence against shipped cJSON. What the prediction missed is
+that the same function has a *second* defect — no type check at all — which no
+amount of reading it caught; see the note under §4.
 
 ### H6 — `cJSON_SetValuestring`'s length-dependent in-place branch
 
