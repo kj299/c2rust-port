@@ -62,7 +62,7 @@ static char *read_all_stdin(size_t *out_len) {
 
 int main(int argc, char **argv) {
     if (argc < 2) {
-        fprintf(stderr, "usage: driver <print|...|build|query|ptr|patch|merge|genmerge|genpatch|findptr|addpatch|sort (+ -cs)>\n");
+        fprintf(stderr, "usage: driver <print|...|build|query|access|construct|set|ptr|patch|merge|genmerge|genpatch|findptr|addpatch|sort (+ -cs)>\n");
         return 2;
     }
     const char *mode = argv[1];
@@ -157,6 +157,50 @@ int main(int argc, char **argv) {
         char *out = cjson_modes_construct(count, t1 + 1, t2 + 1, payload, payload_len);
         free(input);
         if (out == NULL) { fprintf(stderr, "construct failed\n"); return 1; }
+        fputs(out, stdout);
+        free(out);
+        return 0;
+    }
+
+    if (strcmp(mode, "set") == 0) {
+        /* stdin is "<bits>\t<key>\t<newstr>\n<json>". Self-contained early
+         * return like `construct` above (LESSONS #27): it splits its OWN view
+         * of `input` and never falls through. */
+        char *nl = memchr(input, '\n', len);
+        char *t1 = nl ? memchr(input, '\t', (size_t)(nl - input)) : NULL;
+        char *t2 = t1 ? memchr(t1 + 1, '\t', (size_t)(nl - t1 - 1)) : NULL;
+        if (nl == NULL || t1 == NULL || t2 == NULL) {
+            fprintf(stderr, "set needs <bits>\\t<key>\\t<newstr>\\n<json>\n");
+            free(input);
+            return 2;
+        }
+        *nl = '\0';
+        *t1 = '\0';
+        *t2 = '\0';
+        /* The double arrives as its raw IEEE-754 bits in hex, not as decimal
+         * text. Decimal would put libc's strtod on the compared contract (the
+         * same trap `access` avoids when it PRINTS doubles as bits), and it
+         * could not spell the values this mode exists for: a NaN payload, a
+         * signalling NaN, -0.0. Hand-rolled rather than strtoull so the two
+         * sides share one two-line rule instead of two libraries' notions of
+         * "leading 0x, whitespace, and overflow". */
+        unsigned long long bits = 0;
+        const char *h = input;
+        for (int n = 0; *h != '\0' && n < 16; h++, n++) {
+            int d;
+            if (*h >= '0' && *h <= '9') d = *h - '0';
+            else if (*h >= 'a' && *h <= 'f') d = *h - 'a' + 10;
+            else if (*h >= 'A' && *h <= 'F') d = *h - 'A' + 10;
+            else break;
+            bits = (bits << 4) | (unsigned long long)d;
+        }
+        double num;
+        memcpy(&num, &bits, sizeof num);
+        const char *json = nl + 1;
+        size_t json_len = len - (size_t)(json - input);
+        char *out = cjson_modes_set(num, t1 + 1, t2 + 1, json, json_len);
+        free(input);
+        if (out == NULL) { fprintf(stderr, "set failed\n"); return 1; }
         fputs(out, stdout);
         free(out);
         return 0;

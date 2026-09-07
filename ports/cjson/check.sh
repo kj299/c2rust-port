@@ -61,7 +61,7 @@ echo "===== 1b. probe-then-port — transcripts pinned, tests generated ====="
 # fails closed on oracle drift, a tampered transcript, or a hand-edited/stale
 # generated test file. The generated tests themselves run under `cargo test`
 # in step 2.
-PROBE_SETS=(quirks plumbing builder utils access construct)
+PROBE_SETS=(quirks plumbing builder utils access construct set)
 PROBE_FILES=()
 for set in "${PROBE_SETS[@]}"; do
   PROBE_FILES+=("$HERE/oracle/probes-$set.json")
@@ -163,6 +163,25 @@ echo "----- module 11 (dom-construct): the twelve constructor entry points -----
     --matrix "$HERE/oracle/matrix-construct.json" --ledger "$HERE/DIVERGENCES.md" \
     --json > "$HERE/reports/dom-construct.json"
 
+echo "----- module 12 (dom-mutate-set): the two in-place setters -----"
+# This block is what makes the setter hazards EXECUTED rather than read
+# (LESSONS #38): MUTATION-API-SPIKE.md reasoned about both functions and got one
+# of them wrong, and its evidence table now labels every hazard `ran:` or `read`
+# for that reason.
+# cJSON_SetValuestring and cJSON_SetNumberHelper, in one `set` mode. Ten of
+# these rows ASSERT ledgered divergences rather than matches, in two classes:
+#   * cJSON_SetNumberHelper writes valueint/valuedouble with NO TYPE CHECK, so
+#     the C leaves a cJSON_String node carrying a number (CWE-843). The port
+#     cannot represent that state, so it does nothing.
+#   * the same NaN -> int UB cJSON_CreateNumber has, at the second of the two
+#     sites carrying that cast.
+# Both classes are predicate-defined, so the finite assertion lives HERE against
+# shipped cJSON and the fuzzer below uses the corrected oracle (LESSONS #28).
+"$PY" "$KIT/harnesses/differential/diff_run.py" \
+    --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
+    --matrix "$HERE/oracle/matrix-set.json" --ledger "$HERE/DIVERGENCES.md" \
+    --json > "$HERE/reports/dom-mutate-set.json"
+
 echo "----- module 9 (cJSON_Utils): pointer / patch / merge / sort differentials -----"
 # JSON Pointer (RFC 6901), Patch (6902), Merge-Patch (7396), object sort. The 3
 # utils-tilde-* rows in the matrix ASSERT the ledgered decode fix still diverges
@@ -183,6 +202,8 @@ mkdir -p "$HERE/reports/fuzz"
 # modes fuzz against a C that shares the port's fix and every finding is real):
 #   patch     : cJSON_Utils.c's ~0/~1 pointer decode  (utils-tilde-*)
 #   construct : cJSON.c's NaN -> int conversion       (create-number-nan-*)
+#   set       : the same cast in cJSON_SetNumberHelper, plus its missing type
+#               check                                 (set-number-nan-*, set-*-type-confusion)
 # Every other mode fuzzes against the PRISTINE oracle.
 bash "$HERE/oracle/build_fixed.sh" > /dev/null
 "$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
@@ -228,6 +249,18 @@ bash "$HERE/oracle/build_fixed.sh" > /dev/null
     --args construct --matrix "$HERE/oracle/matrix-construct.json" \
     --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
     --json > "$HERE/reports/fuzz/dom-construct.json"
+# set mode: fuzz the two setters against the CORRECTED oracle as well — the
+# `set` mode's divergences are the same shape as `construct`'s (every NaN, and
+# now every non-number target), so the pristine oracle would report an endless
+# stream of already-known differences and drown a real one. Its matrix seeds the
+# corpus, so the fuzzer mutates the "<bits>\t<key>\t<newstr>\n<json>" framing as
+# well as the document — including stdin_b64 rows whose replacement carries an
+# interior NUL or a lone 0x80-0xFF byte (LESSONS #36).
+"$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
+    --oracle "$HERE/oracle/cjson_oracle_fixed" --rust "$RUST_DRIVER" \
+    --args set --matrix "$HERE/oracle/matrix-set.json" \
+    --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
+    --json > "$HERE/reports/fuzz/dom-mutate-set.json"
 for m in scalar-parse string-parse buffer-plumbing recursive-core; do
   cp "$HERE/reports/fuzz/alloc-node.json" "$HERE/reports/fuzz/$m.json"
 done

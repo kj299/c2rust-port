@@ -108,35 +108,54 @@ sizing arithmetic — and the CWE-120 class with it — does not exist there. No
 `DIVERGENCES.md` entry: the generated paths are byte-identical (the differential
 and the 25k-iteration `genpatch` fuzz both confirm).
 
-## Live defects found by PROBING, not by the scanner (added 2026-09-05)
+## Live defects found by PROBING, not by the scanner (added 2026-09-05, extended 2026-09-07)
 
-The scanner greps for copy sinks. None of the three below is a copy sink, and
-none was found by reading either — each turned up when a module put the relevant
-entry point on the compared contract, or when its spike ran the C under
-sanitizers. Recorded here because this file is the port's flaw record, and a
-flaw record that only contains what a regex can see is measuring the regex.
+The scanner greps for copy sinks. Only one of the five below is a copy sink at
+all — and it is one the scanner **did** report, as line 418, and this document
+triaged as benign in 2026-08 (see the `cJSON_SetValuestring` bullet under "The 17
+copy-sink hits" above, which reasoned about the length check and stopped there).
+None was found by reading; each turned up when a module put the relevant entry
+point on the compared contract, or when its spike ran the C under sanitizers.
+Recorded here because this file is the port's flaw record, and a flaw record that
+only contains what a regex can see is measuring the regex.
 
 | # | Where | Class | Status |
 |---|---|---|---|
 | L1 | `cJSON_CreateNumber` (cJSON.c:2471) | **CWE-758**, reliance on undefined behavior: `(int)num` on a NaN. C17 6.3.1.4p1 — and target-dependent in fact (INT_MIN on x86-64, 0 on AArch64), not merely in theory | **Found + ledgered**, module 11. Port takes the defined answer (0). `DIVERGENCES.md create-number-nan-valueint`, 5 pinned rows |
 | L2 | `cJSON_DetachItemViaPointer` (cJSON.c:2231) | **CWE-476**, NULL-pointer WRITE. No check that `item` is a child of `parent`; an empty parent plus a last-of-another-list item writes through `parent->child` | **Found + reproduced** (`spikes/detach_null_write.c`, ASan SEGV). Not yet ported — see `MUTATION-API-SPIKE.md` |
 | L3 | same | **CWE-787**-adjacent silent state corruption: the same write splices a pointer from one document's list into another's last-item cache. No error; the damage appears on a *later, unrelated* call, which then appends to the wrong document | **Found + reproduced** (`spikes/detach_cross_document.c`, `detach_corruption_cashes_in.c`). Drives the mutation module's design |
+| L4 | `cJSON_SetValuestring` (cJSON.c:418) | **CWE-758**, reliance on undefined behavior: an OVERLAPPING `strcpy`. The "new is no longer than old" fast path is `strcpy(object->valuestring, valuestring)` with nothing stopping `valuestring` pointing into that same buffer — `cJSON_SetValuestring(item, item->valuestring + 2)` is a plausible in-place prefix strip, and C17 7.24.2.3 makes overlapping copies undefined | **Found + reproduced** (`spikes/setvaluestring_alias.c`, ASan `strcpy-param-overlap`). Port ships module 12: the signature takes `&mut Value` plus a separate slice, so the aliasing is a compile error. `DIVERGENCES.md`, "Structural eliminations" |
+| L5 | `cJSON_SetNumberHelper` (cJSON.c:384) | **CWE-843**, type confusion: writes `valueint`/`valuedouble` with **no type check**, leaving a `cJSON_String` node that carries a number. Public struct fields, so it is observable — and it outlives the call. Plus **CWE-476**: the exported symbol has no NULL check (only the `cJSON_SetNumberValue` macro does), and **CWE-758** again, the same `(int)NaN` cast as L1 | **Found + ledgered**, module 12. Port makes the state unrepresentable. `DIVERGENCES.md set-*-type-confusion` (6 pinned rows) and `set-nan-*` (4 pinned rows); the NULL-deref is a structural elimination |
 
-L2/L3 are in a currently-shipping MIT library. They are characterized here solely
+L2–L5 are in a currently-shipping MIT library. They are characterized here solely
 to keep them out of the port (the Prime Directive's *"do not faithfully
 re-implement a vulnerability"*). Nothing has been reported anywhere; see
 `MUTATION-API-SPIKE.md` §6 — that is a deliberate decision to leave to the repo's
 owner, not an oversight.
 
+**L4 is the one that should sting.** It is not a class the scanner is blind to —
+line 418 is *in* the 17 hits above, and this document triaged it in 2026-08 as
+"correct in C *given the NULL checks above it*". That conclusion was about buffer
+sizing, and it was right about buffer sizing; it simply never asked what happens
+if the two pointers are the same object. Reading a sink and concluding "safe"
+answers the question you thought to ask. Running it under ASan answers the one
+you did not.
+
 ## Net Phase-0 security posture
 
 Phase 0 concluded **preserve-and-harden, not fix-a-live-bug**, and that was an
-accurate reading *of what Phase 0 could see*. Three modules later it is no longer
-true: L1 above is a live UB defect the port deliberately diverges from, and
-L2/L3 are live memory-safety defects in code the port has not reached yet. The
-correction matters more than the conclusion did — **"no live bugs" was a
-statement about the scan's reach, and it survived as a statement about the
-library** until something actually exercised the code.
+accurate reading *of what Phase 0 could see*. Four modules later it is no longer
+true: L1, L4 and L5 are live UB / type-confusion defects the port deliberately
+diverges from or designs out, and L2/L3 are live memory-safety defects in code
+the port has not reached yet. The correction matters more than the conclusion
+did — **"no live bugs" was a statement about the scan's reach, and it survived as
+a statement about the library** until something actually exercised the code.
+
+Note the trend, because it is the argument for keeping this section: the count
+went 0 → 3 → 5, and every increase came from a module putting more C on the
+compared contract or running it under a sanitizer. Nothing about the library
+changed. The number tracks how much of it has been *executed*, which is the only
+honest thing a flaw record can be a count of.
 
 The threat model (`THREAT-MODEL.md`) and the port plan (`PORT-PLAN.md`) remain
 built around the two guards Rust does **not** give for free — **recursion depth**

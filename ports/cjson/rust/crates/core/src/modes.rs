@@ -346,6 +346,162 @@ fn construct(input: &[u8]) -> (i32, Vec<u8>) {
     (0, out)
 }
 
+/// The driver's `<bits>` field: up to 16 hex digits, stopping at the first
+/// character that is not one (a NUL included, since the C reads the field as a
+/// C string). Missing digits read as 0.
+///
+/// The double arrives as raw IEEE-754 bits rather than decimal text for the same
+/// reason [`encode_double`] emits bits: decimal would put `strtod` against
+/// Rust's float parser on the compared contract, and it could not spell the
+/// values this mode exists for — a NaN payload, a signalling NaN, `-0.0`. The
+/// rule is hand-rolled on both sides so it is two lines shared, not two
+/// libraries' notions of prefixes, whitespace and overflow.
+fn parse_bits(field: &[u8]) -> u64 {
+    let mut v: u64 = 0;
+    for &b in field.iter().take(16) {
+        let Some(d) = char::from(b).to_digit(16) else {
+            break;
+        };
+        // `wrapping_shl`: the workspace denies arithmetic_side_effects, and 16
+        // digits is exactly 64 bits, so nothing is discarded anyway.
+        v = v.wrapping_shl(4) | u64::from(d);
+    }
+    v
+}
+
+/// One item as the C's `sb_item` spells it: the struct fields a C caller reads
+/// straight off the pointer, then the printed form. `-` for a missing item.
+///
+/// `valuedouble` is in here deliberately. It is the field `cJSON_SetNumberHelper`
+/// writes WITHOUT a type check, so a `cJSON_String` node can end up carrying a
+/// number — a state the port cannot represent and refuses to create. That is an
+/// intentional divergence, and a divergence has to be *visible* in the compared
+/// bytes or its ledger entry is asserting something nothing measures
+/// (LESSONS #31).
+fn push_item(out: &mut Vec<u8>, item: Option<&Value>) {
+    let Some(it) = item else {
+        out.push(b'-');
+        return;
+    };
+    out.extend_from_slice(
+        format!(
+            "t{},i{},d{:016x},s",
+            dom::type_code(it),
+            dom::value_int(it),
+            dom::value_double(it).to_bits()
+        )
+        .as_bytes(),
+    );
+    push_bytes(out, dom::value_string(it));
+    out.extend_from_slice(b",p");
+    push_printed(out, Some(it));
+}
+
+/// `set`: stdin is `<bits>\t<key>\t<newstr>\n<json>` — both in-place setters
+/// (`cJSON_SetValuestring`, `cJSON_SetNumberHelper`) in one shot.
+///
+/// Unlike `access`/`query`, an unparseable document is NOT an error: the setters
+/// are the surface under test, so they still run and the descriptor reports
+/// `doc=-`. That also keeps the fuzzer productive — a mode that exits 1 on most
+/// mutations compares its error path over and over and its subject almost never.
+///
+/// This mode is what turned three of `MUTATION-API-SPIKE.md`'s hazards from
+/// `read` rows into executed ones (LESSONS #38), and the first thing it executed
+/// was a defect two readings of the same function had missed:
+/// `cJSON_SetNumberHelper` performs no type check. Which is why the descriptor
+/// carries the target's raw struct fields rather than only what an accessor
+/// would report — a mode that only shows the tidy view finds only tidy bugs.
+fn set_mode(input: &[u8]) -> (i32, Vec<u8>) {
+    let Some(nl) = input.iter().position(|&b| b == b'\n') else {
+        return (RC_USAGE, Vec::new());
+    };
+    let (head, rest) = input.split_at(nl);
+    let json = rest.get(1..).unwrap_or(&[]);
+    let Some(t1) = head.iter().position(|&b| b == b'\t') else {
+        return (RC_USAGE, Vec::new());
+    };
+    let (bits_field, after) = head.split_at(t1);
+    let after = after.get(1..).unwrap_or(&[]);
+    let Some(t2) = after.iter().position(|&b| b == b'\t') else {
+        return (RC_USAGE, Vec::new());
+    };
+    let (key_field, new_field) = after.split_at(t2);
+    let new_field = new_field.get(1..).unwrap_or(&[]);
+
+    let num = f64::from_bits(parse_bits(bits_field));
+    // Both fields reach the C as pointers into a NUL-split buffer, so both are
+    // C strings before cJSON ever sees them.
+    let key = cstr_prefix(key_field);
+    let newstr = cstr_prefix(new_field);
+
+    let mut root = crate::parse_with_length(json).ok().map(|(v, _)| v);
+
+    // The document target, mutated then described. `sv`/`sn` are copied out of
+    // the borrow so the document can be printed afterwards; in the C the same
+    // two values are plain pointers into a tree nothing stops you mutating
+    // again, which is the difference this port exists to make.
+    let mut tgt = Vec::new();
+    let mut sv: Option<Vec<u8>> = None;
+    let mut sn: Option<f64> = None;
+    match root
+        .as_mut()
+        .and_then(|r| dom::get_object_item_mut(r, key, true))
+    {
+        Some(t) => {
+            sv = dom::set_valuestring(t, Some(newstr)).map(<[u8]>::to_vec);
+            // Conditional on the target existing, because the C's
+            // cJSON_SetNumberHelper has no NULL check at all — calling it with
+            // one is a segfault in the oracle, and a segfault is not an answer
+            // to compare against.
+            sn = Some(dom::set_number(t, num));
+            push_item(&mut tgt, Some(&*t));
+        }
+        // cJSON_SetValuestring's own `object == NULL` guard answers NULL here;
+        // the port's `None` target reaches the same result by having nothing to
+        // call it on.
+        None => push_item(&mut tgt, None),
+    }
+
+    // A fresh string node whose OLD text is the key, so one input can land on
+    // either side of the C's `strlen(new) <= strlen(old)` branch. Both sides of
+    // it produce the same observable result — see `dom::set_valuestring`.
+    let mut s2 = Value::String(key.to_vec());
+    let sv2 = dom::set_valuestring(&mut s2, Some(newstr)).map(<[u8]>::to_vec);
+    let svnull = dom::set_valuestring(&mut s2, None).map(<[u8]>::to_vec);
+
+    // A NUMBER node: first the "not a string" guard, then the setter that owns
+    // this node's type.
+    let mut n2 = dom::number(0.0);
+    let svnum = dom::set_valuestring(&mut n2, Some(newstr)).map(<[u8]>::to_vec);
+    let sn2 = dom::set_number(&mut n2, num);
+
+    let mut out = b"tgt=".to_vec();
+    out.extend_from_slice(&tgt);
+    out.extend_from_slice(b";sv=");
+    push_bytes(&mut out, sv.as_deref());
+    out.extend_from_slice(b";sn=");
+    match sn {
+        Some(d) => out.extend_from_slice(format!("{:016x}", d.to_bits()).as_bytes()),
+        None => out.push(b'-'),
+    }
+    out.extend_from_slice(b";s2=");
+    push_item(&mut out, Some(&s2));
+    out.extend_from_slice(b";sv2=");
+    push_bytes(&mut out, sv2.as_deref());
+    out.extend_from_slice(b";svnull=");
+    push_bytes(&mut out, svnull.as_deref());
+    out.extend_from_slice(b";svnum=");
+    push_bytes(&mut out, svnum.as_deref());
+    out.extend_from_slice(b";n2=");
+    push_item(&mut out, Some(&n2));
+    out.extend_from_slice(format!(";sn2={:016x};doc=", sn2.to_bits()).as_bytes());
+    match root.as_ref().and_then(|r| crate::print_value(r, false)) {
+        Some(p) => out.extend_from_slice(&p),
+        None => out.push(b'-'),
+    }
+    (0, out)
+}
+
 /// Everything up to the first NUL — the C driver hands `cjson_modes_construct`
 /// pointers into a NUL-split buffer, so both fields are C strings.
 fn cstr_prefix(s: &[u8]) -> &[u8] {
@@ -353,12 +509,20 @@ fn cstr_prefix(s: &[u8]) -> &[u8] {
         .unwrap_or(s)
 }
 
-/// Length-prefixed bytes, or `-` for NULL. Length-prefixed rather than
-/// delimited because `["a,b"]` and `["a","b"]` would otherwise render
-/// identically and a real divergence between them would be invisible.
+/// Length-prefixed bytes, or `-` for NULL — the exact counterpart of the C
+/// descriptors' `sb_bytes`. Length-prefixed rather than delimited because
+/// `["a,b"]` and `["a","b"]` would otherwise render identically and a real
+/// divergence between them would be invisible.
+///
+/// The bytes are C-STRING bytes: `sb_bytes` measures with `strlen` and writes
+/// with `%s`, so both stop at the first NUL, and so does this (LESSONS #29 — the
+/// truncation has to hold at every boundary). It makes no difference to
+/// `construct`, whose values are already NUL-truncated at construction, but it
+/// does to `set`, which can be handed a PARSED string with an interior NUL.
 fn push_bytes(out: &mut Vec<u8>, s: Option<&[u8]>) {
     match s {
         Some(s) => {
+            let s = &s[..s.iter().position(|&b| b == 0).unwrap_or(s.len())];
             out.extend_from_slice(format!("{}:", s.len()).as_bytes());
             out.extend_from_slice(s);
         }
@@ -508,6 +672,9 @@ pub fn run(mode: &str, input: &[u8]) -> (i32, Vec<u8>) {
     }
     if mode == "construct" {
         return construct(input);
+    }
+    if mode == "set" {
+        return set_mode(input);
     }
 
     // cJSON_Utils modes (JSON Pointer / Patch / Merge / Sort) — one dispatch,

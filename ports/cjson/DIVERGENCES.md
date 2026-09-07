@@ -81,8 +81,8 @@ Format:
   *construction* API can reach it, and no driver mode constructed a number from
   attacker-supplied bits until `dom-construct` did (LESSONS #26 yet again).
   `cJSON_SetNumberHelper` (cJSON.c:396) carries the same cast and is the third
-  route; it belongs to the not-yet-ported mutation API and is recorded as
-  unported in API-COVERAGE.md rather than fixed blind.
+  route; it landed with `dom-mutate-set` and is ledgered as
+  `set-number-nan-*` below.
 
   Because the class is predicate-defined (*every* NaN, and 8 random bytes are a
   NaN about once in 2048), it cannot be pinned case-by-case for the FUZZER — so
@@ -91,6 +91,63 @@ Format:
   0 and any finding is a real port bug. The five rows above are the finite
   assertion against *shipped* cJSON, and they fail if the divergence ever stops
   happening.
+
+- [x] `set-string-target-type-confusion` [sha256:7c6dfc6245f8]: **`cJSON_SetNumberHelper`
+  writes number fields into a node that is not a number** (CWE-843, type
+  confusion). The function (cJSON.c:384) tests nothing about `object->type`
+  before `object->valueint = …` and `object->valuedouble = number`, so
+  `cJSON_SetNumberValue(a_string_node, 3)` leaves a node whose `type` still says
+  `cJSON_String`, whose `valuestring` is still the string, and whose
+  `valuedouble` is now 3. No accessor reports it — `cJSON_GetNumberValue` checks
+  `cJSON_IsNumber` first and answers NaN — but `valueint`/`valuedouble` are
+  public struct fields cJSON's own header documents callers reading
+  (cJSON.h:110-120), so the inconsistency is observable and it outlives the call
+  that made it.
+
+  The port answers by **not being able to represent it**: `Value::String` has no
+  number to write, so `dom::set_number` is a no-op on a non-number and returns
+  the same `number` the C returns. That is the Prime Directive's "make the
+  invariant structural" rather than a check a later edit could drop.
+
+  The `set` driver mode prints the target's `type`, `valueint` and
+  `valuedouble` precisely so this is *measured*, not asserted (LESSONS #31): the
+  C row carries `i3,d4008000000000000` on a `t16` node and the port's carries
+  `i0,d0000000000000000`.
+- [x] `set-true-target-type-confusion` [sha256:127f73189076]: same defect onto a
+  boolean, which already carries `valueint = 1` — so the C's write *replaces* a
+  meaningful field rather than filling a zeroed one.
+- [x] `set-null-target-type-confusion` [sha256:56ccfe9002a8]: same, onto a null.
+- [x] `set-array-target-type-confusion` [sha256:4b79e1693966]: same, onto an
+  array — a container node that now also claims a numeric value.
+- [x] `set-object-target-type-confusion` [sha256:b854f0a045b0]: same, onto an object.
+- [x] `set-string-target-then-set-string` [sha256:84bdb68edd2e]: the same defect,
+  on a row where `cJSON_SetValuestring` **succeeds** first (a string target, a
+  shorter replacement). It is here so the ledger pins that only the *number*
+  write diverges: every string-setter field in the row (`sv`, `s2`, `sv2`,
+  `svnull`, `svnum`, `doc`) matches the C byte for byte.
+
+- [x] `set-nan-quiet-no-target` [sha256:1e215c037df1]: **`cJSON_SetNumberHelper(item, NaN)`
+  converts a NaN to `int`** — the identical CWE-758 defect as
+  `construct-nan-*` above, at the second of the two sites that carry that cast
+  (cJSON.c:396). A NaN fails both saturation guards and reaches
+  `object->valueint = (int)number`: undefined per C17 6.3.1.4p1, and
+  target-dependent in fact (INT_MIN on x86-64, 0 on AArch64). The port shares
+  one saturating helper with `cJSON_CreateNumber`, so it answers the defined 0
+  at both sites for free. This row has NO document target, which isolates the
+  divergence to the freshly-built number (`n2`/`sn2`) and proves the setter
+  reaches the cast on its own.
+- [x] `set-nan-quiet-number-target` [sha256:241f397092b7]: the same NaN onto a
+  parsed NUMBER target as well, so both the document node and `n2` take the cast.
+- [x] `set-nan-negative` [sha256:6391a5a4b77a]: same defect, negative quiet NaN.
+- [x] `set-nan-signalling` [sha256:0e46ef6b51ba]: same defect, signalling NaN payload.
+
+  Both classes above are **predicate-defined** — *every* non-number target, and
+  *every* NaN — so neither can be pinned case-by-case for the FUZZER. The `set`
+  mode therefore fuzzes against the corrected oracle
+  (`oracle/make_fixed_core.py` now patches `cJSON_SetNumberHelper` as well as
+  `cJSON_CreateNumber`), where both sides agree and any finding is a real port
+  bug. The ten rows above are the finite assertion against *shipped* cJSON and
+  fail if either divergence ever stops happening (LESSONS #28).
 
 - [ ] `scalar-parent-child` — **NOT YET ON THE COMPARED CONTRACT.** `cJSON`'s
   `add_item_to_array` / `add_item_to_object` never check that the parent is a
@@ -167,6 +224,45 @@ the port diverges and the divergence is judged an intentional fix-of-C-defect.
   clamps every count to the elements its payload actually holds. Stated here
   because "the differential shows no divergence" must not be misread as "the
   differential checked it".
+
+- **`cJSON_SetValuestring`'s overlapping `strcpy` (cJSON.c:418).** The
+  shorter-or-equal fast path is `strcpy(object->valuestring, valuestring)` with
+  nothing stopping the caller passing a pointer *into that same buffer* —
+  `cJSON_SetValuestring(item, item->valuestring + 2)` is a plausible "strip a
+  prefix" call and is an overlapping copy, undefined per C17 7.24.2.3. Confirmed
+  live, not reasoned: ASan reports `memcpy-param-overlap` at cJSON.c:418
+  (`spikes/setvaluestring_alias.c`; FLAW-SCAN.md **L4**). The port's signature is
+  `set_valuestring(&mut Value, Option<&[u8]>)`, so the target is exclusively
+  borrowed for the call and the replacement cannot be a view into it — the
+  aliasing is a *compile error*, not a runtime check. Invisible to the
+  differential because the C's answer to it is undefined behavior, so the `set`
+  mode deliberately never builds the state (LESSONS #36: a differential can only
+  compare where the C has an answer).
+
+- **`cJSON_SetNumberHelper`'s missing NULL check (cJSON.c:385).** Only the
+  `cJSON_SetNumberValue` MACRO guards the argument; the exported function
+  dereferences `object` immediately, so a caller who links against the symbol —
+  it is `CJSON_PUBLIC` and declared in the public header — gets a NULL-deref.
+  `&mut Value` has no null state. Also invisible to the differential, and for
+  the same reason: the C's answer is a segfault, not a value, so the `set` mode
+  calls it only for a target that exists.
+
+- **`cJSON_SetValuestring`'s length branch.** `strlen(new) <= strlen(old)` reuses
+  the existing allocation and the else-branch allocates a fresh one, but both
+  leave `valuestring` equal to the new C string and both return it, so the two
+  paths are indistinguishable from outside. The `set` mode crosses the branch in
+  both directions (its `s2` node's old text is the caller-controlled key) and
+  says so here rather than letting "the matrix covers both sides" imply the
+  differential can tell them apart. The port has one path: replace the owned
+  `Vec<u8>`.
+
+- **`cJSON_SetValuestring`'s `IsReference` and NULL-`valuestring` guards.** Both
+  need a node built by `cJSON_CreateStringReference`, which API-COVERAGE.md
+  refuses as out-of-scope (a borrowed pointer whose correctness depends on the
+  caller outliving the tree). The port never builds one, so the branches are
+  unreachable rather than untested — and the `set` mode does not fake them with
+  a hardcoded answer on the Rust side, which would be a control nothing invokes
+  (LESSONS #31).
 
 These historical-CVE classes are eliminated by Rust's type system and produce
 **no observable divergence**, so they never appear as ledger entries — they are

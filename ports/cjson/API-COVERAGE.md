@@ -16,15 +16,16 @@ it down and lock the progress in).
 
 ## The headline number, stated before the tables
 
-**92 exported symbols across both headers: 66 ported, 8 out-of-scope, 18
+**92 exported symbols across both headers: 68 ported, 8 out-of-scope, 16
 unported.** This port covers cJSON_Utils completely and the base library's
-parse / print / minify / query / build / **accessor** / **constructor** surface;
-**it does not cover the base library's mutation API** (detach, delete, insert,
-replace, and the two setters), nor the parse/print *options* surface. Anything
-that reads "cJSON is ported" without that sentence is overclaiming, which is why
-the gate prints the shortfall on every run rather than only on failure.
+parse / print / minify / query / build / **accessor** / **constructor** /
+**setter** surface; **it does not cover the rest of the base library's mutation
+API** (detach, delete, insert, replace), nor the parse/print *options* surface.
+Anything that reads "cJSON is ported" without that sentence is overclaiming,
+which is why the gate prints the shortfall on every run rather than only on
+failure.
 
-api-coverage: max-unported = 18
+api-coverage: max-unported = 16
 
 Why it exists (LESSONS #34, mechanizing #26): module 9 (`cJSON_Utils`) shipped
 **"DONE" through all six green gates with two of these 14 symbols never ported and
@@ -98,7 +99,7 @@ wired into the gate. Two notes on getting the *number* right first:
   is precisely the rounding-up this gate exists to stop. Their own contract —
   NULL arguments, type mismatches, detached-item ownership — is never called.
 
-### Ported — 52
+### Ported — 54
 
 | Symbol | Status | Where it is gated |
 |---|---|---|
@@ -155,6 +156,8 @@ wired into the gate. Two notes on getting the *number* right first:
 | `cJSON_AddRawToObject` | ported | driver mode `construct` (`addR`); the NULL-raw case adds nothing |
 | `cJSON_AddObjectToObject` | ported | driver mode `construct` (`addO`) |
 | `cJSON_AddArrayToObject` | ported | driver mode `construct` (`addA`) |
+| `cJSON_SetValuestring` | ported | driver mode `set` (`sv`/`sv2`/`svnull`/`svnum`); its `object == NULL`, non-string and NULL-replacement guards are each reached by a probe, and both sides of the `strlen(new) <= strlen(old)` branch are crossed. The overlapping-`strcpy` hazard at cJSON.c:418 is designed out, not compared — see DIVERGENCES.md, "Structural eliminations" |
+| `cJSON_SetNumberHelper` | ported | driver mode `set` (`sn`/`sn2`); saturation boundaries probed inclusive on both ends, NaN and the missing type check both ledgered. Called only for a non-NULL target: the exported symbol has no NULL check (only the `cJSON_SetNumberValue` macro does), and a segfault is not an answer to compare against |
 
 ### Out of scope — 8, each a deliberate refusal under the Prime Directive
 
@@ -195,7 +198,7 @@ and a 20-digit overflow with both sides normalizing identically. That is a wider
 space than `findptr`'s single pointer, and narrower than `patch`'s two-document
 op grammar, where 2000 was demonstrably insufficient.
 
-### Unported — 18, against the ceiling declared at the top
+### Unported — 16, against the ceiling declared at the top
 
 Real work not done, recorded as such. Grouped by what would be needed.
 
@@ -217,8 +220,6 @@ Real work not done, recorded as such. Grouped by what would be needed.
 | `cJSON_ReplaceItemInArray` | unported | as above |
 | `cJSON_ReplaceItemInObject` | unported | as above |
 | `cJSON_ReplaceItemInObjectCaseSensitive` | unported | as above |
-| `cJSON_SetNumberHelper` | unported | in-place number mutation behind the `cJSON_SetNumberValue` macro; needs the mutation surface above |
-| `cJSON_SetValuestring` | unported | in-place string replacement. cJSON reuses the existing buffer when the new string is no longer than the old — a length-dependent branch that is exactly what a differential mode should be pinning |
 
 ### High-budget sweep on the `construct` mode (LESSONS #33)
 
@@ -239,6 +240,26 @@ that four constructors reinterpret at three widths, so the fuzzer has more
 independent grammars to mutate here than anywhere except `patch`. The seed
 corpus includes the matrix's `stdin_b64` rows, which carry NaN bit patterns a
 UTF-8 seed string could not have spelled at all (LESSONS #36).
+
+### High-budget sweep on the `set` mode (LESSONS #33)
+
+Same discipline again, before calling the two setters done:
+
+| Mode | Seed | Iterations | Findings |
+|---|---|---|---|
+| `set` | 0 | 25 000 | 0 |
+| `set` | 12345 | 25 000 | 0 |
+| `set` | 777 | 25 000 | 0 |
+
+75 000 generated inputs, zero divergences (executed 2026-09-07, against the
+**corrected** oracle — DIVERGENCES.md `set-number-nan-*` and
+`set-*-type-confusion` are why this mode cannot fuzz against pristine cJSON).
+Three seeds because the input has three grammars the fuzzer mutates
+independently: a 16-hex-digit `<bits>` field that must normalize identically on
+both sides before any `double` exists, a `<key>\t<newstr>` pair the C reads as C
+strings, and the JSON document. The seed corpus includes the matrix's
+`stdin_b64` rows, whose replacement strings carry an interior NUL and lone
+0x80-0xFF bytes — inputs no UTF-8 seed string could spell (LESSONS #36).
 
 ### What this table changed
 

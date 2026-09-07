@@ -1454,3 +1454,78 @@ the emphasized half.
   ports/cjson/spikes/ (new, 3 reproducers + run.sh);
   ports/cjson/API-COVERAGE.md (the mutation rows point at the spike);
   skeleton/FLAW-SCAN.md.
+
+## 038. The hazard you READ instead of RAN is the one that is wrong
+
+*(2026-09-07, cJSON — module `dom-mutate-set`, the two in-place setters.)*
+
+- **What happened:** `MUTATION-API-SPIKE.md` opens its findings with *"Everything
+  below was executed against the vendored v1.7.18 under ASan/UBSan, not inferred
+  from reading."* That was true of H1–H3, the scary ones. H4–H6 — the small
+  module's hazards — were **read**. H6 looked at
+  `strcpy(object->valuestring, valuestring)` in `cJSON_SetValuestring`, checked
+  that the destination is always at least as long as the source, concluded
+  *"memory-safe as written"*, and moved on to interior NULs.
+
+  Buffer length was the right answer to the wrong question. Nothing stops the
+  source pointing **into** the destination:
+  `cJSON_SetValuestring(item, item->valuestring + 2)` is a plausible in-place
+  prefix strip, it passes the length test, and it is an overlapping copy —
+  undefined per C17 7.24.2.3. ASan says so the first time you run it
+  (`strcpy-param-overlap`, cJSON.c:418). Ten lines of C, one compile, one run.
+- **Two things that should have made it louder.** First, that exact line was
+  already one of the Phase-0 flaw scan's 17 copy-sink hits, and `FLAW-SCAN.md`
+  had already triaged it as benign — by the same reading, about the same
+  question. Second, the spike existed *specifically* to stop this: "spike the
+  scary module before scheduling it" is the kit's most expensive habit, and the
+  spike did find the aliasing bug in `DetachItemViaPointer`, because it ran it.
+  It missed the aliasing bug in `SetValuestring`, three functions away, because
+  it only read it.
+- **Why mixing the two is worse than reading everything.** A document that says
+  "executed, not inferred" lends the credibility of its executed claims to its
+  read ones. A reader — including the author, three sessions later — cannot tell
+  which is which, so the weakest claim inherits the strongest claim's authority.
+  This is LESSONS #37's shape (a record's *reach* must be stated) applied to a
+  spike instead of a scan, and LESSONS #35's (an unstated scope argument is the
+  next place the hole moves to).
+- **The rule:** *in any document that claims its findings were executed, label
+  every claim as executed or read, per claim.* And for anything you are about to
+  call benign, write the ten-line program that would prove it isn't, and run it.
+  If you cannot think of such a program, that itself goes in the record — it is
+  a much more useful sentence than "safe".
+- **Kit change:** `skeleton/SPIKE.md` (new) — a hazard-log template whose table
+  carries a mandatory per-hazard **Evidence** column (`ran: <reproducer>` or
+  `read`) and a closing rule that a `read` row may not be called benign without
+  saying what was not tried. `skills/porting-kit-module/SKILL.md`'s spike step
+  now points at it and states the per-claim labelling rule. `PLAYBOOK.md`'s
+  Phase-4 spike bullet likewise.
+- **The same discipline, applied to the new gate.** The module's differential
+  was fail-closed-verified by injection (LESSONS #6/#18), and one injection
+  *stayed green*: deleting `set_valuestring`'s NUL truncation changed nothing
+  across all 52 matrix rows. Not a hole — the C physically cannot store an
+  interior NUL there and every reader on both sides truncates, so it is a
+  canonicalization rather than an observable behavior. But the only way to learn
+  which of a module's claims its gate actually holds is to try to break each one.
+  The answer was a unit test plus a comment saying the differential cannot see
+  this, not a bigger descriptor. Two other injections (dropping the type guard,
+  making the number setter a no-op) went red with 48 divergences each.
+- **What the module found on top of it:** `cJSON_SetNumberHelper` performs **no
+  type check** — it writes `valueint`/`valuedouble` into any node, leaving a
+  `cJSON_String` that carries a number (CWE-843, and both fields are public).
+  The spike's H4/H5 caught the missing NULL check and the NaN cast in that same
+  function and did not mention the type check, for the same reason: nobody ran
+  it. Both are now ledgered, and the port's enum makes the confused state
+  unrepresentable.
+- **Section amended:** ports/cjson/MUTATION-API-SPIKE.md (H7, a status header,
+  and §4/§5/§6 updated); ports/cjson/FLAW-SCAN.md (L4/L5, and the copy-sink
+  triage's own miss called out); ports/cjson/spikes/setvaluestring_alias.c (new);
+  ports/cjson/spikes/run.sh; ports/cjson/DIVERGENCES.md (10 pinned rows + 4
+  structural eliminations); ports/cjson/oracle/make_fixed_core.py (a second
+  patch site, and a patch LIST instead of one hardcoded pair);
+  ports/cjson/oracle/cjson_modes.{c,h} + driver.c (the `set` mode);
+  ports/cjson/rust/crates/core/src/dom.rs (`set_valuestring`, `set_number`,
+  `value_double`, `get_object_item_mut`);
+  ports/cjson/rust/crates/core/src/modes.rs (the `set` mode; `push_bytes` made
+  NUL-truncating to match its C counterpart); ports/cjson/check.sh;
+  ports/cjson/API-COVERAGE.md (ratchet 18 -> 16); skeleton/SPIKE.md (new);
+  skills/porting-kit-module/SKILL.md; PLAYBOOK.md.

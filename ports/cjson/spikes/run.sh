@@ -2,11 +2,17 @@
 # Reproduce the mutation-API hazards documented in ../MUTATION-API-SPIKE.md
 # against the vendored cJSON, under ASan + UBSan.
 #
-# These are SPIKE programs, not gates: `check.sh` does not run them, and two of
-# the three are EXPECTED to abort. They are committed because the spike document
-# makes claims about a dependency's behavior, and a claim whose evidence lives
-# only in the session that made it is a claim nobody can re-check later
-# (LESSONS #32). Run this to re-derive every quoted result from scratch.
+# These are SPIKE programs, not gates: `check.sh` does not run them, and three
+# of the four are EXPECTED to abort. They are committed because the spike
+# document and FLAW-SCAN.md make claims about a dependency's behavior, and a
+# claim whose evidence lives only in the session that made it is a claim nobody
+# can re-check later (LESSONS #32). Run this to re-derive every quoted result
+# from scratch.
+#
+# LESSONS #38: a spike hazard counts as executed only while its reproducer is
+# committed AND runnable. This script is what keeps every `ran:` row in
+# ../MUTATION-API-SPIKE.md's evidence table honest — a row whose program has
+# rotted is a `read` row wearing a `ran:` label.
 #
 # Usage: bash spikes/run.sh
 set -uo pipefail                 # NOT -e: the first spike is meant to crash
@@ -29,3 +35,4 @@ run() {
 run detach_null_write            "ASan SEGV, WRITE, cJSON.c:2231"
 run detach_cross_document        "B modified though only A was named"
 run detach_corruption_cashes_in  "append to A lands in B"
+run setvaluestring_alias         "ASan strcpy-param-overlap, cJSON.c:418"

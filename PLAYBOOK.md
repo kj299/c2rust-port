@@ -210,6 +210,15 @@ experiment on the one scary syscall/idiom to learn its behavior (does it block?
 need privilege? vary by version?) *before* committing to a design. Record the
 result. This is the single highest-ROI habit in the retrospective.
 
+Write the record from `skeleton/SPIKE.md`, and **label every hazard `ran:` or
+`read`** (LESSONS #38). Mixing the two silently lends the executed claims'
+credibility to the reasoned ones; the cJSON mutation spike ran its headline
+hazard, read its small ones, and the read one that called a line "memory-safe as
+written" was the only claim in the document that was wrong. A `read` row you are
+about to call benign must name the case you did not try — and naming it is
+usually enough to run it. Commit the reproducers under the port's `spikes/`
+(LESSONS #32).
+
 **For a *research-grade* capability — one that might be impossible, not merely
 hard** (winlsof: socket-FD correlation, byte-range locks, AF_UNIX/raw) — run the
 **spike-and-gate ritual** instead of an open-ended attempt (LESSONS #1). It was

@@ -425,6 +425,118 @@ char *cjson_modes_construct(long count, const char *name, const char *raw,
     return b.p;
 }
 
+/* ---- `set` mode: the two in-place setters -------------------------------- */
+
+/* One item, as the struct fields a C caller reads straight off the pointer plus
+ * its printed form. `valuedouble` is here because it is the field
+ * cJSON_SetNumberHelper writes, and it writes it WITHOUT a type check — so a
+ * string node can end up carrying a number, which no accessor would ever show.
+ * The descriptor shows it, which is the whole point: an intentional divergence
+ * has to be observable or the ledger entry is asserting something unmeasured
+ * (LESSONS #31). */
+static void sb_item(struct sbuf *b, const cJSON *it) {
+    char *printed;
+    if (it == NULL) {
+        sb_str(b, "-");
+        return;
+    }
+    sb_str(b, "t");
+    sb_int(b, it->type);
+    sb_str(b, ",i");
+    sb_int(b, it->valueint);
+    sb_str(b, ",d");
+    sb_double(b, it->valuedouble);
+    sb_str(b, ",s");
+    sb_bytes(b, it->valuestring);
+    sb_str(b, ",p");
+    printed = cJSON_PrintUnformatted(it);
+    sb_str(b, printed ? printed : "-");
+    cJSON_free(printed);
+}
+
+char *cjson_modes_set(double num, const char *key, const char *newstr,
+                      const char *json, size_t json_len) {
+    /* A NULL root is NOT an error here (unlike `access`/`query`): the setters
+     * are the surface under test and they must still run, so an unparseable
+     * document just means the document-target calls take their NULL path. */
+    cJSON *root = cJSON_ParseWithLength(json, json_len);
+    cJSON *target = (root != NULL)
+                        ? cJSON_GetObjectItemCaseSensitive(root, key)
+                        : NULL;
+
+    /* Called with `target` even when it is NULL: cJSON_SetValuestring's FIRST
+     * guard is `object == NULL`, so passing NULL is how that branch is
+     * exercised rather than assumed. cJSON_SetNumberHelper below has no such
+     * guard, which is why it is the one call that must be conditional. */
+    const char *sv = cJSON_SetValuestring(target, newstr);
+    int have_sn = (target != NULL);
+    double sn = have_sn ? cJSON_SetNumberHelper(target, num) : 0.0;
+
+    /* A fresh string node whose OLD value is the key: with key and newstr both
+     * caller-controlled, one input reaches either side of
+     * `strlen(new) <= strlen(old)` (cJSON.c:416). The two paths are not
+     * distinguishable from outside — the shorter one reuses the buffer and the
+     * longer one allocates, but both leave `valuestring` equal to the new C
+     * string and both return it — so this crosses the branch without being
+     * able to tell which side it took. Said out loud because assuming a branch
+     * is covered because an input reaches it is how the C's own defects
+     * survive. */
+    cJSON *s2 = cJSON_CreateString(key);
+    const char *sv2 = cJSON_SetValuestring(s2, newstr);
+    /* the documented NULL-replacement error path (cJSON.c:402 comment) */
+    const char *svnull = cJSON_SetValuestring(s2, NULL);
+
+    /* A NUMBER node: first the "not a cJSON_String" guard, then the setter that
+     * owns this node's type. Same node for both so the descriptor shows the
+     * number setter's effect on a node the string setter just refused. */
+    cJSON *n2 = cJSON_CreateNumber(0);
+    const char *svnum = cJSON_SetValuestring(n2, newstr);
+    double sn2 = (n2 != NULL) ? cJSON_SetNumberHelper(n2, num) : 0.0;
+
+    char *proot = (root != NULL) ? cJSON_PrintUnformatted(root) : NULL;
+
+    size_t cap = 4096 + (strlen(key) + strlen(newstr) + json_len
+                         + (proot ? strlen(proot) : 0)) * 8;
+    struct sbuf b;
+    b.p = (char *)malloc(cap);
+    b.cap = cap;
+    b.len = 0;
+    b.ok = (b.p != NULL);
+    if (b.p != NULL) b.p[0] = '\0';
+
+    sb_str(&b, "tgt=");
+    sb_item(&b, target);
+    sb_str(&b, ";sv=");
+    sb_bytes(&b, sv);
+    sb_str(&b, ";sn=");
+    if (have_sn) sb_double(&b, sn); else sb_str(&b, "-");
+    sb_str(&b, ";s2=");
+    sb_item(&b, s2);
+    sb_str(&b, ";sv2=");
+    sb_bytes(&b, sv2);
+    sb_str(&b, ";svnull=");
+    sb_bytes(&b, svnull);
+    sb_str(&b, ";svnum=");
+    sb_bytes(&b, svnum);
+    sb_str(&b, ";n2=");
+    sb_item(&b, n2);
+    sb_str(&b, ";sn2=");
+    sb_double(&b, sn2);
+    sb_str(&b, ";doc=");
+    sb_str(&b, proot ? proot : "-");
+
+    cJSON_free(proot);
+    cJSON_Delete(n2);
+    cJSON_Delete(s2);
+    cJSON_Delete(root);
+
+    if (!b.ok) {
+        free(b.p);
+        return NULL;
+    }
+    return b.p;
+}
+
 char *cjson_modes_query(const char *key, const char *json, size_t json_len) {
     cJSON *item = cJSON_ParseWithLength(json, json_len);
     if (item == NULL) return NULL;

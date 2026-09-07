@@ -1,0 +1,344 @@
+{
+  "module": "dom-mutate-set",
+  "modules": [
+    "dom-mutate-set"
+  ],
+  "probes": [
+    {
+      "id": "set-no-target-missing-key",
+      "args": [
+        "set"
+      ],
+      "stdin": "3ff0000000000000\tzz\tx\n{\"n\":1}",
+      "note": "no such key: cJSON_SetValuestring's OWN `object == NULL` guard, and the one call the mode must skip (cJSON_SetNumberHelper has no NULL check at all -- sn=-)"
+    },
+    {
+      "id": "set-no-target-root-array",
+      "args": [
+        "set"
+      ],
+      "stdin": "3ff0000000000000\tk\tx\n[1,2,3]",
+      "note": "cJSON_GetObjectItemCaseSensitive on an ARRAY answers NULL, so the whole document path takes its no-target branch"
+    },
+    {
+      "id": "set-no-target-root-scalar",
+      "args": [
+        "set"
+      ],
+      "stdin": "3ff0000000000000\tk\tx\n\"top\"",
+      "note": "same for a scalar root -- the lookup has no child list to walk"
+    },
+    {
+      "id": "set-doc-unparseable",
+      "args": [
+        "set"
+      ],
+      "stdin": "3ff0000000000000\tk\tx\n{oops",
+      "note": "an unparseable document is NOT an error in this mode (rc=0, doc=-): the setters are the surface under test and must still run. Every other mode exits 1 here"
+    },
+    {
+      "id": "set-doc-empty",
+      "args": [
+        "set"
+      ],
+      "stdin": "3ff0000000000000\tk\tx\n",
+      "note": "empty document: ParseWithLength(.., 0) fails, same no-target path"
+    },
+    {
+      "id": "set-number-target-in-range",
+      "args": [
+        "set"
+      ],
+      "stdin": "4008000000000000\tn\tx\n{\"n\":1}",
+      "note": "the ordinary path: a NUMBER target, so cJSON_SetValuestring refuses it (not a cJSON_String) and cJSON_SetNumberHelper owns it"
+    },
+    {
+      "id": "set-number-target-zero",
+      "args": [
+        "set"
+      ],
+      "stdin": "0000000000000000\tn\t\n{\"n\":42}",
+      "note": "setting 0 over an existing number, with an EMPTY replacement string"
+    },
+    {
+      "id": "set-number-target-neg-zero",
+      "args": [
+        "set"
+      ],
+      "stdin": "8000000000000000\tn\tx\n{\"n\":1}",
+      "note": "-0.0: valueint is 0 and the sign survives only in valuedouble's bits, which is why the descriptor carries bits rather than a formatted float"
+    },
+    {
+      "id": "set-number-target-fraction",
+      "args": [
+        "set"
+      ],
+      "stdin": "c01e000000000000\tn\tx\n{\"n\":1}",
+      "note": "-7.5 truncates TOWARD ZERO into valueint (-7) while valuedouble stays exact"
+    },
+    {
+      "id": "set-number-target-saturate-high",
+      "args": [
+        "set"
+      ],
+      "stdin": "41e65a0bc0000000\tn\tx\n{\"n\":1}",
+      "note": "3e9 > INT_MAX: the first saturation guard (cJSON.c:386)"
+    },
+    {
+      "id": "set-number-target-saturate-low",
+      "args": [
+        "set"
+      ],
+      "stdin": "c1e65a0bc0000000\tn\tx\n{\"n\":1}",
+      "note": "-3e9 < INT_MIN: the second saturation guard"
+    },
+    {
+      "id": "set-number-target-int-max",
+      "args": [
+        "set"
+      ],
+      "stdin": "41dfffffffc00000\tn\tx\n{\"n\":1}",
+      "note": "exactly INT_MAX as a double: `number >= INT_MAX` is TRUE, so it saturates rather than casting -- the boundary is inclusive"
+    },
+    {
+      "id": "set-number-target-int-max-minus-one",
+      "args": [
+        "set"
+      ],
+      "stdin": "41dfffffff800000\tn\tx\n{\"n\":1}",
+      "note": "one representable step below: the cast branch, not the guard"
+    },
+    {
+      "id": "set-number-target-int-min",
+      "args": [
+        "set"
+      ],
+      "stdin": "c1e0000000000000\tn\tx\n{\"n\":1}",
+      "note": "exactly INT_MIN as a double: `number <= (double)INT_MIN` is TRUE, also inclusive"
+    },
+    {
+      "id": "set-number-target-inf",
+      "args": [
+        "set"
+      ],
+      "stdin": "7ff0000000000000\tn\tx\n{\"n\":1}",
+      "note": "+inf saturates to INT_MAX and PRINTS as null (cJSON refuses to emit a non-finite number)"
+    },
+    {
+      "id": "set-number-target-neg-inf",
+      "args": [
+        "set"
+      ],
+      "stdin": "fff0000000000000\tn\tx\n{\"n\":1}",
+      "note": "-inf saturates to INT_MIN, prints null"
+    },
+    {
+      "id": "set-number-target-huge",
+      "args": [
+        "set"
+      ],
+      "stdin": "7fe1ccf385ebc8a0\tn\tx\n{\"n\":1}",
+      "note": "1e308: finite but far past INT_MAX; prints in full precision"
+    },
+    {
+      "id": "set-number-target-subnormal",
+      "args": [
+        "set"
+      ],
+      "stdin": "0000000000000001\tn\tx\n{\"n\":1}",
+      "note": "the smallest positive subnormal: valueint 0, valuedouble non-zero"
+    },
+    {
+      "id": "set-number-target-half",
+      "args": [
+        "set"
+      ],
+      "stdin": "3fe0000000000000\tn\tx\n{\"n\":1}",
+      "note": "0.5 truncates to 0 -- a number whose valueint and valuedouble disagree, which is what the printer's integer fast-path keys off"
+    },
+    {
+      "id": "set-dup-key-first-wins",
+      "args": [
+        "set"
+      ],
+      "stdin": "4008000000000000\tk\tx\n{\"k\":1,\"k\":2}",
+      "note": "duplicate keys: the C walks the child list and stops at the FIRST match, so only the first is set"
+    },
+    {
+      "id": "set-lookup-is-case-sensitive",
+      "args": [
+        "set"
+      ],
+      "stdin": "3ff0000000000000\tk\tx\n{\"K\":1}",
+      "note": "this mode uses cJSON_GetObjectItemCaseSensitive, so `k` does not find `K` -- no target"
+    },
+    {
+      "id": "set-newstr-empty-on-empty-key",
+      "args": [
+        "set"
+      ],
+      "stdin": "3ff0000000000000\t\t\n{}",
+      "note": "empty key AND empty replacement: s2 is CreateString(\"\"), then set to \"\" -- strlen(new) <= strlen(old) with both zero"
+    },
+    {
+      "id": "set-newstr-longer-than-key",
+      "args": [
+        "set"
+      ],
+      "stdin": "3ff0000000000000\tk\tabcdefghijklmnop\n{}",
+      "note": "s2's old text is 1 byte and the new is 16: the ALLOCATING side of cJSON.c:416. Crossed, but not distinguishable from outside -- both paths leave the same valuestring"
+    },
+    {
+      "id": "set-newstr-shorter-than-key",
+      "args": [
+        "set"
+      ],
+      "stdin": "3ff0000000000000\tabcdefghij\tz\n{}",
+      "note": "the reverse: the in-place strcpy side of the same branch"
+    },
+    {
+      "id": "set-newstr-equal-length",
+      "args": [
+        "set"
+      ],
+      "stdin": "3ff0000000000000\tabc\txyz\n{}",
+      "note": "exactly equal lengths -- `<=` makes this the in-place side, so the boundary is pinned"
+    },
+    {
+      "id": "set-newstr-escapes",
+      "args": [
+        "set"
+      ],
+      "stdin": "3ff0000000000000\tk\ta\"b\\\\c\n{}",
+      "note": "a replacement needing JSON escaping: the descriptor carries the RAW bytes (length-prefixed) and the printed form separately"
+    },
+    {
+      "id": "set-newstr-interior-nul",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "M2ZmMDAwMDAwMDAwMDAwMAlrCWFiAGNkCnt9",
+      "note": "an interior NUL in the replacement: cJSON_SetValuestring takes a `const char *`, so it copies \"ab\" and the rest is gone (LESSONS #29). Needs stdin_b64 -- a JSON string cannot spell it (LESSONS #36)"
+    },
+    {
+      "id": "set-key-interior-nul",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "M2ZmMDAwMDAwMDAwMDAwMAlrAGV4dHJhCXgKeyJrIjoxfQ==",
+      "note": "an interior NUL in the KEY: the driver hands cJSON a C string, so the lookup is for `k` and it FINDS the target"
+    },
+    {
+      "id": "set-newstr-high-bytes",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "M2ZmMDAwMDAwMDAwMDAwMAlrCf/+gAp7fQ==",
+      "note": "bytes 0x80-0xFF in the replacement: cJSON copies string content verbatim with no UTF-8 validation, and the printer emits them raw"
+    },
+    {
+      "id": "set-newstr-control-byte",
+      "args": [
+        "set"
+      ],
+      "stdin": "3ff0000000000000\tk\ta\u0001b\n{}",
+      "note": "a control byte: printed as \\u0001, so the raw bytes and the printed form differ"
+    },
+    {
+      "id": "set-target-string-with-interior-nul-no-write",
+      "args": [
+        "set"
+      ],
+      "stdin": "3ff0000000000000\tzz\tx\n{\"k\":\"a\\u0000bcdef\"}",
+      "note": "a PARSED string carrying an interior NUL, but NOT targeted: pins that the descriptor's byte fields are C-string fields (the `set` target here is absent)"
+    },
+    {
+      "id": "set-bits-junk",
+      "args": [
+        "set"
+      ],
+      "stdin": "zz\tn\tx\n{\"n\":1}",
+      "note": "a non-hex bits field reads as 0 on both sides before any double exists"
+    },
+    {
+      "id": "set-bits-empty",
+      "args": [
+        "set"
+      ],
+      "stdin": "\tn\tx\n{\"n\":1}",
+      "note": "an empty bits field is also 0 -- the field is optional in effect, never an error"
+    },
+    {
+      "id": "set-bits-uppercase",
+      "args": [
+        "set"
+      ],
+      "stdin": "7FF0000000000000\tn\tx\n{\"n\":1}",
+      "note": "uppercase hex digits are accepted, giving +inf"
+    },
+    {
+      "id": "set-bits-seventeen-digits",
+      "args": [
+        "set"
+      ],
+      "stdin": "3ff0000000000000f\tn\tx\n{\"n\":1}",
+      "note": "17 hex digits: only the first 16 are read, so the trailing nibble is ignored rather than shifting the value"
+    },
+    {
+      "id": "set-bits-trailing-junk",
+      "args": [
+        "set"
+      ],
+      "stdin": "3ff0zzzz\tn\tx\n{\"n\":1}",
+      "note": "the scan stops at the first non-hex character, so this is 0x3ff0 -- a tiny subnormal, not 1.0"
+    },
+    {
+      "id": "set-bits-short",
+      "args": [
+        "set"
+      ],
+      "stdin": "8\tn\tx\n{\"n\":1}",
+      "note": "a single digit: 0x8, the eighth subnormal"
+    },
+    {
+      "id": "set-nested-number-target",
+      "args": [
+        "set"
+      ],
+      "stdin": "4008000000000000\tn\tx\n{\"a\":{\"b\":1},\"n\":7}",
+      "note": "a nested document, target at top level: the rest of the tree must come back unchanged in doc="
+    },
+    {
+      "id": "set-usage-no-newline",
+      "args": [
+        "set"
+      ],
+      "stdin": "3ff0000000000000\tk\tx",
+      "note": "no newline: usage error, rc 2 with nothing on stdout"
+    },
+    {
+      "id": "set-usage-one-tab",
+      "args": [
+        "set"
+      ],
+      "stdin": "3ff0000000000000\tk\n{}",
+      "note": "only one tab: usage error"
+    },
+    {
+      "id": "set-usage-no-tabs",
+      "args": [
+        "set"
+      ],
+      "stdin": "abc\n{}",
+      "note": "no tabs at all: usage error"
+    },
+    {
+      "id": "set-usage-tab-after-newline",
+      "args": [
+        "set"
+      ],
+      "stdin": "3ff0000000000000\n{}\tk\tx",
+      "note": "the tabs must be in the HEAD line; one after the newline does not count"
+    }
+  ]
+}

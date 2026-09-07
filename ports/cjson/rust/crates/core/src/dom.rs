@@ -236,6 +236,36 @@ pub fn get_object_item<'a>(v: &'a Value, name: &[u8], case_sensitive: bool) -> O
         .map(|(_, val)| val)
 }
 
+/// [`get_object_item`], but handing back a mutable borrow so the in-place
+/// setters can be applied to a member of a parsed document.
+///
+/// In C this distinction does not exist: `cJSON_GetObjectItem` returns a plain
+/// `cJSON *` and the caller may write through it whenever it likes, including
+/// after the document has been freed. Here the returned borrow keeps the
+/// document alive and exclusive for exactly as long as it is held, which is what
+/// makes `cJSON_SetValuestring`'s aliasing hazard unspellable (see
+/// [`set_valuestring`]).
+#[must_use]
+pub fn get_object_item_mut<'a>(
+    v: &'a mut Value,
+    name: &[u8],
+    case_sensitive: bool,
+) -> Option<&'a mut Value> {
+    let Value::Object(entries) = v else {
+        return None;
+    };
+    entries
+        .iter_mut()
+        .find(|(k, _)| {
+            if case_sensitive {
+                strcmp_eq(k, name)
+            } else {
+                eq_ci(k, name)
+            }
+        })
+        .map(|(_, val)| val)
+}
+
 /// cJSON.c `cJSON_GetArraySize` — counts the node's CHILDREN, whatever the node
 /// is: the C walks `array->child` and follows `next`, so an *object* reports its
 /// member count, not 0.
@@ -296,6 +326,23 @@ pub fn value_string(v: &Value) -> Option<&[u8]> {
     }
 }
 
+/// C `valuedouble`. Every node the C builds comes from `cJSON_New_Item`, which
+/// `memset`s the struct to zero, and only `parse_number` / `cJSON_CreateNumber`
+/// / `cJSON_SetNumberHelper` ever write the field — so a non-number reads 0.0.
+///
+/// The port's enum reproduces that for every node it can build. The one place it
+/// cannot is `cJSON_SetNumberHelper`, which writes `valuedouble` (and
+/// `valueint`) with **no type check at all**, leaving a `cJSON_String` node
+/// carrying a number. See [`set_number`] — that is a ledgered divergence, and
+/// this accessor is how the `set` driver mode makes it visible.
+#[must_use]
+pub fn value_double(v: &Value) -> f64 {
+    match v {
+        Value::Number(n) => n.d,
+        _ => 0.0,
+    }
+}
+
 // ---- type predicates (cJSON_Is*) -------------------------------------------
 
 /// `cJSON_IsBool` answers true for BOTH `True` and `False`, so a `true` value
@@ -336,6 +383,106 @@ is_variant!(/// `cJSON_IsObject`
 #[must_use]
 pub fn is_invalid(_v: &Value) -> bool {
     false
+}
+
+// ---- in-place setters (cJSON_Set*) -----------------------------------------
+
+/// cJSON.c:403 `cJSON_SetValuestring` — replace a string node's text in place.
+/// `None` for a non-string target or a `None` replacement, matching the C's two
+/// NULL-returning guards; otherwise the new (NUL-truncated) bytes.
+///
+/// **Three of the C's behaviors are designed out rather than reproduced**, and
+/// the differential cannot see any of them, which is why they are written here:
+///
+/// 1. **The overlapping `strcpy` (cJSON.c:418) — a live UB defect.** The C's
+///    "new is no longer than old" fast path is
+///    `strcpy(object->valuestring, valuestring)`, and nothing stops the caller
+///    passing a pointer *into that same buffer* — `cJSON_SetValuestring(item,
+///    item->valuestring + 2)` is a plausible "strip a prefix" call and is an
+///    overlapping copy, undefined per C17 7.24.2.3. Not theoretical: ASan
+///    reports `memcpy-param-overlap` at cJSON.c:418 (`spikes/setvaluestring_alias.c`,
+///    FLAW-SCAN.md L4). Here the target is `&mut Value` and the replacement is a
+///    separate slice, so a caller cannot name both at once — the borrow checker
+///    rejects it at compile time.
+/// 2. **The `object->valuestring == NULL` guard** is unreachable for the port:
+///    `Value::String` always owns its bytes, and the only C nodes that can carry
+///    a NULL `valuestring` while claiming to be strings come from
+///    `cJSON_CreateStringReference`, which API-COVERAGE.md refuses as
+///    out-of-scope.
+/// 3. **The `cJSON_IsReference` guard**, for the same reason — the port never
+///    builds a borrowed-pointer node.
+///
+/// What the differential DOES compare is the observable result: which calls
+/// answer NULL, and what the node's text is afterwards. The C's length branch is
+/// crossed in both directions by the `set` driver mode but is not
+/// *distinguishable* from outside — both paths leave `valuestring` equal to the
+/// new C string and return it (DIVERGENCES.md, "Structural eliminations").
+pub fn set_valuestring<'a>(v: &'a mut Value, s: Option<&[u8]>) -> Option<&'a [u8]> {
+    let s = s?;
+    match v {
+        Value::String(cur) => {
+            // `cstr`, not the whole slice: the C copies with `strcpy`, so an
+            // interior NUL ends the value here exactly as it does in every
+            // other constructor (LESSONS #29).
+            //
+            // Unlike the other boundaries, this one is a CANONICALIZATION the
+            // differential cannot see, and saying so beats implying otherwise.
+            // Deleting the `cstr` was injected deliberately and the `set` matrix
+            // stayed green: the C physically cannot store an interior NUL here
+            // (it arrives through a `const char *`), and every reader on both
+            // sides — the printer, `strcmp_eq`, the descriptor's `sb_bytes`
+            // counterpart — truncates, so the extra bytes are unreachable. It is
+            // still right to drop them: `Value` equality and any future
+            // full-bytes consumer would otherwise see a state parsing can
+            // produce but this setter should not. Pinned by
+            // `set_valuestring_truncates_at_a_nul`, which is the only thing
+            // holding it.
+            *cur = cstr(s).to_vec();
+            Some(cur.as_slice())
+        }
+        _ => None,
+    }
+}
+
+/// cJSON.c:384 `cJSON_SetNumberHelper` — the function behind the
+/// `cJSON_SetNumberValue` macro. Returns the number it was given, as the C does
+/// (`return object->valuedouble = number;`).
+///
+/// **INTENTIONAL DIVERGENCE: the C performs NO TYPE CHECK.** It writes
+/// `valueint` and `valuedouble` into whatever node it is handed, so
+/// `cJSON_SetNumberValue(a_string_node, 5)` leaves a node whose `type` says
+/// `cJSON_String` and whose `valuedouble` says 5 — a type-confused state no
+/// accessor will ever report (`cJSON_GetNumberValue` checks `cJSON_IsNumber`
+/// first) but that any caller reading the public struct fields will see. The
+/// port cannot represent it: `Value::String` has no number to write. So the
+/// operation is a no-op on a non-number, which is also the safer answer — the
+/// inconsistent state is unrepresentable rather than merely undocumented.
+/// Ledgered as `set-*-type-confusion` (6 rows) and pinned by the `set` matrix,
+/// which shows the target's `type`/`valueint`/`valuedouble` precisely so the
+/// divergence is measured rather than asserted (LESSONS #31).
+///
+/// Nobody found this by reading. The mutation spike read this same function
+/// twice — H4 for its missing NULL check, H5 for the NaN cast below — and
+/// neither pass noticed the missing type check; the `set` driver mode's first
+/// non-number target did (LESSONS #38).
+///
+/// **INTENTIONAL DIVERGENCE for NaN**, identical to [`number`]'s: a NaN falls
+/// past both of the C's saturation guards into `(int)number`, which is UB
+/// (C17 6.3.1.4p1) and answers INT_MIN on x86-64 and 0 on AArch64. Sharing
+/// [`number`] is what gives the port the defined answer here for free —
+/// DIVERGENCES.md `set-number-nan-valueint`.
+///
+/// **STRUCTURAL ELIMINATION: the missing NULL check.** The exported symbol
+/// dereferences `object` immediately; only the macro guards it, so a caller who
+/// links against `cJSON_SetNumberHelper` (it is `CJSON_PUBLIC`) gets a
+/// NULL-deref. `&mut Value` has no null state, so the hazard does not exist
+/// here — and it cannot be differentially tested either, because the C's answer
+/// to it is a segfault, not a value.
+pub fn set_number(v: &mut Value, d: f64) -> f64 {
+    if matches!(v, Value::Number(_)) {
+        *v = number(d);
+    }
+    d
 }
 
 // ---- builders (Add*) -------------------------------------------------------
@@ -726,5 +873,134 @@ mod tests {
             print_value(&root, false).unwrap(),
             br#"{"k":{"unescaped":"quotes"}}"#.to_vec()
         );
+    }
+
+    /// DIVERGENCES.md `set-*-type-confusion`. The C writes `valueint` and
+    /// `valuedouble` into whatever node it is handed; the port refuses, so the
+    /// node stays exactly what it was. The RETURN value still matches the C's
+    /// (`return object->valuedouble = number` gives back `number` either way),
+    /// which is why only the struct-field view of the target diverges.
+    #[test]
+    fn set_number_on_a_non_number_leaves_the_node_alone_but_returns_the_number() {
+        for mut v in [
+            Value::String(b"text".to_vec()),
+            Value::True,
+            Value::Null,
+            Value::Array(vec![Value::Null]),
+            Value::Object(Vec::new()),
+            Value::Raw(b"1".to_vec()),
+        ] {
+            let before = v.clone();
+            assert_eq!(set_number(&mut v, 3.0), 3.0);
+            assert_eq!(v, before, "set_number must not touch a non-number");
+            assert_eq!(value_double(&v), 0.0);
+        }
+        // ...and on a real number it does the whole job.
+        let mut n = number(1.0);
+        assert_eq!(set_number(&mut n, -7.5), -7.5);
+        assert_eq!(value_int(&n), -7);
+        assert_eq!(value_double(&n), -7.5);
+    }
+
+    /// DIVERGENCES.md `set-nan-*`: the second site of the `(int)NaN` cast. The
+    /// port answers the DEFINED 0 rather than x86-64's INT_MIN, and it does so
+    /// by sharing one helper with `cJSON_CreateNumber` rather than by having a
+    /// second copy of the rule that could drift.
+    #[test]
+    fn set_number_nan_valueint_is_zero_at_this_site_too() {
+        for nan in [f64::NAN, -f64::NAN, f64::from_bits(0x7ff0_0000_0000_0001)] {
+            let mut n = number(1.0);
+            set_number(&mut n, nan);
+            assert_eq!(value_int(&n), 0);
+            assert!(value_double(&n).is_nan());
+        }
+    }
+
+    /// The saturation guards are `>=` and `<=`, so both boundaries land on the
+    /// guard rather than on the cast (cJSON.c:386-395).
+    #[test]
+    fn set_number_saturation_boundaries_are_inclusive() {
+        let mut n = number(0.0);
+        set_number(&mut n, f64::from(i32::MAX));
+        assert_eq!(value_int(&n), i32::MAX);
+        set_number(&mut n, f64::from(i32::MIN));
+        assert_eq!(value_int(&n), i32::MIN);
+        set_number(&mut n, f64::INFINITY);
+        assert_eq!(value_int(&n), i32::MAX);
+        set_number(&mut n, f64::NEG_INFINITY);
+        assert_eq!(value_int(&n), i32::MIN);
+    }
+
+    /// Both of the C's NULL-returning guards, and the fact that a refused call
+    /// changes nothing.
+    #[test]
+    fn set_valuestring_refuses_a_non_string_or_a_missing_replacement() {
+        let mut n = number(1.0);
+        assert!(set_valuestring(&mut n, Some(b"x")).is_none());
+        assert_eq!(n, number(1.0));
+
+        let mut s = Value::String(b"keep".to_vec());
+        assert!(set_valuestring(&mut s, None).is_none());
+        assert_eq!(s, Value::String(b"keep".to_vec()));
+    }
+
+    /// LESSONS #29 at this boundary too: the C copies with `strcpy`, so an
+    /// interior NUL ends the value however many bytes the caller passed.
+    ///
+    /// **This test is the only thing pinning it.** Removing the `cstr` call was
+    /// injected into the port deliberately and the `set` differential stayed
+    /// green over all 52 matrix rows — the C cannot represent the difference and
+    /// every reader truncates, so it is a canonicalization rather than an
+    /// observable behavior. Which is exactly why it needs a unit test: the gate
+    /// that would normally catch a regression here cannot.
+    #[test]
+    fn set_valuestring_truncates_at_a_nul() {
+        let mut s = Value::String(b"original".to_vec());
+        assert_eq!(set_valuestring(&mut s, Some(b"ab\0cd")), Some(&b"ab"[..]));
+        assert_eq!(s, Value::String(b"ab".to_vec()));
+    }
+
+    /// The C picks between an in-place `strcpy` and a fresh allocation on
+    /// `strlen(new) <= strlen(old)`. Both sides must leave the same value, which
+    /// is the whole reason the branch is invisible to the differential — pinned
+    /// here so a future port that grows two paths has to keep them agreeing.
+    ///
+    /// The C's in-place path is also where its overlapping-`strcpy` UB lives
+    /// (FLAW-SCAN.md L4). There is no test for that here because there is
+    /// nothing to test: `set_valuestring(&mut v, Some(<bytes borrowed from v>))`
+    /// does not compile, which is the entire fix.
+    #[test]
+    fn set_valuestring_gives_the_same_answer_on_both_sides_of_the_length_branch() {
+        // shorter than the old value: the C reuses the buffer
+        let mut short = Value::String(b"0123456789".to_vec());
+        assert_eq!(set_valuestring(&mut short, Some(b"ab")), Some(&b"ab"[..]));
+        // longer: the C allocates a new one and frees the old
+        let mut long = Value::String(b"a".to_vec());
+        assert_eq!(set_valuestring(&mut long, Some(b"ab")), Some(&b"ab"[..]));
+        assert_eq!(short, long);
+        // exactly equal: `<=` puts this on the in-place side
+        let mut eq = Value::String(b"xy".to_vec());
+        assert_eq!(set_valuestring(&mut eq, Some(b"ab")), Some(&b"ab"[..]));
+        assert_eq!(eq, long);
+    }
+
+    /// `get_object_item_mut` must resolve duplicate keys the way the C's list
+    /// walk does — first match wins — or a setter would land on the wrong node.
+    #[test]
+    fn get_object_item_mut_takes_the_first_duplicate_key() {
+        let mut root = Value::Object(vec![
+            (b"k".to_vec(), number(1.0)),
+            (b"k".to_vec(), number(2.0)),
+        ]);
+        let target = get_object_item_mut(&mut root, b"k", true).unwrap();
+        set_number(target, 9.0);
+        assert_eq!(
+            print_value(&root, false).unwrap(),
+            br#"{"k":9,"k":2}"#.to_vec()
+        );
+        // ...and it is case-sensitive when asked to be, like its shared-name
+        // read-only twin.
+        assert!(get_object_item_mut(&mut root, b"K", true).is_none());
+        assert!(get_object_item_mut(&mut root, b"K", false).is_some());
     }
 }

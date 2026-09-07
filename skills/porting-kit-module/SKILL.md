@@ -16,6 +16,18 @@ commits reactively vs ~1 day up front). For a capability that might be *impossib
 (not just hard), use the research spike-and-gate ritual: rate effort/confidence,
 write the decision gate before coding, and do a pivot check before declaring it dead.
 
+**Write it from `skeleton/SPIKE.md`, and label every hazard `ran:` or `read`**
+(LESSONS #38). A spike that says "executed, not inferred" and then reasons its way
+through the small hazards lends the executed claims' credibility to the read ones,
+and nobody — including you, three sessions later — can tell which is which. The
+cJSON mutation spike did exactly that: it *ran* `DetachItemViaPointer` and found a
+NULL-write, and it *read* `cJSON_SetValuestring`, checked the destination buffer
+was long enough, called it "memory-safe as written", and missed that the source
+may alias the destination (ASan `strcpy-param-overlap`, ten lines of C to show).
+Rule: a `read` row you are about to call **benign** must name the case you did not
+try — and if you can name it, run it. Commit every reproducer under the port's
+`spikes/` so the claim outlives the session (LESSONS #32).
+
 ## Probe the oracle before writing any Rust (step 0)
 The C is a spec only the oracle can read (LESSONS #17, mechanized by #21): pin the
 module's edge cases with `python3 porting-kit/harnesses/probe/probe.py run --probes

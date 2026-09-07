@@ -54,4 +54,38 @@ char *cjson_modes_access(const char *key, int index,
 char *cjson_modes_construct(long count, const char *name, const char *raw,
                             const unsigned char *payload, size_t payload_len);
 
+/* The two in-place SETTERS (LESSONS #26): cJSON_SetValuestring and
+ * cJSON_SetNumberHelper. `num` is the double to set, `key` selects a target
+ * inside `json` (case-sensitively), and `newstr` is the replacement string.
+ *
+ * Both setters run against the looked-up document item AND against freshly
+ * built nodes, so every guard each one has is reachable from one input: a
+ * missing target (the C's `object == NULL` check), a non-string target, a NULL
+ * replacement, and both sides of cJSON_SetValuestring's
+ * `strlen(new) <= strlen(old)` branch.
+ *
+ * Three of the C's behaviors here are deliberately NOT reachable from this
+ * mode, and each is recorded rather than quietly avoided:
+ *
+ *   - `cJSON_SetNumberHelper(NULL, d)` dereferences without a NULL check
+ *     (cJSON.c:385; only the cJSON_SetNumberValue MACRO guards it). That is a
+ *     NULL-deref in the ORACLE, which has no defined answer to compare
+ *     against, so the call is made only for a non-NULL target. The port has no
+ *     null item at all — see DIVERGENCES.md, "Structural eliminations".
+ *   - `cJSON_SetValuestring(item, item->valuestring + k)` is an OVERLAPPING
+ *     strcpy (cJSON.c:418) — undefined behavior, and ASan reports it as
+ *     `memcpy-param-overlap` (spikes/setvaluestring_alias.c). Same reason: UB
+ *     in the oracle is not a contract to compare. The port's signature takes
+ *     `&mut Value` plus a byte slice, so the aliasing cannot be spelled.
+ *   - the `cJSON_IsReference` guard needs a node built by
+ *     cJSON_CreateStringReference, which API-COVERAGE.md lists as
+ *     out-of-scope: the port never builds a borrowed-pointer node, so the
+ *     branch is unreachable rather than untested. A hardcoded `-` on the Rust
+ *     side would be a control nothing invokes (LESSONS #31).
+ *
+ * Returns NULL only on allocation failure; an unparseable `json` is reported
+ * in the descriptor (`doc=-`), not as an error, so the setters still run. */
+char *cjson_modes_set(double num, const char *key, const char *newstr,
+                      const char *json, size_t json_len);
+
 #endif /* CJSON_MODES_H */
