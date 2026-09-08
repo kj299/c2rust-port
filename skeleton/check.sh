@@ -78,7 +78,15 @@ echo "===== 3c. oracle-sanitize — the C DRIVER is code this port wrote ====="
 # changes no stdout, so the differential and the fuzzer stay green over it.
 # Build a sanitized twin of the same sources and drive every matrix case
 # through it. Toolchain-optional, but the SKIP must be loud.
-if bash "$HERE/oracle/build_asan.sh" > /dev/null 2>&1; then
+# Three outcomes, not two. "You have not written the build script" and "your
+# compiler cannot do ASan" are different facts, and reporting the second when the
+# first is true tells a port its environment is thin when actually its control is
+# missing — the same conflation LESSONS #40's own self-test had.
+if [ ! -x "$HERE/oracle/build_asan.sh" ]; then
+  echo "TODO  oracle-sanitize: no oracle/build_asan.sh yet. Write one (same"
+  echo "      sources as build.sh, plus -fsanitize=address,undefined) — until"
+  echo "      then the C driver you wrote is checked by nothing."
+elif bash "$HERE/oracle/build_asan.sh" > /dev/null 2>&1; then
   # one --matrix flag per file: the flag takes a single path, so a bare glob
   # would hand argparse positionals it rejects.
   SAN_MATRICES=()
@@ -86,8 +94,8 @@ if bash "$HERE/oracle/build_asan.sh" > /dev/null 2>&1; then
   "$PY" "$KIT/harnesses/oracle-sanitize/sanitize_oracle.py" \
       --oracle "$HERE/oracle/oracle_asan" "${SAN_MATRICES[@]}"
 else
-  echo "SKIP  oracle-sanitize: no ASan-capable compiler — the C driver was NOT"
-  echo "      checked for memory errors this run."
+  echo "SKIP  oracle-sanitize: build_asan.sh exists but did not build (no"
+  echo "      ASan-capable compiler?). The C driver was NOT checked this run."
 fi
 
 echo "===== 4. sanitizers (toolchain-optional, but SKIP must be loud) ====="

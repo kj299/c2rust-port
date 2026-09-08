@@ -350,7 +350,12 @@ echo "===== 4a. oracle-sanitize — the C side of the differential is OUR C too 
 # and for fourteen modules nothing looked. Build a sanitized twin and drive
 # every matrix case through it. Toolchain-optional in the same LOUD way as the
 # sanitizer step: a missing compiler prints a SKIP, never a silent pass.
-if bash "$HERE/oracle/build_asan.sh" > /dev/null 2>&1; then
+if [ ! -x "$HERE/oracle/build_asan.sh" ]; then
+  echo "MISSING  oracle-sanitize: oracle/build_asan.sh is gone. This gate is"
+  echo "         declared in CLAUDE.md's control table; a deleted build script"
+  echo "         must not look like a thin toolchain."
+  exit 1
+elif bash "$HERE/oracle/build_asan.sh" > /dev/null 2>&1; then
   # `--matrix` takes ONE path per flag, so the glob has to become repeated
   # flags rather than a bare expansion — the first draft passed the extra paths
   # as positionals and argparse rejected the whole invocation (rc 2).
@@ -360,8 +365,8 @@ if bash "$HERE/oracle/build_asan.sh" > /dev/null 2>&1; then
       --oracle "$HERE/oracle/cjson_oracle_asan" \
       "${SAN_MATRICES[@]}" --timeout 60
 else
-  echo "SKIP  oracle-sanitize: could not build a sanitized oracle (no ASan-capable"
-  echo "      compiler?). The C driver was NOT checked for memory errors this run."
+  echo "SKIP  oracle-sanitize: build_asan.sh exists but did not build (no"
+  echo "      ASan-capable compiler?). The C driver was NOT checked this run."
 fi
 
 echo "===== 4b. sanitizers — miri (UB) + asan (FFI memory), toolchain-optional ====="
