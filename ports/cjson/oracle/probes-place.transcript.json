@@ -1,0 +1,561 @@
+{
+  "probe_transcript": 1,
+  "module": "dom-mutate-place",
+  "oracle_sha256": "99721b14d77900c43de637114125be1b13cd4d287bd1255c47464d033b710d1c",
+  "generated_by": "harnesses/probe/probe.py run",
+  "entries": [
+    {
+      "id": "place-ins-at-front",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "WzEwLDIwXQppbnMJCTA=",
+      "note": "insert at index 0: the C sets array->child to the new node and repairs the first element's prev, which is also the last-item cache",
+      "rc": 0,
+      "stdout_b64": "aW5pdD1bMTAsMjBdfGluczpyPTEsZ290PS0sa2V5PS0sc3o9Myxkb2M9WzAsMTAsMjBd",
+      "stdin_preview": "[10,20]\nins\t\t0",
+      "stdout_preview": "init=[10,20]|ins:r=1,got=-,key=-,sz=3,doc=[0,10,20]"
+    },
+    {
+      "id": "place-ins-middle",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "WzEwLDIwLDMwXQppbnMJCTE=",
+      "note": "insert in the middle -- the plain relink, neither end of the list",
+      "rc": 0,
+      "stdout_b64": "aW5pdD1bMTAsMjAsMzBdfGluczpyPTEsZ290PS0sa2V5PS0sc3o9NCxkb2M9WzEwLDEsMjAsMzBd",
+      "stdin_preview": "[10,20,30]\nins\t\t1",
+      "stdout_preview": "init=[10,20,30]|ins:r=1,got=-,key=-,sz=4,doc=[10,1,20,30]"
+    },
+    {
+      "id": "place-ins-at-end-index",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "WzEwLDIwXQppbnMJCTI=",
+      "note": "index == size: get_array_item answers NULL, so this is already the APPEND path, not an in-place insert",
+      "rc": 0,
+      "stdout_b64": "aW5pdD1bMTAsMjBdfGluczpyPTEsZ290PS0sa2V5PS0sc3o9Myxkb2M9WzEwLDIwLDJd",
+      "stdin_preview": "[10,20]\nins\t\t2",
+      "stdout_preview": "init=[10,20]|ins:r=1,got=-,key=-,sz=3,doc=[10,20,2]"
+    },
+    {
+      "id": "place-ins-past-end",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "WzEsMl0KaW5zCQk5OQ==",
+      "note": "an index far past the end does NOT fail. cJSON_InsertItemInArray falls through to add_item_to_array and appends (probed; spikes/place_relink.c)",
+      "rc": 0,
+      "stdout_b64": "aW5pdD1bMSwyXXxpbnM6cj0xLGdvdD0tLGtleT0tLHN6PTMsZG9jPVsxLDIsOTld",
+      "stdin_preview": "[1,2]\nins\t\t99",
+      "stdout_preview": "init=[1,2]|ins:r=1,got=-,key=-,sz=3,doc=[1,2,99]"
+    },
+    {
+      "id": "place-ins-into-empty",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "W10KaW5zCQkw",
+      "note": "insert into an empty array: the append path again, and the branch that starts a fresh list (item->prev = item)",
+      "rc": 0,
+      "stdout_b64": "aW5pdD1bXXxpbnM6cj0xLGdvdD0tLGtleT0tLHN6PTEsZG9jPVswXQ==",
+      "stdin_preview": "[]\nins\t\t0",
+      "stdout_preview": "init=[]|ins:r=1,got=-,key=-,sz=1,doc=[0]"
+    },
+    {
+      "id": "place-ins-negative",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "WzEsMl0KaW5zCQktMQ==",
+      "note": "which < 0 is the C's own guard -- false, document untouched, and the caller still owns the node it was handed",
+      "rc": 0,
+      "stdout_b64": "aW5pdD1bMSwyXXxpbnM6cj0wLGdvdD0tLGtleT0tLHN6PTIsZG9jPVsxLDJd",
+      "stdin_preview": "[1,2]\nins\t\t-1",
+      "stdout_preview": "init=[1,2]|ins:r=0,got=-,key=-,sz=2,doc=[1,2]"
+    },
+    {
+      "id": "place-ins-then-append",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "WzEwLDIwXQppbnMJCTAKYXBwCQk5OQ==",
+      "note": "THE WITNESS: insert at the front rewrites the last-item cache, and only a later append reads it back (LESSONS #39). 99 must land at the END",
+      "rc": 0,
+      "stdout_b64": "aW5pdD1bMTAsMjBdfGluczpyPTEsZ290PS0sa2V5PS0sc3o9Myxkb2M9WzAsMTAsMjBdfGFwcDpyPTEsZ290PS0sa2V5PS0sc3o9NCxkb2M9WzAsMTAsMjAsOTld",
+      "stdin_preview": "[10,20]\nins\t\t0\napp\t\t99",
+      "stdout_preview": "init=[10,20]|ins:r=1,got=-,key=-,sz=3,doc=[0,10,20]|app:r=1,got=-,key=-,sz=4,doc\u2026"
+    },
+    {
+      "id": "place-ins-end-then-append",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "WzEwLDIwXQppbnMJCTIKYXBwCQk5OQ==",
+      "note": "same witness for the append path of insert",
+      "rc": 0,
+      "stdout_b64": "aW5pdD1bMTAsMjBdfGluczpyPTEsZ290PS0sa2V5PS0sc3o9Myxkb2M9WzEwLDIwLDJdfGFwcDpyPTEsZ290PS0sa2V5PS0sc3o9NCxkb2M9WzEwLDIwLDIsOTld",
+      "stdin_preview": "[10,20]\nins\t\t2\napp\t\t99",
+      "stdout_preview": "init=[10,20]|ins:r=1,got=-,key=-,sz=3,doc=[10,20,2]|app:r=1,got=-,key=-,sz=4,doc\u2026"
+    },
+    {
+      "id": "place-ins-empty-then-append",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "W10KaW5zCQkwCmFwcAkJOTk=",
+      "note": "and for the fresh-list branch, where a wrong prev would make the next append the first element",
+      "rc": 0,
+      "stdout_b64": "aW5pdD1bXXxpbnM6cj0xLGdvdD0tLGtleT0tLHN6PTEsZG9jPVswXXxhcHA6cj0xLGdvdD0tLGtleT0tLHN6PTIsZG9jPVswLDk5XQ==",
+      "stdin_preview": "[]\nins\t\t0\napp\t\t99",
+      "stdout_preview": "init=[]|ins:r=1,got=-,key=-,sz=1,doc=[0]|app:r=1,got=-,key=-,sz=2,doc=[0,99]"
+    },
+    {
+      "id": "place-ins-object-refused",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "eyJhIjoxLCJiIjoyfQppbnMJCTE=",
+      "note": "the mode refuses a non-ARRAY target. The C would insert a member with a NULL key, which is not the same as a member keyed \"\": get_object_item stops its walk at a NULL string, so it would be present but unfindable -- unrepresentable in Value::Object. Stated limit, see cjson_modes.h",
+      "rc": 0,
+      "stdout_b64": "aW5pdD17ImEiOjEsImIiOjJ9fGluczpyPTAsZ290PS0sa2V5PS0sc3o9Mixkb2M9eyJhIjoxLCJiIjoyfQ==",
+      "stdin_preview": "{\"a\":1,\"b\":2}\nins\t\t1",
+      "stdout_preview": "init={\"a\":1,\"b\":2}|ins:r=0,got=-,key=-,sz=2,doc={\"a\":1,\"b\":2}"
+    },
+    {
+      "id": "place-ins-scalar-refused",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "eyJhIjo3fQppbnMJYQkw",
+      "note": "same refusal for a scalar target, which the C would give a child (scalar-parent-child)",
+      "rc": 0,
+      "stdout_b64": "aW5pdD17ImEiOjd9fGluczpyPTAsZ290PS0sa2V5PS0sc3o9MCxkb2M9eyJhIjo3fQ==",
+      "stdin_preview": "{\"a\":7}\nins\ta\t0",
+      "stdout_preview": "init={\"a\":7}|ins:r=0,got=-,key=-,sz=0,doc={\"a\":7}"
+    },
+    {
+      "id": "place-ins-missing-target",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "WzEsMl0KaW5zCXp6CTA=",
+      "note": "an unresolvable selector: no target, so the op is a recorded no-op on both sides",
+      "rc": 0,
+      "stdout_b64": "aW5pdD1bMSwyXXxpbnM6cj0wLGdvdD0tLGtleT0tLHN6PS0xLGRvYz1bMSwyXQ==",
+      "stdin_preview": "[1,2]\nins\tzz\t0",
+      "stdout_preview": "init=[1,2]|ins:r=0,got=-,key=-,sz=-1,doc=[1,2]"
+    },
+    {
+      "id": "place-ins-index-junk",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "WzEsMl0KaW5zCQl6eg==",
+      "note": "a non-numeric index reads as 0 through the shared strtol rule before cJSON sees an int",
+      "rc": 0,
+      "stdout_b64": "aW5pdD1bMSwyXXxpbnM6cj0xLGdvdD0tLGtleT0tLHN6PTMsZG9jPVswLDEsMl0=",
+      "stdin_preview": "[1,2]\nins\t\tzz",
+      "stdout_preview": "init=[1,2]|ins:r=1,got=-,key=-,sz=3,doc=[0,1,2]"
+    },
+    {
+      "id": "place-ins-index-overflow",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "WzEsMl0KaW5zCQk5OTk5OTk5OTk5OTk5OTk5OTk5OQ==",
+      "note": "20 digits overflow long; strtol saturates and the driver clamps to INT_MAX, which is then the append path",
+      "rc": 0,
+      "stdout_b64": "aW5pdD1bMSwyXXxpbnM6cj0xLGdvdD0tLGtleT0tLHN6PTMsZG9jPVsxLDIsMjE0NzQ4MzY0N10=",
+      "stdin_preview": "[1,2]\nins\t\t99999999999999999999",
+      "stdout_preview": "init=[1,2]|ins:r=1,got=-,key=-,sz=3,doc=[1,2,2147483647]"
+    },
+    {
+      "id": "place-ins-nested-array",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "eyJhIjpbMSwyXSwiYiI6OX0KaW5zCWEJMQphcHAJYQk3",
+      "note": "the selector reaches one level down, so insert runs on a nested array and the rest of the document must come back untouched",
+      "rc": 0,
+      "stdout_b64": "aW5pdD17ImEiOlsxLDJdLCJiIjo5fXxpbnM6cj0xLGdvdD0tLGtleT0tLHN6PTMsZG9jPXsiYSI6WzEsMSwyXSwiYiI6OX18YXBwOnI9MSxnb3Q9LSxrZXk9LSxzej00LGRvYz17ImEiOlsxLDEsMiw3XSwiYiI6OX0=",
+      "stdin_preview": "{\"a\":[1,2],\"b\":9}\nins\ta\t1\napp\ta\t7",
+      "stdout_preview": "init={\"a\":[1,2],\"b\":9}|ins:r=1,got=-,key=-,sz=3,doc={\"a\":[1,1,2],\"b\":9}|app:r=1,\u2026"
+    },
+    {
+      "id": "place-rep-first",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "WzEwLDIwLDMwXQpyZXAJCTAKYXBwCQk5OQ==",
+      "note": "replace the first element, then append: the C has a special branch for parent->child == item and must still leave the cache right",
+      "rc": 0,
+      "stdout_b64": "aW5pdD1bMTAsMjAsMzBdfHJlcDpyPTEsZ290PS0sa2V5PS0sc3o9Myxkb2M9WzAsMjAsMzBdfGFwcDpyPTEsZ290PS0sa2V5PS0sc3o9NCxkb2M9WzAsMjAsMzAsOTld",
+      "stdin_preview": "[10,20,30]\nrep\t\t0\napp\t\t99",
+      "stdout_preview": "init=[10,20,30]|rep:r=1,got=-,key=-,sz=3,doc=[0,20,30]|app:r=1,got=-,key=-,sz=4,\u2026"
+    },
+    {
+      "id": "place-rep-middle",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "WzEwLDIwLDMwXQpyZXAJCTEKYXBwCQk5OQ==",
+      "note": "replace in the middle",
+      "rc": 0,
+      "stdout_b64": "aW5pdD1bMTAsMjAsMzBdfHJlcDpyPTEsZ290PS0sa2V5PS0sc3o9Myxkb2M9WzEwLDEsMzBdfGFwcDpyPTEsZ290PS0sa2V5PS0sc3o9NCxkb2M9WzEwLDEsMzAsOTld",
+      "stdin_preview": "[10,20,30]\nrep\t\t1\napp\t\t99",
+      "stdout_preview": "init=[10,20,30]|rep:r=1,got=-,key=-,sz=3,doc=[10,1,30]|app:r=1,got=-,key=-,sz=4,\u2026"
+    },
+    {
+      "id": "place-rep-last",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "WzEwLDIwLDMwXQpyZXAJCTIKYXBwCQk5OQ==",
+      "note": "replace the LAST element -- the branch that writes parent->child->prev, i.e. the cache itself",
+      "rc": 0,
+      "stdout_b64": "aW5pdD1bMTAsMjAsMzBdfHJlcDpyPTEsZ290PS0sa2V5PS0sc3o9Myxkb2M9WzEwLDIwLDJdfGFwcDpyPTEsZ290PS0sa2V5PS0sc3o9NCxkb2M9WzEwLDIwLDIsOTld",
+      "stdin_preview": "[10,20,30]\nrep\t\t2\napp\t\t99",
+      "stdout_preview": "init=[10,20,30]|rep:r=1,got=-,key=-,sz=3,doc=[10,20,2]|app:r=1,got=-,key=-,sz=4,\u2026"
+    },
+    {
+      "id": "place-rep-only-element",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "WzQyXQpyZXAJCTAKYXBwCQk5OQ==",
+      "note": "the only element: the C's `parent->child->prev == parent->child` self-referential case",
+      "rc": 0,
+      "stdout_b64": "aW5pdD1bNDJdfHJlcDpyPTEsZ290PS0sa2V5PS0sc3o9MSxkb2M9WzBdfGFwcDpyPTEsZ290PS0sa2V5PS0sc3o9Mixkb2M9WzAsOTld",
+      "stdin_preview": "[42]\nrep\t\t0\napp\t\t99",
+      "stdout_preview": "init=[42]|rep:r=1,got=-,key=-,sz=1,doc=[0]|app:r=1,got=-,key=-,sz=2,doc=[0,99]"
+    },
+    {
+      "id": "place-rep-out-of-range",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "WzFdCnJlcAkJOQ==",
+      "note": "unlike insert, an out-of-range index IS a failure here: get_array_item answers NULL and ReplaceItemViaPointer rejects a NULL item",
+      "rc": 0,
+      "stdout_b64": "aW5pdD1bMV18cmVwOnI9MCxnb3Q9LSxrZXk9LSxzej0xLGRvYz1bMV0=",
+      "stdin_preview": "[1]\nrep\t\t9",
+      "stdout_preview": "init=[1]|rep:r=0,got=-,key=-,sz=1,doc=[1]"
+    },
+    {
+      "id": "place-rep-negative",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "WzEsMl0KcmVwCQktMQ==",
+      "note": "which < 0 guard",
+      "rc": 0,
+      "stdout_b64": "aW5pdD1bMSwyXXxyZXA6cj0wLGdvdD0tLGtleT0tLHN6PTIsZG9jPVsxLDJd",
+      "stdin_preview": "[1,2]\nrep\t\t-1",
+      "stdout_preview": "init=[1,2]|rep:r=0,got=-,key=-,sz=2,doc=[1,2]"
+    },
+    {
+      "id": "place-rep-empty",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "W10KcmVwCQkw",
+      "note": "empty container: also the `parent->child == NULL` guard inside ReplaceItemViaPointer",
+      "rc": 0,
+      "stdout_b64": "aW5pdD1bXXxyZXA6cj0wLGdvdD0tLGtleT0tLHN6PTAsZG9jPVtd",
+      "stdin_preview": "[]\nrep\t\t0",
+      "stdout_preview": "init=[]|rep:r=0,got=-,key=-,sz=0,doc=[]"
+    },
+    {
+      "id": "place-rep-object-refused",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "eyJhIjoxfQpyZXAJCTA=",
+      "note": "non-array target refused, same reason as insert",
+      "rc": 0,
+      "stdout_b64": "aW5pdD17ImEiOjF9fHJlcDpyPTAsZ290PS0sa2V5PS0sc3o9MSxkb2M9eyJhIjoxfQ==",
+      "stdin_preview": "{\"a\":1}\nrep\t\t0",
+      "stdout_preview": "init={\"a\":1}|rep:r=0,got=-,key=-,sz=1,doc={\"a\":1}"
+    },
+    {
+      "id": "place-rep-nested",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "eyJhIjpbMSwyLDNdfQpyZXAJYQkx",
+      "note": "replace inside a nested array",
+      "rc": 0,
+      "stdout_b64": "aW5pdD17ImEiOlsxLDIsM119fHJlcDpyPTEsZ290PS0sa2V5PS0sc3o9Myxkb2M9eyJhIjpbMSwxLDNdfQ==",
+      "stdin_preview": "{\"a\":[1,2,3]}\nrep\ta\t1",
+      "stdout_preview": "init={\"a\":[1,2,3]}|rep:r=1,got=-,key=-,sz=3,doc={\"a\":[1,1,3]}"
+    },
+    {
+      "id": "place-ro-keeps-position",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "eyJhIjoxLCJiIjoyLCJjIjozfQpybwkJYg==",
+      "note": "the replacement takes the SLOT, not the end: order is a,b,c afterwards",
+      "rc": 0,
+      "stdout_b64": "aW5pdD17ImEiOjEsImIiOjIsImMiOjN9fHJvOnI9MSxnb3Q9LSxrZXk9LSxzej0zLGRvYz17ImEiOjEsImIiOjEsImMiOjN9",
+      "stdin_preview": "{\"a\":1,\"b\":2,\"c\":3}\nro\t\tb",
+      "stdout_preview": "init={\"a\":1,\"b\":2,\"c\":3}|ro:r=1,got=-,key=-,sz=3,doc={\"a\":1,\"b\":1,\"c\":3}"
+    },
+    {
+      "id": "place-ro-renames-key-case",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "eyJBIjoxfQpybwkJYQ==",
+      "note": "replace_item_in_object strdups the LOOKUP string into the replacement's key before looking anything up, so a case-INsensitive replace of `a` rewrites the member's spelling to `a`. Probed, because it is the opposite of what the name suggests",
+      "rc": 0,
+      "stdout_b64": "aW5pdD17IkEiOjF9fHJvOnI9MSxnb3Q9LSxrZXk9LSxzej0xLGRvYz17ImEiOjF9",
+      "stdin_preview": "{\"A\":1}\nro\t\ta",
+      "stdout_preview": "init={\"A\":1}|ro:r=1,got=-,key=-,sz=1,doc={\"a\":1}"
+    },
+    {
+      "id": "place-ros-is-case-sensitive",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "eyJBIjoxfQpyb3MJCWE=",
+      "note": "the case-SENSITIVE twin finds nothing, so the document is untouched",
+      "rc": 0,
+      "stdout_b64": "aW5pdD17IkEiOjF9fHJvczpyPTAsZ290PS0sa2V5PS0sc3o9MSxkb2M9eyJBIjoxfQ==",
+      "stdin_preview": "{\"A\":1}\nros\t\ta",
+      "stdout_preview": "init={\"A\":1}|ros:r=0,got=-,key=-,sz=1,doc={\"A\":1}"
+    },
+    {
+      "id": "place-ro-duplicate-first-wins",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "eyJrIjoxLCJrIjoyfQpybwkJaw==",
+      "note": "duplicate keys resolve to the first match, like every other object walk in the C",
+      "rc": 0,
+      "stdout_b64": "aW5pdD17ImsiOjEsImsiOjJ9fHJvOnI9MSxnb3Q9LSxrZXk9LSxzej0yLGRvYz17ImsiOjEsImsiOjJ9",
+      "stdin_preview": "{\"k\":1,\"k\":2}\nro\t\tk",
+      "stdout_preview": "init={\"k\":1,\"k\":2}|ro:r=1,got=-,key=-,sz=2,doc={\"k\":1,\"k\":2}"
+    },
+    {
+      "id": "place-ro-missing-key",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "eyJhIjoxfQpybwkJeno=",
+      "note": "a missing key answers false. In the C the replacement has ALREADY been renamed at this point; the port consumes it by value, so there is no caller-visible node to have been mutated (DIVERGENCES.md, structural eliminations)",
+      "rc": 0,
+      "stdout_b64": "aW5pdD17ImEiOjF9fHJvOnI9MCxnb3Q9LSxrZXk9LSxzej0xLGRvYz17ImEiOjF9",
+      "stdin_preview": "{\"a\":1}\nro\t\tzz",
+      "stdout_preview": "init={\"a\":1}|ro:r=0,got=-,key=-,sz=1,doc={\"a\":1}"
+    },
+    {
+      "id": "place-ro-array-parent",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "WzEsMl0Kcm8JCWs=",
+      "note": "an array parent: get_object_item compares ->string, and array children have none, so false",
+      "rc": 0,
+      "stdout_b64": "aW5pdD1bMSwyXXxybzpyPTAsZ290PS0sa2V5PS0sc3o9Mixkb2M9WzEsMl0=",
+      "stdin_preview": "[1,2]\nro\t\tk",
+      "stdout_preview": "init=[1,2]|ro:r=0,got=-,key=-,sz=2,doc=[1,2]"
+    },
+    {
+      "id": "place-ro-empty-object",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "e30Kcm8JCWs=",
+      "note": "empty object -- both the lookup and the child==NULL guard say no",
+      "rc": 0,
+      "stdout_b64": "aW5pdD17fXxybzpyPTAsZ290PS0sa2V5PS0sc3o9MCxkb2M9e30=",
+      "stdin_preview": "{}\nro\t\tk",
+      "stdout_preview": "init={}|ro:r=0,got=-,key=-,sz=0,doc={}"
+    },
+    {
+      "id": "place-ro-scalar-parent",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "eyJhIjo3fQpybwlhCWs=",
+      "note": "a scalar parent: no child list to walk",
+      "rc": 0,
+      "stdout_b64": "aW5pdD17ImEiOjd9fHJvOnI9MCxnb3Q9LSxrZXk9LSxzej0wLGRvYz17ImEiOjd9",
+      "stdin_preview": "{\"a\":7}\nro\ta\tk",
+      "stdout_preview": "init={\"a\":7}|ro:r=0,got=-,key=-,sz=0,doc={\"a\":7}"
+    },
+    {
+      "id": "place-ro-empty-key",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "eyIiOjF9CnJvcwkJ",
+      "note": "an EMPTY key is a findable key, unlike the NULL key the C would create by inserting into an object -- which is exactly why `ins` refuses object targets",
+      "rc": 0,
+      "stdout_b64": "aW5pdD17IiI6MX18cm9zOnI9MSxnb3Q9LSxrZXk9LSxzej0xLGRvYz17IiI6MH0=",
+      "stdin_preview": "{\"\":1}\nros\t\t",
+      "stdout_preview": "init={\"\":1}|ros:r=1,got=-,key=-,sz=1,doc={\"\":0}"
+    },
+    {
+      "id": "place-ro-nested",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "eyJvIjp7IngiOjEsInkiOjJ9fQpyb3MJbwl4",
+      "note": "replace one level down",
+      "rc": 0,
+      "stdout_b64": "aW5pdD17Im8iOnsieCI6MSwieSI6Mn19fHJvczpyPTEsZ290PS0sa2V5PS0sc3o9Mixkb2M9eyJvIjp7IngiOjEsInkiOjJ9fQ==",
+      "stdin_preview": "{\"o\":{\"x\":1,\"y\":2}}\nros\to\tx",
+      "stdout_preview": "init={\"o\":{\"x\":1,\"y\":2}}|ros:r=1,got=-,key=-,sz=2,doc={\"o\":{\"x\":1,\"y\":2}}"
+    },
+    {
+      "id": "place-ro-then-detach",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "eyJhIjoxLCJiIjoyfQpybwkJYQpkb3MJCWE=",
+      "note": "replace then detach the same key: the replacement must be findable under the key it was renamed to",
+      "rc": 0,
+      "stdout_b64": "aW5pdD17ImEiOjEsImIiOjJ9fHJvOnI9MSxnb3Q9LSxrZXk9LSxzej0yLGRvYz17ImEiOjEsImIiOjJ9fGRvczpyPTEsZ290PTEsa2V5PTE6YSxzej0xLGRvYz17ImIiOjJ9",
+      "stdin_preview": "{\"a\":1,\"b\":2}\nro\t\ta\ndos\t\ta",
+      "stdout_preview": "init={\"a\":1,\"b\":2}|ro:r=1,got=-,key=-,sz=2,doc={\"a\":1,\"b\":2}|dos:r=1,got=1,key=1\u2026"
+    },
+    {
+      "id": "place-ins-rep-app-mix",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "WzEwLDIwLDMwXQppbnMJCTAKcmVwCQkyCmFwcAkJNwpkYQkJMQphcHAJCTg=",
+      "note": "five ops composing insert, replace, append and detach -- each step's descriptor is emitted, so a corruption at step 1 masked by step 4 is still visible",
+      "rc": 0,
+      "stdout_b64": "aW5pdD1bMTAsMjAsMzBdfGluczpyPTEsZ290PS0sa2V5PS0sc3o9NCxkb2M9WzAsMTAsMjAsMzBdfHJlcDpyPTEsZ290PS0sa2V5PS0sc3o9NCxkb2M9WzAsMTAsMiwzMF18YXBwOnI9MSxnb3Q9LSxrZXk9LSxzej01LGRvYz1bMCwxMCwyLDMwLDddfGRhOnI9MSxnb3Q9MTAsa2V5PS0sc3o9NCxkb2M9WzAsMiwzMCw3XXxhcHA6cj0xLGdvdD0tLGtleT0tLHN6PTUsZG9jPVswLDIsMzAsNyw4XQ==",
+      "stdin_preview": "[10,20,30]\nins\t\t0\nrep\t\t2\napp\t\t7\nda\t\t1\napp\t\t8",
+      "stdout_preview": "init=[10,20,30]|ins:r=1,got=-,key=-,sz=4,doc=[0,10,20,30]|rep:r=1,got=-,key=-,sz\u2026"
+    },
+    {
+      "id": "place-rep-detach-append",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "WzEsMiwzXQpyZXAJCTIKZGEJCTAKYXBwCQk5CmRhCQkyCmFwcAkJOA==",
+      "note": "replace the last, then remove around it, appending after each -- the cache is read back three times",
+      "rc": 0,
+      "stdout_b64": "aW5pdD1bMSwyLDNdfHJlcDpyPTEsZ290PS0sa2V5PS0sc3o9Myxkb2M9WzEsMiwyXXxkYTpyPTEsZ290PTEsa2V5PS0sc3o9Mixkb2M9WzIsMl18YXBwOnI9MSxnb3Q9LSxrZXk9LSxzej0zLGRvYz1bMiwyLDldfGRhOnI9MSxnb3Q9OSxrZXk9LSxzej0yLGRvYz1bMiwyXXxhcHA6cj0xLGdvdD0tLGtleT0tLHN6PTMsZG9jPVsyLDIsOF0=",
+      "stdin_preview": "[1,2,3]\nrep\t\t2\nda\t\t0\napp\t\t9\nda\t\t2\napp\t\t8",
+      "stdout_preview": "init=[1,2,3]|rep:r=1,got=-,key=-,sz=3,doc=[1,2,2]|da:r=1,got=1,key=-,sz=2,doc=[2\u2026"
+    },
+    {
+      "id": "place-ins-then-rep-same-index",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "WzVdCmlucwkJMApyZXAJCTAKYXBwCQk5",
+      "note": "insert then immediately replace the node just inserted",
+      "rc": 0,
+      "stdout_b64": "aW5pdD1bNV18aW5zOnI9MSxnb3Q9LSxrZXk9LSxzej0yLGRvYz1bMCw1XXxyZXA6cj0xLGdvdD0tLGtleT0tLHN6PTIsZG9jPVswLDVdfGFwcDpyPTEsZ290PS0sa2V5PS0sc3o9Myxkb2M9WzAsNSw5XQ==",
+      "stdin_preview": "[5]\nins\t\t0\nrep\t\t0\napp\t\t9",
+      "stdout_preview": "init=[5]|ins:r=1,got=-,key=-,sz=2,doc=[0,5]|rep:r=1,got=-,key=-,sz=2,doc=[0,5]|a\u2026"
+    },
+    {
+      "id": "place-object-mix",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "eyJhIjoxLCJiIjoyfQpybwkJYQp4bwkJYgpyb3MJCWEKZG8JCUE=",
+      "note": "object placement and removal interleaved, including a case-insensitive detach of the renamed key",
+      "rc": 0,
+      "stdout_b64": "aW5pdD17ImEiOjEsImIiOjJ9fHJvOnI9MSxnb3Q9LSxrZXk9LSxzej0yLGRvYz17ImEiOjEsImIiOjJ9fHhvOnI9LSxnb3Q9LSxrZXk9LSxzej0xLGRvYz17ImEiOjF9fHJvczpyPTEsZ290PS0sa2V5PS0sc3o9MSxkb2M9eyJhIjoxfXxkbzpyPTEsZ290PTEsa2V5PTE6YSxzej0wLGRvYz17fQ==",
+      "stdin_preview": "{\"a\":1,\"b\":2}\nro\t\ta\nxo\t\tb\nros\t\ta\ndo\t\tA",
+      "stdout_preview": "init={\"a\":1,\"b\":2}|ro:r=1,got=-,key=-,sz=2,doc={\"a\":1,\"b\":2}|xo:r=-,got=-,key=-,\u2026"
+    },
+    {
+      "id": "place-max-ops-truncates",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "WzEsMiwzLDQsNSw2LDcsOCw5XQphcHAJCTEKYXBwCQkxCmFwcAkJMQphcHAJCTEKYXBwCQkxCmFwcAkJMQphcHAJCTEKYXBwCQkxCmFwcAkJMQphcHAJCTEKYXBwCQkxCmFwcAkJMQ==",
+      "note": "twelve op lines with a cap of eight: the last four are ignored so the descriptor stays bounded whatever the fuzzer sends",
+      "rc": 0,
+      "stdout_b64": "aW5pdD1bMSwyLDMsNCw1LDYsNyw4LDldfGFwcDpyPTEsZ290PS0sa2V5PS0sc3o9MTAsZG9jPVsxLDIsMyw0LDUsNiw3LDgsOSwxXXxhcHA6cj0xLGdvdD0tLGtleT0tLHN6PTExLGRvYz1bMSwyLDMsNCw1LDYsNyw4LDksMSwxXXxhcHA6cj0xLGdvdD0tLGtleT0tLHN6PTEyLGRvYz1bMSwyLDMsNCw1LDYsNyw4LDksMSwxLDFdfGFwcDpyPTEsZ290PS0sa2V5PS0sc3o9MTMsZG9jPVsxLDIsMyw0LDUsNiw3LDgsOSwxLDEsMSwxXXxhcHA6cj0xLGdvdD0tLGtleT0tLHN6PTE0LGRvYz1bMSwyLDMsNCw1LDYsNyw4LDksMSwxLDEsMSwxXXxhcHA6cj0xLGdvdD0tLGtleT0tLHN6PTE1LGRvYz1bMSwyLDMsNCw1LDYsNyw4LDksMSwxLDEsMSwxLDFdfGFwcDpyPTEsZ290PS0sa2V5PS0sc3o9MTYsZG9jPVsxLDIsMyw0LDUsNiw3LDgsOSwxLDEsMSwxLDEsMSwxXXxhcHA6cj0xLGdvdD0tLGtleT0tLHN6PTE3LGRvYz1bMSwyLDMsNCw1LDYsNyw4LDksMSwxLDEsMSwxLDEsMSwxXQ==",
+      "stdin_preview": "[1,2,3,4,5,6,7,8,9]\napp\t\t1\napp\t\t1\napp\t\t1\napp\t\t1\napp\t\t1\napp\t\t1\napp\t\t1\napp\t\t1\napp\t\u2026",
+      "stdout_preview": "init=[1,2,3,4,5,6,7,8,9]|app:r=1,got=-,key=-,sz=10,doc=[1,2,3,4,5,6,7,8,9,1]|app\u2026"
+    },
+    {
+      "id": "place-unknown-op",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "WzEsMl0KPz8JCTAKYXBwCQk5",
+      "note": "an unrecognized opcode records as `?` and changes nothing -- a fuzzed opcode cannot put arbitrary bytes into the descriptor",
+      "rc": 0,
+      "stdout_b64": "aW5pdD1bMSwyXXw/OnI9LSxnb3Q9LSxrZXk9LSxzej0yLGRvYz1bMSwyXXxhcHA6cj0xLGdvdD0tLGtleT0tLHN6PTMsZG9jPVsxLDIsOV0=",
+      "stdin_preview": "[1,2]\n??\t\t0\napp\t\t9",
+      "stdout_preview": "init=[1,2]|?:r=-,got=-,key=-,sz=2,doc=[1,2]|app:r=1,got=-,key=-,sz=3,doc=[1,2,9]"
+    },
+    {
+      "id": "place-no-ops",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "WzEsMiwzXQ==",
+      "note": "a document and no program at all: just the initial state",
+      "rc": 0,
+      "stdout_b64": "aW5pdD1bMSwyLDNd",
+      "stdin_preview": "[1,2,3]",
+      "stdout_preview": "init=[1,2,3]"
+    },
+    {
+      "id": "place-unparseable",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "e29vcHMKYXBwCQkx",
+      "note": "an unparseable document is rc 1 with nothing on stdout -- there is no tree to mutate",
+      "rc": 1,
+      "stdout_b64": "",
+      "stdin_preview": "{oops\napp\t\t1",
+      "stdout_preview": ""
+    },
+    {
+      "id": "place-key-interior-nul",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "eyJhIjoxLCJiIjoyfQpybwkJYQB6egphcHAJCTE=",
+      "note": "an interior NUL in the key: the C hands cJSON a C string, so the lookup is for `a` and the rename writes `a` -- everything after the NUL is invisible to it (LESSONS #29)",
+      "rc": 0,
+      "stdout_b64": "aW5pdD17ImEiOjEsImIiOjJ9fHJvOnI9MSxnb3Q9LSxrZXk9LSxzej0yLGRvYz17ImEiOjEsImIiOjJ9",
+      "stdin_preview": "{\"a\":1,\"b\":2}\nro\t\ta\u0000zz\napp\t\t1",
+      "stdout_preview": "init={\"a\":1,\"b\":2}|ro:r=1,got=-,key=-,sz=2,doc={\"a\":1,\"b\":2}"
+    },
+    {
+      "id": "place-arg-high-bytes",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "eyL//iI6MX0Kcm9zCQn//g==",
+      "note": "bytes 0x80-0xFF in a key: cJSON compares them verbatim with no UTF-8 validation, and so must the port",
+      "rc": 0,
+      "stdout_b64": "aW5pdD17Iv/+IjoxfXxyb3M6cj0xLGdvdD0tLGtleT0tLHN6PTEsZG9jPXsi//4iOjJ9",
+      "stdin_preview": "{\"\\xff\\xfe\":1}\nros\t\t\\xff\\xfe",
+      "stdout_preview": "init={\"\\xff\\xfe\":1}|ros:r=1,got=-,key=-,sz=1,doc={\"\\xff\\xfe\":2}"
+    },
+    {
+      "id": "place-ops-after-nul",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "WzEsMl0KYXBwCQkxAAppbnMJCTA=",
+      "note": "the C copies the op region into a NUL-terminated buffer and walks it with strchr, so everything past an interior NUL is invisible -- the second op never runs",
+      "rc": 0,
+      "stdout_b64": "aW5pdD1bMSwyXXxhcHA6cj0xLGdvdD0tLGtleT0tLHN6PTMsZG9jPVsxLDIsMV0=",
+      "stdin_preview": "[1,2]\napp\t\t1\u0000\nins\t\t0",
+      "stdout_preview": "init=[1,2]|app:r=1,got=-,key=-,sz=3,doc=[1,2,1]"
+    }
+  ],
+  "fingerprint": "0a3793232135d803b7756dff52c3cb55f07294d174b9180f6a075c7f2a53dd45"
+}

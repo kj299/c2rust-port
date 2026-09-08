@@ -88,9 +88,10 @@ char *cjson_modes_construct(long count, const char *name, const char *raw,
 char *cjson_modes_set(double num, const char *key, const char *newstr,
                       const char *json, size_t json_len);
 
-/* The REMOVAL surface -- cJSON_DetachItemFrom{Array,Object,ObjectCaseSensitive}
- * and cJSON_DeleteItemFrom{Array,Object,ObjectCaseSensitive} -- driven as a
- * PROGRAM rather than a single shot.
+/* The REMOVAL and PLACEMENT surfaces -- cJSON_DetachItemFrom{Array,Object,
+ * ObjectCaseSensitive}, cJSON_DeleteItemFrom{Array,Object,ObjectCaseSensitive},
+ * cJSON_InsertItemInArray and cJSON_ReplaceItemIn{Array,Object,
+ * ObjectCaseSensitive} -- driven as a PROGRAM rather than a single shot.
  *
  * `ops` is a newline-separated list of `<opcode>\t<selector>\t<arg>` lines, at
  * most CJSON_SEQ_MAX_OPS of them; the rest are ignored so the descriptor stays
@@ -110,6 +111,10 @@ char *cjson_modes_set(double num, const char *key, const char *newstr,
  *   xo      cJSON_DeleteItemFromObject(target, <arg>)             case-INsensitive
  *   xos     cJSON_DeleteItemFromObjectCaseSensitive(target, <arg>)
  *   app     cJSON_AddItemToArray(target, cJSON_CreateNumber(<arg>))
+ *   ins     cJSON_InsertItemInArray(target, <arg as index>, Number(<arg>))
+ *   rep     cJSON_ReplaceItemInArray(target, <arg as index>, Number(<arg>))
+ *   ro      cJSON_ReplaceItemInObject(target, <arg>, Number(strlen(<arg>)))   case-INsensitive
+ *   ros     cJSON_ReplaceItemInObjectCaseSensitive(target, <arg>, ...)
  *
  * `app` is the WITNESS op, not a ported entry point -- it is how a corrupted
  * last-item cache becomes visible, since an append is what CONSUMES it
@@ -124,16 +129,44 @@ char *cjson_modes_set(double num, const char *key, const char *newstr,
  *   - deeper nesting is not directly addressable. Adding a path grammar would
  *     put the port's own tree walk on trial instead of the C's list surgery,
  *     which is what this module is for.
- *   - `app` runs only when the target is an ARRAY. The C has no such check and
- *     will happily hang a child off a scalar or give an object a NULL-keyed
- *     member; the port can represent neither. That is the `scalar-parent-child`
- *     divergence class, which belongs to cJSON_AddItemTo* and is tracked as its
- *     own increment -- see DIVERGENCES.md. Refusing it HERE keeps this module's
- *     ledger to the removal surface; it is a scope decision, and it is written
- *     down because an unstated one is indistinguishable from an oversight.
+ *   - `app`, `ins` and `rep` run only when the target is an ARRAY. The C has no
+ *     such check on any of them and will happily hang a child off a scalar or
+ *     give an object a member with a NULL key; the port can represent neither.
+ *     The NULL-keyed member is worth spelling out, because an empty key is NOT
+ *     the same thing: the C's get_object_item stops its walk at a NULL string,
+ *     so a NULL-keyed member is UNFINDABLE, while a member keyed "" is found by
+ *     a lookup for "". A `Value::Object` entry has a key either way, so the port
+ *     cannot express "present but unfindable". That is the `scalar-parent-child`
+ *     class, it belongs to cJSON_AddItemTo*, and it is tracked as its own
+ *     increment -- see DIVERGENCES.md. Refusing it HERE is a scope decision, and
+ *     it is written down because an unstated one is indistinguishable from an
+ *     oversight.
+ *   - `ro`/`ros` are NOT restricted, because every way they can fail is
+ *     representable: a missing key, a non-object parent and an empty container
+ *     all just answer false on both sides.
  *
- * The detach entry points hand the caller OWNERSHIP of the removed node, so
- * every one printed here is cJSON_Delete'd immediately afterwards.
+ * OWNERSHIP, in both directions, because the C splits it across the return
+ * value and every path has to be handled by hand:
+ *   - the detach entry points hand the caller ownership of the REMOVED node, so
+ *     every one printed here is cJSON_Delete'd immediately afterwards;
+ *   - insert and replace take ownership of the new node only when they SUCCEED.
+ *     On any failure path -- a negative index, a NULL item, a missing key, a
+ *     non-container parent -- the caller still owns it and must free it. Probed
+ *     the hard way: the first draft of this mode's probe leaked exactly there,
+ *     under `cJSON_InsertItemInArray(arr, -1, ...)`, and LeakSanitizer named it.
+ *
+ * Two placement behaviors worth knowing before reading the descriptor, both
+ * executed rather than inferred (spikes/place_relink.c):
+ *   - cJSON_InsertItemInArray with an index PAST THE END does not fail. It falls
+ *     through to add_item_to_array and APPENDS, so `ins 99` on a 2-element array
+ *     succeeds and grows it to 3.
+ *   - cJSON_ReplaceItemInObject RENAMES the replacement to the lookup string
+ *     before it looks anything up. A case-insensitive replace of `a` in
+ *     {"A":1} therefore leaves {"a":"..."} -- the key's spelling changes -- and
+ *     even a FAILED replace has already overwritten the caller's node->string.
+ *     The port consumes the replacement by value, so there is no caller-visible
+ *     node left to have been renamed; recorded in DIVERGENCES.md under
+ *     "Structural eliminations" rather than compared.
  *
  * Returns NULL when `json` does not parse (there is nothing to mutate) or on
  * allocation failure. */

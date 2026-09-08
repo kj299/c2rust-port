@@ -1596,3 +1596,66 @@ the emphasized half.
   `cJSON_DetachItemViaPointer` moved to `out-of-scope`), `DIVERGENCES.md` (two
   structural eliminations and the `app` scope refusal), `MUTATION-API-SPIKE.md`,
   `README.md`, `progress.json`.
+
+## 040. The oracle is your code too, and nothing was checking it
+
+*(2026-09-08, cJSON — module `dom-mutate-place`, Insert + Replace.)*
+
+- **What happened:** module 14's first probe program leaked. LeakSanitizer named
+  `cJSON_New_Item`, and the cause was a rule nobody had written down:
+  `cJSON_InsertItemInArray` and `cJSON_ReplaceItemIn*` adopt the new node only
+  when they SUCCEED. On a negative index, a NULL item, a missing key or a
+  non-container parent, the caller still owns it. Fine — that is what probes are
+  for. The uncomfortable part came next: the identical ownership rule was about
+  to be written three lines away in `oracle/cjson_modes.c`, the C driver the
+  differential actually executes, **and nothing in the kit would have caught it
+  there.**
+- **Why not.** A leak does not change stdout. `diff_run` compares stdout, so it
+  stays green. `diff_fuzz` compares stdout, so it stays green. The sanitizer gate
+  runs miri and ASan over the *Rust* workspace, which is the port's declared
+  memory-safety surface — and the C driver is not in it. The oracle is compiled
+  plain, deliberately, because it has to behave like the shipped library.
+  `ports/cjson/oracle` had been in that position for fourteen modules: about a
+  thousand lines of hand-written C, sizing buffers and transferring ownership by
+  hand, unchecked and clean only by luck and review.
+- **The generalization:** *the code a harness adds in order to observe the
+  subject is invisible to that harness's own verdict.* This is LESSONS #39's
+  shape turned on the test rig instead of the library — there the C kept state no
+  output depended on, here the harness has behavior no comparison depends on.
+  Whenever you write code so a gate can watch something, ask what watches THAT.
+  For a differential port the answer is not subtle: the driver is C, so run it
+  under the sanitizers you already run on everything else.
+- **Kit change:** a new control, `harnesses/oracle-sanitize/sanitize_oracle.py`,
+  and a row in CLAUDE.md's table so `control-coverage` obliges every port's gate
+  to call it. The port builds a sanitized twin of its own oracle
+  (`oracle/build_asan.sh`, same sources plus ASan/UBSan/LSan) and the harness
+  drives every matrix case through it, failing on any sanitizer report. Two
+  fail-closed refusals it needs and would be worthless without: an empty case set
+  (0-of-0, LESSONS #18) and an **uninstrumented** binary — a build that silently
+  dropped `-fsanitize` would report clean forever, so the harness checks the
+  binary for the sanitizer runtime and refuses one that has none. Both are
+  mutation-sweep entries. `skeleton/check.sh` ships the step so a new port
+  inherits it.
+- **A smaller instance of the same bug, inside the new control.** Its self-test
+  compiles a deliberately leaky fixture, and my first fixture did not compile —
+  so the self-test printed `SKIP  no sanitizer-capable C compiler` on a machine
+  that had *just* built a sanitized oracle. A broken test and a missing toolchain
+  are not the same event, and collapsing them makes the second one a hiding place
+  for the first. The probe now separates them: a compiler that cannot build the
+  TRIVIAL fixture is a skip; one that builds it and then chokes on the real
+  fixture is a FAIL.
+- **What the module itself found**, all executed rather than read
+  (`spikes/place_relink.c`): `cJSON_InsertItemInArray` with an index past the end
+  does not fail — it falls through to `add_item_to_array` and appends. And
+  `cJSON_ReplaceItemInObject` rewrites the replacement's key to the LOOKUP
+  string before it looks anything up, so a case-insensitive replace of `a` in
+  `{"A":1}` leaves `{"a":…}` and even a *failed* replace has already overwritten
+  the caller's node. Both are pinned as probes. Neither is a defect; both are the
+  opposite of what the function names suggest.
+- **Section amended:** harnesses/oracle-sanitize/sanitize_oracle.py (new);
+  harnesses/gate-mutation/mutate_gates.py (two entries);
+  ports/cjson/oracle/build_asan.sh (new); ports/cjson/check.sh (step 4a);
+  ports/cjson/oracle/cjson_modes.c (the placement ops' ownership handling);
+  ports/cjson/rust/crates/core/src/dom.rs (the placement section);
+  skeleton/check.sh; CLAUDE.md (control table); Makefile;
+  skills/porting-kit-oracle/SKILL.md; PLAYBOOK.md.

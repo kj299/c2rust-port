@@ -5,6 +5,7 @@
     "dom": "unsafe_audited",
     "dom-access": "unsafe_audited",
     "dom-construct": "unsafe_audited",
+    "dom-mutate-place": "unsafe_audited",
     "dom-mutate-remove": "unsafe_audited",
     "dom-mutate-set": "unsafe_audited",
     "entry-minify": "unsafe_audited",

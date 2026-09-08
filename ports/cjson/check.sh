@@ -61,7 +61,7 @@ echo "===== 1b. probe-then-port — transcripts pinned, tests generated ====="
 # fails closed on oracle drift, a tampered transcript, or a hand-edited/stale
 # generated test file. The generated tests themselves run under `cargo test`
 # in step 2.
-PROBE_SETS=(quirks plumbing builder utils access construct set seq)
+PROBE_SETS=(quirks plumbing builder utils access construct set seq place)
 PROBE_FILES=()
 for set in "${PROBE_SETS[@]}"; do
   PROBE_FILES+=("$HERE/oracle/probes-$set.json")
@@ -199,6 +199,22 @@ echo "----- module 13 (dom-mutate-remove): Detach + Delete, as a PROGRAM -----"
     --matrix "$HERE/oracle/matrix-seq.json" --ledger "$HERE/DIVERGENCES.md" \
     --json > "$HERE/reports/dom-mutate-remove.json"
 
+echo "----- module 14 (dom-mutate-place): Insert + Replace, same PROGRAM -----"
+# cJSON_InsertItemInArray and cJSON_ReplaceItemIn{Array,Object,ObjectCaseSensitive},
+# as four more `seq` opcodes so they COMPOSE with the removal ops rather than
+# being tested beside them. cJSON_ReplaceItemViaPointer is out-of-scope for the
+# same reason as its Detach twin, and worse: it frees the item after relinking,
+# so a wrong parent leaves another tree holding freed memory.
+#
+# No ledger entry: this surface matches shipped cJSON everywhere, including the
+# two behaviors that read like bugs and are not (an insert past the end appends;
+# a case-insensitive object replace rewrites the member's key to the lookup
+# spelling). Both are pinned as probes rather than argued about.
+"$PY" "$KIT/harnesses/differential/diff_run.py" \
+    --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
+    --matrix "$HERE/oracle/matrix-place.json" --ledger "$HERE/DIVERGENCES.md" \
+    --json > "$HERE/reports/dom-mutate-place.json"
+
 echo "----- module 9 (cJSON_Utils): pointer / patch / merge / sort differentials -----"
 # JSON Pointer (RFC 6901), Patch (6902), Merge-Patch (7396), object sort. The 3
 # utils-tilde-* rows in the matrix ASSERT the ledgered decode fix still diverges
@@ -287,6 +303,14 @@ bash "$HERE/oracle/build_fixed.sh" > /dev/null
     --args seq --matrix "$HERE/oracle/matrix-seq.json" \
     --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
     --json > "$HERE/reports/fuzz/dom-mutate-remove.json"
+# ...and the same mode seeded from the PLACEMENT matrix, so the fuzzer mutates
+# programs whose ops are inserts and replaces rather than detaches. Same mode,
+# different seed corpus, different reachable states.
+"$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
+    --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
+    --args seq --matrix "$HERE/oracle/matrix-place.json" \
+    --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
+    --json > "$HERE/reports/fuzz/dom-mutate-place.json"
 for m in scalar-parse string-parse buffer-plumbing recursive-core; do
   cp "$HERE/reports/fuzz/alloc-node.json" "$HERE/reports/fuzz/$m.json"
 done
@@ -318,6 +342,27 @@ for um in merge genmerge genpatch; do
       --args "$um" --matrix "$HERE/oracle/matrix-utils.json" \
       --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 > /dev/null
 done
+
+echo "===== 4a. oracle-sanitize — the C side of the differential is OUR C too ====="
+# LESSONS #40: `oracle/driver.c` + `oracle/cjson_modes.c` are ~1000 lines this
+# port wrote, sizing buffers and transferring ownership by hand. A leak or an
+# overread there changes no stdout, so every other gate stays green over it --
+# and for fourteen modules nothing looked. Build a sanitized twin and drive
+# every matrix case through it. Toolchain-optional in the same LOUD way as the
+# sanitizer step: a missing compiler prints a SKIP, never a silent pass.
+if bash "$HERE/oracle/build_asan.sh" > /dev/null 2>&1; then
+  # `--matrix` takes ONE path per flag, so the glob has to become repeated
+  # flags rather than a bare expansion — the first draft passed the extra paths
+  # as positionals and argparse rejected the whole invocation (rc 2).
+  SAN_MATRICES=()
+  for m in "$HERE"/oracle/matrix*.json; do SAN_MATRICES+=(--matrix "$m"); done
+  "$PY" "$KIT/harnesses/oracle-sanitize/sanitize_oracle.py" \
+      --oracle "$HERE/oracle/cjson_oracle_asan" \
+      "${SAN_MATRICES[@]}" --timeout 60
+else
+  echo "SKIP  oracle-sanitize: could not build a sanitized oracle (no ASan-capable"
+  echo "      compiler?). The C driver was NOT checked for memory errors this run."
+fi
 
 echo "===== 4b. sanitizers — miri (UB) + asan (FFI memory), toolchain-optional ====="
 # The ffi crate is the port's ENTIRE memory-safety risk surface, so this is where

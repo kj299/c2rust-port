@@ -19,6 +19,17 @@ semantic-comparison stage, not build time — "it builds" tells you almost nothi
 3. **Capture + version the golden corpus**, flagging oracle nondeterminism so you
    normalize it instead of enshrining it:
    `python3 porting-kit/harnesses/golden/golden.py capture --oracle <c-bin> --matrix <m> --corpus <dir>`
+3b. **Sanitize the driver you wrote around the C** (LESSONS #40). If the subject
+   is a library, you had to write a CLI wrapper for it — that wrapper is your own
+   C, and it is compiled without sanitizers so it behaves like the shipped
+   library. A leak or an overread in it changes no stdout, so `diff_run`,
+   `diff_fuzz` and the Rust-side sanitizer gate are all green over it. Build a
+   sanitized twin from the same sources and drive the matrix through it:
+   `python3 porting-kit/harnesses/oracle-sanitize/sanitize_oracle.py --oracle <sanitized-oracle> --matrix <m.json>`
+   It refuses an empty case set and an uninstrumented binary, because a clean
+   report from either means nothing. cJSON's driver ran unchecked for fourteen
+   modules; the gap surfaced only when a probe program leaked and the same
+   ownership rule turned out to be three lines away in the driver.
 4. **Tune normalization** (`porting-kit/harnesses/differential/normalize.py`) so
    PIDs/timestamps/pointers/ephemeral-ports are masked *identically* on both sides —
    whatever you erase from C you must erase from Rust, or you manufacture a divergence.

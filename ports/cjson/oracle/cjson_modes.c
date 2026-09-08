@@ -538,7 +538,7 @@ char *cjson_modes_set(double num, const char *key, const char *newstr,
     return b.p;
 }
 
-/* ---- `seq` mode: the removal surface, driven as a program ----------------- */
+/* ---- `seq` mode: the removal + placement surfaces, driven as a program ---- */
 
 /* The driver's index rule, identical to `access`'s: strtol base 10 with the
  * result clamped into int, so junk reads as 0 and an overflowing literal
@@ -594,8 +594,10 @@ char *cjson_modes_seq(const char *json, size_t json_len,
 
     char *proot = cJSON_PrintUnformatted(root);
     size_t p = (proot != NULL) ? strlen(proot) : 0;
-    /* Every step prints at most the document, the detached node and its key,
-     * and only `app` can GROW the document (by one small number per step). */
+    /* Every step prints at most the document, the detached node and its key.
+     * Only `app` and `ins` GROW the document, by one number each -- at most 11
+     * digits per step, so CJSON_SEQ_MAX_OPS steps add far less than the 256
+     * bytes of slack carried per step below. */
     size_t cap = 4096 + (size_t)(CJSON_SEQ_MAX_OPS + 1) * (3 * (p + 256) + 192);
     struct sbuf b;
     b.p = (char *)malloc(cap);
@@ -666,6 +668,49 @@ char *cjson_modes_seq(const char *json, size_t json_len,
             } else {
                 r = 0;
             }
+        } else if (strcmp(line, "ins") == 0) {
+            name = "ins";
+            /* ARRAY only, same reason as `app`. Note what this op does NOT
+             * fail at: an index past the end is not an error -- the C falls
+             * through to add_item_to_array and appends (probed, see
+             * spikes/place_relink.c), so `ins 99` on a 2-element array
+             * succeeds and grows it to 3. */
+            r = 0;
+            if (cJSON_IsArray(target)) {
+                cJSON *item = cJSON_CreateNumber(seq_index(arg));
+                r = cJSON_InsertItemInArray(target, seq_index(arg), item) ? 1 : 0;
+                /* Ownership transfers only on SUCCESS; on every failure path
+                 * the caller still owns the node. Omitting this leaks, which is
+                 * how it was found -- LeakSanitizer named the `which < 0` case
+                 * in this mode's own probe program. The gate that would now
+                 * catch the same slip HERE, rather than in a throwaway probe,
+                 * is check.sh step 4a (LESSONS #40): this file is the C the
+                 * port wrote, and a leak in it changes no stdout. */
+                if (!r) cJSON_Delete(item);
+            }
+        } else if (strcmp(line, "rep") == 0) {
+            name = "rep";
+            r = 0;
+            if (cJSON_IsArray(target)) {
+                cJSON *item = cJSON_CreateNumber(seq_index(arg));
+                r = cJSON_ReplaceItemInArray(target, seq_index(arg), item) ? 1 : 0;
+                if (!r) cJSON_Delete(item);
+            }
+        } else if (strcmp(line, "ro") == 0 || strcmp(line, "ros") == 0) {
+            /* NOT restricted to a container: every way these fail -- missing
+             * key, non-object parent, empty container -- is representable on
+             * both sides, so the guards themselves are worth comparing.
+             *
+             * The value is the key's length purely so successive replaces are
+             * distinguishable in the descriptor; the interesting part is the
+             * position and the KEY, which the C rewrites to the lookup string
+             * (a case-insensitive replace of `a` in {"A":1} leaves {"a":...}). */
+            int cs = (line[2] == 's');
+            name = cs ? "ros" : "ro";
+            cJSON *item = cJSON_CreateNumber((double)strlen(arg));
+            r = (cs ? cJSON_ReplaceItemInObjectCaseSensitive(target, arg, item)
+                    : cJSON_ReplaceItemInObject(target, arg, item)) ? 1 : 0;
+            if (!r) cJSON_Delete(item);
         }
 
         sb_step(&b, name, r, got, target, root);

@@ -1,0 +1,376 @@
+{
+  "module": "dom-mutate-place",
+  "modules": [
+    "dom-mutate-place"
+  ],
+  "probes": [
+    {
+      "id": "place-ins-at-front",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[10,20]\nins\t\t0",
+      "note": "insert at index 0: the C sets array->child to the new node and repairs the first element's prev, which is also the last-item cache"
+    },
+    {
+      "id": "place-ins-middle",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[10,20,30]\nins\t\t1",
+      "note": "insert in the middle -- the plain relink, neither end of the list"
+    },
+    {
+      "id": "place-ins-at-end-index",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[10,20]\nins\t\t2",
+      "note": "index == size: get_array_item answers NULL, so this is already the APPEND path, not an in-place insert"
+    },
+    {
+      "id": "place-ins-past-end",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[1,2]\nins\t\t99",
+      "note": "an index far past the end does NOT fail. cJSON_InsertItemInArray falls through to add_item_to_array and appends (probed; spikes/place_relink.c)"
+    },
+    {
+      "id": "place-ins-into-empty",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[]\nins\t\t0",
+      "note": "insert into an empty array: the append path again, and the branch that starts a fresh list (item->prev = item)"
+    },
+    {
+      "id": "place-ins-negative",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[1,2]\nins\t\t-1",
+      "note": "which < 0 is the C's own guard -- false, document untouched, and the caller still owns the node it was handed"
+    },
+    {
+      "id": "place-ins-then-append",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[10,20]\nins\t\t0\napp\t\t99",
+      "note": "THE WITNESS: insert at the front rewrites the last-item cache, and only a later append reads it back (LESSONS #39). 99 must land at the END"
+    },
+    {
+      "id": "place-ins-end-then-append",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[10,20]\nins\t\t2\napp\t\t99",
+      "note": "same witness for the append path of insert"
+    },
+    {
+      "id": "place-ins-empty-then-append",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[]\nins\t\t0\napp\t\t99",
+      "note": "and for the fresh-list branch, where a wrong prev would make the next append the first element"
+    },
+    {
+      "id": "place-ins-object-refused",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"a\":1,\"b\":2}\nins\t\t1",
+      "note": "the mode refuses a non-ARRAY target. The C would insert a member with a NULL key, which is not the same as a member keyed \"\": get_object_item stops its walk at a NULL string, so it would be present but unfindable -- unrepresentable in Value::Object. Stated limit, see cjson_modes.h"
+    },
+    {
+      "id": "place-ins-scalar-refused",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"a\":7}\nins\ta\t0",
+      "note": "same refusal for a scalar target, which the C would give a child (scalar-parent-child)"
+    },
+    {
+      "id": "place-ins-missing-target",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[1,2]\nins\tzz\t0",
+      "note": "an unresolvable selector: no target, so the op is a recorded no-op on both sides"
+    },
+    {
+      "id": "place-ins-index-junk",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[1,2]\nins\t\tzz",
+      "note": "a non-numeric index reads as 0 through the shared strtol rule before cJSON sees an int"
+    },
+    {
+      "id": "place-ins-index-overflow",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[1,2]\nins\t\t99999999999999999999",
+      "note": "20 digits overflow long; strtol saturates and the driver clamps to INT_MAX, which is then the append path"
+    },
+    {
+      "id": "place-ins-nested-array",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"a\":[1,2],\"b\":9}\nins\ta\t1\napp\ta\t7",
+      "note": "the selector reaches one level down, so insert runs on a nested array and the rest of the document must come back untouched"
+    },
+    {
+      "id": "place-rep-first",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[10,20,30]\nrep\t\t0\napp\t\t99",
+      "note": "replace the first element, then append: the C has a special branch for parent->child == item and must still leave the cache right"
+    },
+    {
+      "id": "place-rep-middle",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[10,20,30]\nrep\t\t1\napp\t\t99",
+      "note": "replace in the middle"
+    },
+    {
+      "id": "place-rep-last",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[10,20,30]\nrep\t\t2\napp\t\t99",
+      "note": "replace the LAST element -- the branch that writes parent->child->prev, i.e. the cache itself"
+    },
+    {
+      "id": "place-rep-only-element",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[42]\nrep\t\t0\napp\t\t99",
+      "note": "the only element: the C's `parent->child->prev == parent->child` self-referential case"
+    },
+    {
+      "id": "place-rep-out-of-range",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[1]\nrep\t\t9",
+      "note": "unlike insert, an out-of-range index IS a failure here: get_array_item answers NULL and ReplaceItemViaPointer rejects a NULL item"
+    },
+    {
+      "id": "place-rep-negative",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[1,2]\nrep\t\t-1",
+      "note": "which < 0 guard"
+    },
+    {
+      "id": "place-rep-empty",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[]\nrep\t\t0",
+      "note": "empty container: also the `parent->child == NULL` guard inside ReplaceItemViaPointer"
+    },
+    {
+      "id": "place-rep-object-refused",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"a\":1}\nrep\t\t0",
+      "note": "non-array target refused, same reason as insert"
+    },
+    {
+      "id": "place-rep-nested",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"a\":[1,2,3]}\nrep\ta\t1",
+      "note": "replace inside a nested array"
+    },
+    {
+      "id": "place-ro-keeps-position",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"a\":1,\"b\":2,\"c\":3}\nro\t\tb",
+      "note": "the replacement takes the SLOT, not the end: order is a,b,c afterwards"
+    },
+    {
+      "id": "place-ro-renames-key-case",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"A\":1}\nro\t\ta",
+      "note": "replace_item_in_object strdups the LOOKUP string into the replacement's key before looking anything up, so a case-INsensitive replace of `a` rewrites the member's spelling to `a`. Probed, because it is the opposite of what the name suggests"
+    },
+    {
+      "id": "place-ros-is-case-sensitive",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"A\":1}\nros\t\ta",
+      "note": "the case-SENSITIVE twin finds nothing, so the document is untouched"
+    },
+    {
+      "id": "place-ro-duplicate-first-wins",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"k\":1,\"k\":2}\nro\t\tk",
+      "note": "duplicate keys resolve to the first match, like every other object walk in the C"
+    },
+    {
+      "id": "place-ro-missing-key",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"a\":1}\nro\t\tzz",
+      "note": "a missing key answers false. In the C the replacement has ALREADY been renamed at this point; the port consumes it by value, so there is no caller-visible node to have been mutated (DIVERGENCES.md, structural eliminations)"
+    },
+    {
+      "id": "place-ro-array-parent",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[1,2]\nro\t\tk",
+      "note": "an array parent: get_object_item compares ->string, and array children have none, so false"
+    },
+    {
+      "id": "place-ro-empty-object",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{}\nro\t\tk",
+      "note": "empty object -- both the lookup and the child==NULL guard say no"
+    },
+    {
+      "id": "place-ro-scalar-parent",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"a\":7}\nro\ta\tk",
+      "note": "a scalar parent: no child list to walk"
+    },
+    {
+      "id": "place-ro-empty-key",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"\":1}\nros\t\t",
+      "note": "an EMPTY key is a findable key, unlike the NULL key the C would create by inserting into an object -- which is exactly why `ins` refuses object targets"
+    },
+    {
+      "id": "place-ro-nested",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"o\":{\"x\":1,\"y\":2}}\nros\to\tx",
+      "note": "replace one level down"
+    },
+    {
+      "id": "place-ro-then-detach",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"a\":1,\"b\":2}\nro\t\ta\ndos\t\ta",
+      "note": "replace then detach the same key: the replacement must be findable under the key it was renamed to"
+    },
+    {
+      "id": "place-ins-rep-app-mix",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[10,20,30]\nins\t\t0\nrep\t\t2\napp\t\t7\nda\t\t1\napp\t\t8",
+      "note": "five ops composing insert, replace, append and detach -- each step's descriptor is emitted, so a corruption at step 1 masked by step 4 is still visible"
+    },
+    {
+      "id": "place-rep-detach-append",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[1,2,3]\nrep\t\t2\nda\t\t0\napp\t\t9\nda\t\t2\napp\t\t8",
+      "note": "replace the last, then remove around it, appending after each -- the cache is read back three times"
+    },
+    {
+      "id": "place-ins-then-rep-same-index",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[5]\nins\t\t0\nrep\t\t0\napp\t\t9",
+      "note": "insert then immediately replace the node just inserted"
+    },
+    {
+      "id": "place-object-mix",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"a\":1,\"b\":2}\nro\t\ta\nxo\t\tb\nros\t\ta\ndo\t\tA",
+      "note": "object placement and removal interleaved, including a case-insensitive detach of the renamed key"
+    },
+    {
+      "id": "place-max-ops-truncates",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[1,2,3,4,5,6,7,8,9]\napp\t\t1\napp\t\t1\napp\t\t1\napp\t\t1\napp\t\t1\napp\t\t1\napp\t\t1\napp\t\t1\napp\t\t1\napp\t\t1\napp\t\t1\napp\t\t1",
+      "note": "twelve op lines with a cap of eight: the last four are ignored so the descriptor stays bounded whatever the fuzzer sends"
+    },
+    {
+      "id": "place-unknown-op",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[1,2]\n??\t\t0\napp\t\t9",
+      "note": "an unrecognized opcode records as `?` and changes nothing -- a fuzzed opcode cannot put arbitrary bytes into the descriptor"
+    },
+    {
+      "id": "place-no-ops",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[1,2,3]",
+      "note": "a document and no program at all: just the initial state"
+    },
+    {
+      "id": "place-unparseable",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{oops\napp\t\t1",
+      "note": "an unparseable document is rc 1 with nothing on stdout -- there is no tree to mutate"
+    },
+    {
+      "id": "place-key-interior-nul",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "eyJhIjoxLCJiIjoyfQpybwkJYQB6egphcHAJCTE=",
+      "note": "an interior NUL in the key: the C hands cJSON a C string, so the lookup is for `a` and the rename writes `a` -- everything after the NUL is invisible to it (LESSONS #29)"
+    },
+    {
+      "id": "place-arg-high-bytes",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "eyL//iI6MX0Kcm9zCQn//g==",
+      "note": "bytes 0x80-0xFF in a key: cJSON compares them verbatim with no UTF-8 validation, and so must the port"
+    },
+    {
+      "id": "place-ops-after-nul",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "WzEsMl0KYXBwCQkxAAppbnMJCTA=",
+      "note": "the C copies the op region into a NUL-terminated buffer and walks it with strchr, so everything past an interior NUL is invisible -- the second op never runs"
+    }
+  ]
+}

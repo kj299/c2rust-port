@@ -6,8 +6,11 @@ what are the hazards, how should the work be split, and does it need a
 mutation-*sequence* fuzzer rather than the single-shot modes every other module
 uses.
 
-> **Progress against §4's split (updated 2026-09-07).** Two of the three
-> modules have LANDED and the ceiling has ratcheted 18 → 16 → 9.
+> **Progress against §4's split (updated 2026-09-08).** All three modules have
+> LANDED and the ceiling has ratcheted 18 → 16 → 9 → 4. This spike is closed:
+> the mutation API is fully on the compared contract, and the four entry points
+> still unported are the parse/print *options* surface, which is not this
+> document's subject.
 >
 > * **`dom-mutate-set`** (§4.3): `cJSON_SetValuestring` and
 >   `cJSON_SetNumberHelper`, via the `set` driver mode. It also corrected this
@@ -18,9 +21,11 @@ uses.
 >   `cJSON_DetachItemViaPointer` moved to `out-of-scope` exactly as §2 proposed.
 >   Zero divergences: the port matches shipped cJSON on all six.
 >
-> **`dom-mutate-place`** (§4.2, Insert + Replace) is the one still queued, and it
-> reuses the `seq` mode rather than building anything new — which was the whole
-> reason for putting the harness in the expensive module.
+> * **`dom-mutate-place`** (§4.2): `cJSON_InsertItemInArray` and the three
+>   `cJSON_ReplaceItemIn*`, as four more `seq` opcodes — it built nothing new,
+>   which was the whole reason for putting the harness in the expensive module.
+>   `cJSON_ReplaceItemViaPointer` moved to `out-of-scope` beside its Detach twin.
+>   Zero divergences again.
 
 Written because the kit's most expensive lesson says so — *"spike the scary
 module before scheduling it"* (the winlsof hang: 7 reactive commits vs ~1 day up
@@ -51,12 +56,14 @@ row that made a safety claim, was the one that was wrong.
 | # | Hazard | Evidence |
 |---|---|---|
 | H1a/H1b | `DetachItemViaPointer` has no membership check | `ran: spikes/detach_null_write.c`, `detach_cross_document.c`, `detach_corruption_cashes_in.c` |
-| H2 | `ReplaceItemViaPointer` shares the missing check | `read` — a design observation about the same absent invariant, not a claim that any particular call is safe |
-| H3 | `InsertItemInArray` already has a corruption guard | `read` — quoting a guard that is present; nothing is called benign |
+| H2 | `ReplaceItemViaPointer` shares the missing check | `read` — a design observation about the same absent invariant, not a claim that any particular call is safe. Still `read` after module 14: the symbol went `out-of-scope`, so nothing built the state, and running it would have meant constructing the aliasing deliberately |
+| H3 | `InsertItemInArray` already has a corruption guard | `read` — quoting a guard that is present; nothing is called benign. The guard itself is still unexercised: it needs a list already corrupted, which the port cannot build and the `seq` op grammar cannot express |
 | H4 | `SetNumberHelper` has no NULL check | `read` — deliberately not run: the C's answer is a segfault |
 | H5 | `SetNumberHelper` carries the same NaN→`int` UB | `ran` (as of module 12): pinned by `matrix-set.json`'s `set-nan-*` rows |
 | H6 | `SetValuestring`'s length branch | `read`, **and it called the line memory-safe** — see H7 |
 | H7 | the same `strcpy` is an OVERLAPPING copy | `ran: spikes/setvaluestring_alias.c` |
+| H8 | insert past the end APPENDS rather than failing | `ran: spikes/place_relink.c` — and this list did not predict it |
+| H9 | `ReplaceItemInObject` renames the replacement to the lookup string, even when it FAILS | `ran: spikes/place_relink.c` — nor this |
 | H1-safe | the four index/key detach entry points cannot reach H1's state | `ran: spikes/detach_relink.c` — and it is the one spike here that exits 0, because it documents correct behavior rather than a defect |
 
 Reproducers are in the spike scripts described in §5.
@@ -229,6 +236,49 @@ already triaged as benign. The spike found the aliasing bug in
 `DetachItemViaPointer` because it ran it; it missed the aliasing bug in
 `SetValuestring` because it only read it.
 
+### H8 — `cJSON_InsertItemInArray` past the end APPENDS, it does not fail
+
+**Found by module 14, not predicted here.** The function looks the position up
+with `get_array_item`, and NULL sends it straight to `add_item_to_array`:
+
+```c
+after_inserted = get_array_item(array, (size_t)which);
+if (after_inserted == NULL)
+{
+    return add_item_to_array(array, newitem);
+}
+```
+
+So `cJSON_InsertItemInArray(arr, 99, v)` on a two-element array returns **true**
+and grows it to three. Only `which < 0` and `newitem == NULL` are failures. A
+caller validating an index by checking the return value learns nothing.
+Reproduced in `spikes/place_relink.c`; pinned as the `place-ins-past-end` probe.
+
+### H9 — `cJSON_ReplaceItemInObject` renames the replacement, even on failure
+
+`replace_item_in_object` frees the replacement's `->string` and strdups the
+`string` ARGUMENT into it **before** it looks anything up:
+
+```c
+replacement->string = (char*)cJSON_strdup((const unsigned char*)string, &global_hooks);
+...
+return cJSON_ReplaceItemViaPointer(object, get_object_item(object, string, case_sensitive), replacement);
+```
+
+Two consequences, both executed:
+
+- a case-INsensitive replace of `a` in `{"A":1}` leaves `{"a":…}` — the member's
+  spelling changes to whatever the caller asked for, not what the document had;
+- when the lookup then fails, the call returns false but the caller's node has
+  already been renamed. A failed operation mutated an argument the caller still
+  owns.
+
+Neither is a memory-safety defect. Both are the opposite of what the name
+suggests, which is exactly the kind of thing a differential pins and a reading
+does not. The port consumes the replacement by value, so there is no
+caller-visible node left to have been renamed — recorded under "Structural
+eliminations" rather than compared.
+
 ---
 
 ## 2. The API-shape decision this forces
@@ -344,6 +394,15 @@ Not one module. Three, in dependency order, each independently gateable:
 2. **`dom-mutate-place`** — Insert + Replace (5 symbols, minus the 1 refused).
    Reuses the mode; adds ops. H3's corruption guard and H2's free-on-replace are
    the interesting behaviors.
+   **LANDED 2026-09-08**, and the "reuses the mode" estimate was the accurate
+   part: four opcodes, no new harness. The "interesting behaviors" guess was
+   not. H2's free-on-replace never came up — the symbol went `out-of-scope`, so
+   the port never calls it — and H3's corruption guard is still unexercised,
+   because reaching it needs a list that is already corrupted. What was actually
+   interesting was neither: an insert past the end silently appends (H8), and a
+   case-insensitive object replace rewrites the member's key (H9). Both were
+   found by running the functions, which is the third time in three modules that
+   the executed surprise beat the predicted one.
 3. **`dom-mutate-set`** — the two setters (2 symbols). Independent of the other
    two and much smaller: H6's length branch and H5's ledgered NaN. Could ship
    first if a quick win is wanted, since it needs no sequence mode at all.
@@ -374,6 +433,7 @@ re-check later (LESSONS #32).
 | `spikes/detach_cross_document.c` | H1b: cross-document detach, immediate view | B silently modified, A "fine" |
 | `spikes/detach_corruption_cashes_in.c` | H1b one op later | append to A lands in B |
 | `spikes/setvaluestring_alias.c` | H7: in-place prefix strip via `SetValuestring` | ASan strcpy-param-overlap, cJSON.c:418 |
+| `spikes/place_relink.c` | H8/H9 plus the insert/replace relink invariants | clean exit 0 — documents correct behavior and the two surprises |
 | `spikes/detach_relink.c` | the SAFE detach entry points: relink, key retention, case flags, index guards | clean exit 0 — the behavior the port reproduces |
 
 They are **not** gates — `check.sh` does not run them and three are expected to

@@ -181,6 +181,22 @@ Format:
   behaviour. It is written into `cjson_modes.h`, into `modes::seq`, and here,
   because an unstated refusal is indistinguishable from an oversight.
 
+  **`dom-mutate-place` declined it twice more (2026-09-08).** `cJSON_InsertItemInArray`
+  and `cJSON_ReplaceItemInArray` have no type check either — the C reaches both
+  through `get_array_item`, which walks any node's child list — so the `seq`
+  mode's `ins` and `rep` ops carry the same array-only restriction as `app`, for
+  the same reason and stated in the same three places. `ro`/`ros`
+  (`cJSON_ReplaceItemInObject*`) are deliberately NOT restricted: every way they
+  can fail — a missing key, a non-object parent, an empty container — is
+  representable on both sides, so their guards are worth comparing rather than
+  refusing.
+
+  Three modules have now routed around this one class. That is the argument for
+  finally putting it on the contract as its own increment rather than a fourth
+  restriction: the refusal is costing coverage in every mutation mode, and each
+  restatement makes it easier to mistake for a settled decision instead of a
+  deferred one.
+
 Beyond those three JSON-Patch escape fixes and the NaN cast above, every ported module matches the C
 byte-for-byte (the `dom` module's Compare/Duplicate quirks — inf never equals
 itself, dup-keys never compare equal — are REPRODUCED, so they are matches, not
@@ -292,6 +308,38 @@ the port diverges and the divergence is judged an intentional fix-of-C-defect.
   The port returns an owned `Detached`, so the value is either bound or dropped
   and the leak is not expressible. No output difference, so no ledger row — but
   it is half the reason this family is worth porting.
+
+- **`cJSON_ReplaceItemViaPointer`'s missing membership check.** The same
+  unchecked `(parent, item)` contract as its Detach twin, and materially worse:
+  after relinking it calls `cJSON_Delete(item)`, so passing an item that belongs
+  to a different parent frees a node that parent still links to — a
+  use-after-free primitive rather than a wrong answer (MUTATION-API-SPIKE.md H2).
+  `Value` is an owned tree with no parent pointers, so a caller cannot name an
+  item and a different parent at the same time; the state is a compile error,
+  not a runtime check. API-COVERAGE.md lists the symbol as **out-of-scope**, and
+  the four entry points that reach it in the C (`ReplaceItemIn{Array,Object,
+  ObjectCaseSensitive}`, and `InsertItemInArray` for the insert half) ARE ported
+  — they are safe there because each looks the item up inside the parent first.
+
+- **`cJSON_ReplaceItemInObject` renaming a node it then fails to place.**
+  `replace_item_in_object` frees the replacement's `->string` and strdups the
+  lookup key into it BEFORE the lookup runs, so a call that returns false has
+  already overwritten a field of a node the caller still owns (probed;
+  `spikes/place_relink.c`). The port takes the replacement **by value**, so
+  after a failed call there is no caller-visible node left to have been mutated.
+  Invisible to the differential for that exact reason: the `seq` mode has no
+  handle to inspect afterwards, and inventing one would mean modelling a state
+  the port cannot enter.
+
+- **Insert/replace ownership on the failure path.**
+  `cJSON_InsertItemInArray` and `cJSON_ReplaceItemIn*` adopt the new node only
+  when they SUCCEED; on a negative index, a NULL item, a missing key or a
+  non-container parent the caller is still responsible for freeing it. That rule
+  is nowhere in the header, and forgetting it leaks — which is how it was found,
+  in this module's own probe program, named by LeakSanitizer. The port's
+  functions take the value and drop it when the call fails, so there is no rule
+  to remember. It changes no output, so no differential can see it; what checks
+  the C side of it now is `check.sh` step 4a (LESSONS #40).
 
 - **`cJSON_SetValuestring`'s `IsReference` and NULL-`valuestring` guards.** Both
   need a node built by `cJSON_CreateStringReference`, which API-COVERAGE.md

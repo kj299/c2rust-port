@@ -72,6 +72,24 @@ mkdir -p "$HERE/reports/fuzz"
     --matrix "$HERE/oracle/matrix.json" --ledger "$HERE/DIVERGENCES.md" \
     --iterations 2000 --timeout 5 --json > "$HERE/reports/fuzz/MODULE.json"
 
+echo "===== 3c. oracle-sanitize — the C DRIVER is code this port wrote ====="
+# LESSONS #40. `oracle/driver.c` is not vendored C, it is yours: it sizes
+# buffers and transfers ownership by hand, and a leak or an overread there
+# changes no stdout, so the differential and the fuzzer stay green over it.
+# Build a sanitized twin of the same sources and drive every matrix case
+# through it. Toolchain-optional, but the SKIP must be loud.
+if bash "$HERE/oracle/build_asan.sh" > /dev/null 2>&1; then
+  # one --matrix flag per file: the flag takes a single path, so a bare glob
+  # would hand argparse positionals it rejects.
+  SAN_MATRICES=()
+  for m in "$HERE"/oracle/matrix*.json; do SAN_MATRICES+=(--matrix "$m"); done
+  "$PY" "$KIT/harnesses/oracle-sanitize/sanitize_oracle.py" \
+      --oracle "$HERE/oracle/oracle_asan" "${SAN_MATRICES[@]}"
+else
+  echo "SKIP  oracle-sanitize: no ASan-capable compiler — the C driver was NOT"
+  echo "      checked for memory errors this run."
+fi
+
 echo "===== 4. sanitizers (toolchain-optional, but SKIP must be loud) ====="
 mkdir -p "$HERE/reports/sanitize"
 if cargo +nightly miri --version >/dev/null 2>&1; then

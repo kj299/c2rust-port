@@ -101,6 +101,15 @@ winlsof's phase order was sound; its one miss was not spiking the hang first.
 - Lock the C binary at a known commit. Capture golden outputs across a
   **documented input matrix** (`harnesses/differential/input-matrix.example.toml`)
   with `harnesses/golden/golden.py capture`.
+- **Sanitize the DRIVER you wrote around the C** (LESSONS #40). A library needs a
+  CLI wrapper before a differential can execute it, and that wrapper is your C —
+  hand-sized buffers, hand-transferred ownership — compiled plain so it behaves
+  like the shipped library. A leak or an overread in it changes no stdout, so the
+  differential and the fuzzer both stay green over it, and the Rust-side
+  sanitizer gate never looks at C. Build a sanitized twin from the same sources
+  and run the matrix through it:
+  `harnesses/oracle-sanitize/sanitize_oracle.py --oracle <sanitized> --matrix <m>`.
+  cJSON's driver went fourteen modules unchecked this way.
 - **Detect oracle nondeterminism up front** — `golden.py` runs each input N times
   and flags fields that vary (PIDs, timestamps, addresses, ordering). Those feed
   the normalization rules (`harnesses/differential/normalize.py`), so a real

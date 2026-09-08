@@ -560,7 +560,9 @@ fn seq(input: &[u8]) -> (i32, Vec<u8>) {
         // there is no answer to compare, and pretending otherwise would invent
         // a result the C never produced.
         let (name, mut r): (&str, i32) = match opcode {
-            b"da" | b"do" | b"dos" | b"app" => (core_name(opcode), 0),
+            b"da" | b"do" | b"dos" | b"app" | b"ins" | b"rep" | b"ro" | b"ros" => {
+                (core_name(opcode), 0)
+            }
             b"xa" | b"xo" | b"xos" => (core_name(opcode), -1),
             _ => ("?", -1),
         };
@@ -607,6 +609,42 @@ fn seq(input: &[u8]) -> (i32, Vec<u8>) {
                             r = i32::from(dom::add_item_to_array(t, dom::number(f64::from(index))));
                         }
                     }
+                    // `ins`/`rep` are array-only for exactly the same reason as
+                    // `app`. Their negative-index guard lives here too: the C
+                    // rejects `which < 0` before the lookup, and `at` is None
+                    // precisely then.
+                    b"ins" => {
+                        if let (Value::Array(_), Some(i)) = (&*t, at) {
+                            r = i32::from(dom::insert_in_array(
+                                t,
+                                i,
+                                dom::number(f64::from(index)),
+                            ));
+                        }
+                    }
+                    b"rep" => {
+                        if let (Value::Array(_), Some(i)) = (&*t, at) {
+                            r = i32::from(dom::replace_in_array(
+                                t,
+                                i,
+                                dom::number(f64::from(index)),
+                            ));
+                        }
+                    }
+                    // NOT restricted to a container: every way these fail is
+                    // representable, so the guards themselves are compared. The
+                    // value is the key's length only so successive replaces are
+                    // told apart; the interesting part is the position and the
+                    // KEY, which the C rewrites to the lookup string.
+                    b"ro" | b"ros" => {
+                        let cs = opcode == b"ros";
+                        // The C measures with `strlen(arg)`, so an interior NUL
+                        // shortens the value as well as the key (LESSONS #29).
+                        let len = cstr_prefix(arg).len();
+                        #[allow(clippy::cast_precision_loss)] // bounded by the op line
+                        let v = dom::number(len as f64);
+                        r = i32::from(dom::replace_in_object(t, arg, v, cs));
+                    }
                     _ => {}
                 }
                 if got.is_some() {
@@ -648,6 +686,10 @@ fn core_name(opcode: &[u8]) -> &'static str {
         b"xo" => "xo",
         b"xos" => "xos",
         b"app" => "app",
+        b"ins" => "ins",
+        b"rep" => "rep",
+        b"ro" => "ro",
+        b"ros" => "ros",
         _ => "?",
     }
 }

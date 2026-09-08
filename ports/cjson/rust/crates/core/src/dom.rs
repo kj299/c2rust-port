@@ -614,6 +614,106 @@ pub fn delete_from_object(container: &mut Value, name: &[u8], case_sensitive: bo
     drop(detach_from_object(container, name, case_sensitive));
 }
 
+// ---- placement (cJSON_InsertItemInArray / cJSON_ReplaceItemIn*) ------------
+//
+// `cJSON_ReplaceItemViaPointer` is **out-of-scope**, for the same reason as
+// `cJSON_DetachItemViaPointer` and then some: it takes `(parent, item)` without
+// checking that `item` belongs to `parent`, and it *frees* `item` after
+// relinking — so calling it with a node from another tree leaves that tree
+// holding freed memory (MUTATION-API-SPIKE.md H2, a use-after-free primitive
+// rather than merely a wrong answer). `Value` has no parent pointers, so the
+// aliasing that makes it dangerous cannot be spelled here at all.
+//
+// All three functions below take the new value BY VALUE. That is the C's
+// ownership rule made structural: `cJSON_InsertItemInArray` and
+// `cJSON_ReplaceItemIn*` adopt the node only when they succeed, and on every
+// failure path the caller is still responsible for freeing it. In the C that is
+// a rule you have to remember — the first draft of this module's own probe
+// forgot it and LeakSanitizer caught the `which < 0` case, which is what put
+// the C oracle itself under a sanitizer (LESSONS #40). Here the value is simply
+// dropped when the call fails.
+
+/// cJSON.c:2280 `cJSON_InsertItemInArray`.
+///
+/// **An index past the end is not an error.** The C looks the position up with
+/// `get_array_item`, and when that answers NULL it falls through to
+/// `add_item_to_array` — so `insert(arr, 99, v)` on a 2-element array APPENDS
+/// and returns true (probed; `spikes/place_relink.c`). Only a negative index or
+/// a NULL item make it fail, and neither is representable in this signature, so
+/// both guards live at the driver boundary.
+///
+/// Array parents only. The C has no type check and would insert into an object
+/// — producing a member with a NULL key, which is *not* the same as a member
+/// keyed `""`: the C's `get_object_item` stops its walk at a NULL string, so
+/// such a member can never be found again, while `""` can. A `Value::Object`
+/// entry always has a key, so "present but unfindable" is unrepresentable.
+/// DIVERGENCES.md `scalar-parent-child`.
+pub fn insert_in_array(array: &mut Value, index: usize, item: Value) -> bool {
+    let Value::Array(items) = array else {
+        return false;
+    };
+    // `min`, not a bounds check: past-the-end is the append path, not a failure.
+    items.insert(index.min(items.len()), item);
+    true
+}
+
+/// cJSON.c:2320 `cJSON_ReplaceItemInArray`.
+///
+/// Unlike insert, an out-of-range index here IS a failure: `get_array_item`
+/// answers NULL and `cJSON_ReplaceItemViaPointer` rejects a NULL item. An empty
+/// container fails too, via that function's `parent->child == NULL` guard.
+/// Array parents only, for the same reason as [`insert_in_array`].
+pub fn replace_in_array(array: &mut Value, index: usize, item: Value) -> bool {
+    let Value::Array(items) = array else {
+        return false;
+    };
+    match items.get_mut(index) {
+        Some(slot) => {
+            *slot = item;
+            true
+        }
+        None => false,
+    }
+}
+
+/// cJSON.c:2331 `cJSON_ReplaceItemInObject` (`case_sensitive == false`) and
+/// :2336 `cJSON_ReplaceItemInObjectCaseSensitive` (`true`).
+///
+/// **The key is rewritten to the LOOKUP string, not kept.** `replace_item_in_object`
+/// frees the replacement's `->string` and strdups the `string` argument into it
+/// before looking anything up, so a case-INsensitive replace of `a` in
+/// `{"A":1}` leaves `{"a":…}` — the member's spelling changes to whatever the
+/// caller asked for. Probed, because it is the opposite of what "replace the
+/// item at this key" suggests.
+///
+/// The position is preserved and duplicate keys resolve to the first match.
+/// A non-object parent, a missing key and an empty container all answer false.
+///
+/// One C behavior is deliberately absent: the rename happens *before* the
+/// lookup, so a FAILED replace has already overwritten the caller's node. Here
+/// the replacement is consumed by value, so there is no caller-visible node left
+/// to have been mutated — DIVERGENCES.md, "Structural eliminations".
+pub fn replace_in_object(
+    object: &mut Value,
+    name: &[u8],
+    item: Value,
+    case_sensitive: bool,
+) -> bool {
+    let Value::Object(entries) = object else {
+        return false;
+    };
+    let Some(at) = find_object_index(entries, name, case_sensitive) else {
+        return false;
+    };
+    let Some(slot) = entries.get_mut(at) else {
+        return false;
+    };
+    // `cstr`: the C strdups the name with `cJSON_strdup`, which is strlen-based.
+    slot.0 = cstr(name).to_vec();
+    slot.1 = item;
+    true
+}
+
 // ---- builders (Add*) -------------------------------------------------------
 
 /// cJSON.c:1974 `add_item_to_array`.
@@ -1256,5 +1356,123 @@ mod tests {
         // read-only twin.
         assert!(get_object_item_mut(&mut root, b"K", true).is_none());
         assert!(get_object_item_mut(&mut root, b"K", false).is_some());
+    }
+
+    /// The behavior of `cJSON_InsertItemInArray` most likely to surprise a
+    /// reader of its name: an index past the end is not rejected, it appends.
+    /// Probed against v1.7.18 (`spikes/place_relink.c`).
+    #[test]
+    fn insert_past_the_end_appends_rather_than_failing() {
+        let mut arr = Value::Array(vec![number(1.0), number(2.0)]);
+        assert!(insert_in_array(&mut arr, 99, number(7.0)));
+        assert_eq!(print_value(&arr, false).unwrap(), b"[1,2,7]".to_vec());
+        // exactly `len` is the same path
+        let mut arr = Value::Array(vec![number(1.0)]);
+        assert!(insert_in_array(&mut arr, 1, number(7.0)));
+        assert_eq!(print_value(&arr, false).unwrap(), b"[1,7]".to_vec());
+        // and an empty array accepts index 0
+        let mut arr = Value::Array(Vec::new());
+        assert!(insert_in_array(&mut arr, 0, number(7.0)));
+        assert_eq!(print_value(&arr, false).unwrap(), b"[7]".to_vec());
+    }
+
+    /// Insert shifts, replace overwrites — and replace is the one where an
+    /// out-of-range index IS a failure.
+    #[test]
+    fn insert_shifts_and_replace_overwrites_at_every_position() {
+        for (at, want) in [(0, "[7,10,20]"), (1, "[10,7,20]"), (2, "[10,20,7]")] {
+            let mut arr = Value::Array(vec![number(10.0), number(20.0)]);
+            assert!(insert_in_array(&mut arr, at, number(7.0)));
+            assert_eq!(print_value(&arr, false).unwrap(), want.as_bytes());
+        }
+        for (at, want) in [(0, "[7,20,30]"), (1, "[10,7,30]"), (2, "[10,20,7]")] {
+            let mut arr = Value::Array(vec![number(10.0), number(20.0), number(30.0)]);
+            assert!(replace_in_array(&mut arr, at, number(7.0)));
+            assert_eq!(print_value(&arr, false).unwrap(), want.as_bytes());
+        }
+        let mut arr = Value::Array(vec![number(1.0)]);
+        assert!(!replace_in_array(&mut arr, 9, number(7.0)));
+        assert_eq!(print_value(&arr, false).unwrap(), b"[1]".to_vec());
+        let mut empty = Value::Array(Vec::new());
+        assert!(!replace_in_array(&mut empty, 0, number(7.0)));
+    }
+
+    /// Both refuse a non-array parent. The C does not, and the trees it builds
+    /// instead — a child hung off a scalar, an object member with a NULL key —
+    /// are unrepresentable here. DIVERGENCES.md `scalar-parent-child`; the `seq`
+    /// mode declines to compare the case rather than pretending it is tested.
+    #[test]
+    fn placement_refuses_a_non_array_parent() {
+        for mut v in [
+            Value::Object(vec![(b"a".to_vec(), number(1.0))]),
+            Value::String(b"s".to_vec()),
+            number(7.0),
+            Value::Null,
+        ] {
+            let before = v.clone();
+            assert!(!insert_in_array(&mut v, 0, number(5.0)));
+            assert!(!replace_in_array(&mut v, 0, number(5.0)));
+            assert_eq!(v, before);
+        }
+    }
+
+    /// DIVERGENCES.md and `spikes/place_relink.c`: the C strdups the LOOKUP
+    /// string into the replacement's key before it looks anything up, so a
+    /// case-insensitive replace rewrites the member's spelling.
+    #[test]
+    fn replace_in_object_rewrites_the_key_to_the_lookup_string() {
+        let mut obj = Value::Object(vec![(b"A".to_vec(), number(1.0))]);
+        assert!(replace_in_object(&mut obj, b"a", number(9.0), false));
+        assert_eq!(print_value(&obj, false).unwrap(), br#"{"a":9}"#.to_vec());
+
+        // the case-SENSITIVE twin finds nothing and changes nothing
+        let mut obj = Value::Object(vec![(b"A".to_vec(), number(1.0))]);
+        assert!(!replace_in_object(&mut obj, b"a", number(9.0), true));
+        assert_eq!(print_value(&obj, false).unwrap(), br#"{"A":1}"#.to_vec());
+    }
+
+    /// Position is preserved, duplicates resolve to the first match, and every
+    /// unusable parent answers false rather than doing something creative.
+    #[test]
+    fn replace_in_object_keeps_the_slot_and_guards_the_rest() {
+        let mut obj = Value::Object(vec![
+            (b"a".to_vec(), number(1.0)),
+            (b"b".to_vec(), number(2.0)),
+            (b"c".to_vec(), number(3.0)),
+        ]);
+        assert!(replace_in_object(&mut obj, b"b", number(9.0), true));
+        assert_eq!(
+            print_value(&obj, false).unwrap(),
+            br#"{"a":1,"b":9,"c":3}"#.to_vec()
+        );
+
+        let mut dup = Value::Object(vec![
+            (b"k".to_vec(), number(1.0)),
+            (b"k".to_vec(), number(2.0)),
+        ]);
+        assert!(replace_in_object(&mut dup, b"k", number(9.0), true));
+        assert_eq!(
+            print_value(&dup, false).unwrap(),
+            br#"{"k":9,"k":2}"#.to_vec()
+        );
+
+        assert!(!replace_in_object(
+            &mut Value::Object(Vec::new()),
+            b"k",
+            number(1.0),
+            true
+        ));
+        assert!(!replace_in_object(
+            &mut Value::Array(vec![number(1.0)]),
+            b"k",
+            number(1.0),
+            true
+        ));
+        assert!(!replace_in_object(
+            &mut number(7.0),
+            b"k",
+            number(1.0),
+            true
+        ));
     }
 }

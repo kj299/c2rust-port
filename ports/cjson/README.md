@@ -8,8 +8,8 @@ kit did not write (`RETROSPECTIVE-kit-audit.md` §6, keystone item).
 ## Status: **Phase 5 (cutover) — drop-in `.so` verified against the C at the ABI level**
 
 > **Current numbers live in `progress.json` and `API-COVERAGE.md`, not here.**
-> As of module 13: **15/15 tracked modules fully gated**, and **74 of 92
-> exported symbols ported, 9 out-of-scope, 9 unported** against a declared
+> As of module 14: **16/16 tracked modules fully gated**, and **78 of 92
+> exported symbols ported, 10 out-of-scope, 4 unported** against a declared
 > ceiling the gate enforces. The narrative below is the port's history and its
 > counts are as-of-then; the two files above are the ones a gate reads, so they
 > are the ones to trust.
