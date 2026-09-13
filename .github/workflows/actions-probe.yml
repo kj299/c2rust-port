@@ -1,0 +1,58 @@
+# TEMPORARY DIAGNOSTIC — delete once it has answered its one question.
+#
+# Every `check-kit` run since 2026-09-07 has failed with the same fingerprint:
+# four jobs created, `runner_id: 0`, started and dead 2 seconds later, HTTP 404
+# on every log, and `get_workflow_run_usage` reporting total_ms: 0 across all
+# twelve job attempts. Nothing ever executed. The workflow file is byte-identical
+# (blob 43aae642) at the last green SHA, the first red one, and HEAD, and the run
+# conclusion is `failure` rather than `startup_failure`, so GitHub parsed it and
+# created the jobs. The repository is private, so Actions minutes are metered.
+#
+# Two causes fit that evidence, and they need opposite fixes:
+#
+#   A. Account-level block — Actions minutes exhausted, a $0 spending limit
+#      reached, or a failed payment. NOTHING can start, whatever it contains.
+#   B. Actions *permissions* policy — the repo is set to allow only local
+#      actions, which blocks `actions/checkout@v4`. check-kit uses that action
+#      in all four jobs, so all four die; a workflow with no `uses:` would run.
+#
+# This workflow is the discriminator. It has NO `uses:` steps at all, so nothing
+# about it can be disallowed by an action policy, and it does about a second of
+# work so it costs nothing meaningful if minutes do exist.
+#
+#   It SUCCEEDS  -> runners and minutes are available. The block is (B): an
+#                   action-permissions policy. Fix at Settings -> Actions ->
+#                   General -> Actions permissions: allow actions created by
+#                   GitHub (actions/checkout is first-party).
+#
+#   It FAILS the -> nothing can run at all. The block is (A). Fix at
+#   same way        github.com/settings/billing: Actions minutes against the
+#                   2,000 included, and the spending limit (defaults to $0,
+#                   which hard-stops instead of charging). Making this repo
+#                   public also removes the meter entirely.
+#
+# Reading the result: compare this job's `runner_id` and the run's billable
+# total_ms against check-kit's. A nonzero runner_id here is the whole answer.
+name: actions-probe
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+# No token needed: this job reads nothing and writes nothing.
+permissions: {}
+
+jobs:
+  probe:
+    name: can a runner start at all (no actions used)
+    runs-on: ubuntu-latest
+    steps:
+      - name: prove a runner executed a step
+        run: |
+          echo "A runner started and ran a step."
+          echo "runner os : $RUNNER_OS"
+          echo "run attempt: $GITHUB_RUN_ATTEMPT"
+          echo
+          echo "=> check-kit's failure is NOT an account-level Actions block."
+          echo "   Minutes and runners are available, so the cause is the"
+          echo "   Actions permissions policy blocking actions/checkout@v4."
