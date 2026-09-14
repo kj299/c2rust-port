@@ -62,7 +62,7 @@ static char *read_all_stdin(size_t *out_len) {
 
 int main(int argc, char **argv) {
     if (argc < 2) {
-        fprintf(stderr, "usage: driver <print|...|build|query|access|construct|set|seq|ptr|patch|merge|genmerge|genpatch|findptr|addpatch|sort (+ -cs)>\n");
+        fprintf(stderr, "usage: driver <print|...|build|query|access|construct|set|seq|opts|ptr|patch|merge|genmerge|genpatch|findptr|addpatch|sort (+ -cs)>\n");
         return 2;
     }
     const char *mode = argv[1];
@@ -201,6 +201,50 @@ int main(int argc, char **argv) {
         char *out = cjson_modes_set(num, t1 + 1, t2 + 1, json, json_len);
         free(input);
         if (out == NULL) { fprintf(stderr, "set failed\n"); return 1; }
+        fputs(out, stdout);
+        free(out);
+        return 0;
+    }
+
+    if (strcmp(mode, "opts") == 0) {
+        /* stdin is "<flags>\t<prebuffer>\t<prealloc>\n<json>". Self-contained
+         * early return like `set` above (LESSONS #27): it splits its OWN view
+         * of `input` and never falls through.
+         *
+         * `json` is `nl + 1` into a buffer read_all_stdin already
+         * NUL-terminated, which is what lets cJSON_ParseWithOpts (a
+         * `const char *` API) be called on the same bytes the length form
+         * gets -- their differing views of those bytes is the point. */
+        char *nl = memchr(input, '\n', len);
+        char *t1 = nl ? memchr(input, '\t', (size_t)(nl - input)) : NULL;
+        char *t2 = t1 ? memchr(t1 + 1, '\t', (size_t)(nl - t1 - 1)) : NULL;
+        if (nl == NULL || t1 == NULL || t2 == NULL) {
+            fprintf(stderr, "opts needs <flags>\\t<prebuffer>\\t<prealloc>\\n<json>\n");
+            free(input);
+            return 2;
+        }
+        *nl = '\0';
+        *t1 = '\0';
+        *t2 = '\0';
+        /* strtol + clamp, for the same reason as `access` and `construct`: the
+         * fuzzer sends junk and overflowing digits, and atoi's answer there is
+         * undefined. Negatives survive the clamp deliberately -- they are the
+         * guards cJSON_PrintBuffered and cJSON_PrintPreallocated actually have. */
+        long flags = strtol(input, NULL, 10);
+        long prebuffer = strtol(t1 + 1, NULL, 10);
+        long prealloc = strtol(t2 + 1, NULL, 10);
+        if (flags > INT_MAX) flags = INT_MAX;
+        if (flags < INT_MIN) flags = INT_MIN;
+        if (prebuffer > INT_MAX) prebuffer = INT_MAX;
+        if (prebuffer < INT_MIN) prebuffer = INT_MIN;
+        if (prealloc > INT_MAX) prealloc = INT_MAX;
+        if (prealloc < INT_MIN) prealloc = INT_MIN;
+        const char *json = nl + 1;
+        size_t json_len = len - (size_t)(json - input);
+        char *out = cjson_modes_opts((int)flags, (int)prebuffer, (int)prealloc,
+                                     json, json_len);
+        free(input);
+        if (out == NULL) { fprintf(stderr, "opts failed\n"); return 1; }
         fputs(out, stdout);
         free(out);
         return 0;

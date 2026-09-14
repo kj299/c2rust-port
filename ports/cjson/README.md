@@ -8,11 +8,44 @@ kit did not write (`RETROSPECTIVE-kit-audit.md` §6, keystone item).
 ## Status: **Phase 5 (cutover) — drop-in `.so` verified against the C at the ABI level**
 
 > **Current numbers live in `progress.json` and `API-COVERAGE.md`, not here.**
-> As of module 14: **16/16 tracked modules fully gated**, and **78 of 92
-> exported symbols ported, 10 out-of-scope, 4 unported** against a declared
-> ceiling the gate enforces. The narrative below is the port's history and its
-> counts are as-of-then; the two files above are the ones a gate reads, so they
-> are the ones to trust.
+> As of module 15: **17/17 tracked modules fully gated**, and **82 of 92
+> exported symbols ported, 10 out-of-scope, 0 unported** — the api-coverage
+> ratchet is at zero. The narrative below is the port's history and its counts
+> are as-of-then; the two files above are the ones a gate reads, so they are
+> the ones to trust.
+>
+> Zero unported is a claim about **coverage**, not about verification being
+> finished: every exported symbol is now on a compared contract, which is what
+> that table measures and no more.
+
+**Module 15 (`entry-opts`) closed the ratchet** — `cJSON_ParseWithOpts`,
+`cJSON_ParseWithLengthOpts`, `cJSON_PrintBuffered`, `cJSON_PrintPreallocated`,
+behind one `opts` driver mode. Two things it put on the compared contract that
+nothing before it did, and both paid immediately:
+
+* **the parse-end offset.** Error *text* stays a documented divergence, but
+  `*return_parse_end` is the `*WithOpts` pair's entire distinct behavior, so
+  leaving it off would have gated nothing. It found a real port divergence on
+  the first run: cJSON's `parse_string` rewinds to a pointer initialized
+  *before* it validates anything, so a non-quote object key reports the offset
+  **past** it — `{bad` is 2, not 1. Latent since module 3 and invisible until
+  a mode compared the number. Fixed and pinned in the same change.
+* **the `ensure` accounting.** Module 4 deliberately designed cJSON's
+  printbuffer bookkeeping away because `Vec` growth subsumes it — right for
+  every growable printer, and wrong the moment `cJSON_PrintPreallocated` makes
+  the accounting *itself* the success predicate. `print.rs` now mirrors all
+  fifteen `ensure()` call sites, and the measured boundary is
+  **`strlen(output) + 2`**, not the `strlen + 1` a caller would size: `ensure`
+  reserves a NUL slot on top of what it is asked for. cJSON's own header
+  concedes the point without stating the number ("allocate 5 bytes more than
+  you actually need").
+
+The module's one intentional divergence (DIVERGENCES.md `opts-prealloc-*`, 5
+pinned rows): a failed `cJSON_PrintPreallocated` leaves a **NUL-terminated,
+well-formed-looking truncation** in the caller's buffer, indistinguishable from
+a successful print of a smaller document to anyone who ignores the return value
+(CWE-252). The port writes nothing, so the `bool` is the only channel. It is
+*measured*, not asserted — the mode reports the buffer's bytes.
 
 Phase 0 (inventory/plan) merged in #15; Phase 2 (oracle) merged in #16. The Rust
 port now exists (`rust/`: `#![forbid(unsafe_code)]` core + differential driver)

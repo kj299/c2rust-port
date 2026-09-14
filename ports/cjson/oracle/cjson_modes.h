@@ -174,4 +174,61 @@ char *cjson_modes_set(double num, const char *key, const char *newstr,
 char *cjson_modes_seq(const char *json, size_t json_len,
                       const char *ops, size_t ops_len);
 
+/* The four OPTIONS entry points in one shot (LESSONS #26): cJSON_ParseWithOpts,
+ * cJSON_ParseWithLengthOpts, cJSON_PrintBuffered and cJSON_PrintPreallocated.
+ *
+ * `flags` is a bit set: bit 0 = require_null_terminated (both parsers),
+ * bit 1 = format (both printers). `prebuffer` is cJSON_PrintBuffered's, passed
+ * through INCLUDING negatives -- that is the one behavior the prebuffer size
+ * has (cJSON.c:1278) -- but clamped above at CJSON_OPTS_MAX_BUF so a fuzzer
+ * cannot ask for a gigabyte. `prealloc` is cJSON_PrintPreallocated's buffer
+ * length, same treatment.
+ *
+ * `json` must be NUL-terminated at `json_len` (the driver's stdin buffer is):
+ * cJSON_ParseWithLengthOpts is given the explicit length and cJSON_ParseWithOpts
+ * the pointer, so the two entry points' differing views of the SAME bytes are
+ * both on the contract. That difference is the point -- `{"a":1}` with no
+ * terminator inside the length is rejected by the length form under
+ * require_null_terminated and accepted by the string form, which appends one.
+ *
+ * What the descriptor carries, and why each field is there rather than implied:
+ *
+ *   pwl/pwo      the two parses' results, printed, or `-`.
+ *   pwlend/pwoend  `*return_parse_end` as an OFFSET from `json`. This is the
+ *                whole distinct behavior of the *WithOpts pair and the reason
+ *                the mode exists; it is also deliberately NOT the error text,
+ *                which stays a documented divergence. Putting it on the
+ *                contract immediately found a real port divergence (cJSON's
+ *                parse_string rewinds to a pointer set before it validates
+ *                anything, so `{bad` reports 2, not 1).
+ *   pb           cJSON_PrintBuffered's bytes, length-prefixed.
+ *   ppa          cJSON_PrintPreallocated's cJSON_bool at `prealloc`.
+ *   ppabuf       the preallocated buffer AFTER the call, hex, having been
+ *                memset to 0 before it. Without this the intentional
+ *                divergence below is unmeasured, and a control nothing
+ *                observes is not a control (LESSONS #31/#40).
+ *   ppamin       the SMALLEST buffer length that succeeds, found by scanning.
+ *                One number that pins the entire `ensure` predicate, instead
+ *                of one sample of it per case. Probed to be `strlen + 2`: the
+ *                extra byte over `strlen + 1` is ensure's reserved NUL slot,
+ *                and a caller who sizes a buffer the obvious way gets `false`.
+ *
+ * Each scan step allocates EXACTLY the length it passes, rather than reusing
+ * one large buffer, so a write past the stated length is a heap overflow the
+ * oracle-sanitize gate will catch instead of silently landing in slack.
+ *
+ * Two of cJSON_PrintPreallocated's three refusals are not exercised here and
+ * both are recorded rather than quietly skipped: `buffer == NULL` and
+ * `length < 0` cannot be spelled against the port's `&mut [u8]`, so a Rust-side
+ * answer would be a hardcoded constant no code path reaches (LESSONS #31).
+ * The negative length IS handled -- by the mode on both sides, which answers
+ * false without calling the core -- and that is stated in DIVERGENCES.md under
+ * "Structural eliminations" alongside the NULL buffer.
+ *
+ * Returns NULL only on allocation failure; an unparseable document is reported
+ * in the descriptor, not as an error, so the printers' guards still run. */
+#define CJSON_OPTS_MAX_BUF 4096
+char *cjson_modes_opts(int flags, int prebuffer, int prealloc,
+                       const char *json, size_t json_len);
+
 #endif /* CJSON_MODES_H */

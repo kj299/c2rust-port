@@ -197,7 +197,50 @@ Format:
   restatement makes it easier to mistake for a settled decision instead of a
   deferred one.
 
-Beyond those three JSON-Patch escape fixes and the NaN cast above, every ported module matches the C
+- [x] `opts-prealloc-one-short` [sha256:9c6fa00bf415]: **a failed
+  `cJSON_PrintPreallocated` leaves a silently truncated document in the
+  caller's buffer** (CWE-252, unchecked return value, made exploitable by the
+  C's choice of failure state). cJSON.c:1305 returns `print_value`'s verdict and
+  nothing else; every writer inside it terminates its own fragment, so a buffer
+  one byte too small comes back holding
+  `{"a":[1,2],"b":"xy` + `\0` — a **NUL-terminated, well-formed-looking, shorter
+  render**. A caller that ignores the `cJSON_bool` cannot distinguish it from a
+  successful print of a smaller document; nothing in the bytes says "truncated".
+  The port writes **nothing** on failure, so the `bool` is the only channel the
+  result can arrive on and a partial render can never masquerade as a whole one.
+
+  The buffer size here is `strlen + 1`, which is the one a caller sizing "the
+  string and its terminator" would pick — `ensure` reserves a NUL slot *on top
+  of* `needed`, so the real requirement is `strlen + 2` (see
+  `crates/core/src/print.rs`). That makes this failure the *likely* one, not an
+  exotic one.
+
+  Measured, not asserted: the `opts` mode reports the buffer's bytes as
+  `ppabuf`, so the divergence is in the compared output rather than a claim
+  about code nobody runs (LESSONS #31/#40). Differential FUZZING uses the
+  corrected reference (`oracle/make_fixed_core.py` zeroes the buffer on the
+  failure path, which given the driver zeroes it first is exactly "untouched"),
+  because every buffer length below the boundary triggers this — a
+  predicate-defined class with no finite fingerprint set (LESSONS #28).
+- [x] `opts-prealloc-tiny` [sha256:b2e6af498113]: same defect, buffer of 3 —
+  the truncation is `{` and reads back as a plausible fragment start.
+- [x] `opts-prealloc-mid` [sha256:45a9963c88c8]: same defect, buffer of 10,
+  truncating mid-array (`{"a":[1,`).
+- [x] `opts-prealloc-fmt-short` [sha256:813a147126fa]: same defect on a
+  FORMATTED print, whose boundary is a different number (the formatted bytes'
+  length plus two) — pinned so the ledger does not imply the unformatted
+  boundary is the only one.
+- [x] `opts-prealloc-nested-short` [sha256:99f4747d2560]: same defect where the
+  binding `ensure` is a nested object's `depth + 1` close, i.e. reached through
+  a different call site than the four above.
+
+  Not every short buffer diverges, and that is worth stating: a buffer too small
+  for the FIRST `ensure` fails before anything is written, so the C leaves it
+  untouched too and the differential reports MATCH (`opts-prealloc-scalar-short`,
+  `null` into 5 bytes). The divergence is exactly "the C got partway".
+
+Beyond those three JSON-Patch escape fixes, the NaN cast, and the
+preallocated-print partial write above, every ported module matches the C
 byte-for-byte (the `dom` module's Compare/Duplicate quirks — inf never equals
 itself, dup-keys never compare equal — are REPRODUCED, so they are matches, not
 divergences; likewise every faithful cJSON_Utils behavior — non-recursive sort,
@@ -241,6 +284,36 @@ the port diverges and the divergence is judged an intentional fix-of-C-defect.
   future contract puts error detail on stdout, expect divergences here.
 
 ## Structural eliminations (NOT divergences — no output change)
+
+- **`cJSON_PrintPreallocated`'s `buffer == NULL` and `length < 0` guards
+  (cJSON.c:1309).** Two of the function's three refusals exist only because C
+  cannot state "a writable region of n bytes" in the type system. The port takes
+  `&mut [u8]`: a null slice cannot be spelled and a length cannot be negative, so
+  both branches have no code to live in. The negative length is still *answered*
+  — by the `opts` mode on both sides, which returns false without calling the
+  core — because the driver does accept an `int` from stdin and has to decide;
+  putting the guard in the core instead would be a constant no path reaches
+  (LESSONS #31). The NULL buffer has no spelling at any layer and is therefore
+  not exercised at all, which is recorded here rather than left to look like an
+  oversight.
+
+- **`cJSON_ParseWithLengthOpts`' unchecked `(value, buffer_length)` pair
+  (cJSON.c:1104).** Exactly the typed-array constructors' hazard on the parse
+  side: a `buffer_length` larger than the allocation is an out-of-bounds read
+  the library cannot detect, and it is the entry point's only memory-safety
+  hazard. The port takes a slice, so the pair cannot disagree. Invisible to the
+  differential by construction — exercising the mismatch makes the C oracle
+  undefined, so there is no defined behavior to compare against (LESSONS #36).
+
+- **`cJSON_PrintBuffered(item, 0, fmt)` depends on `malloc(0)`
+  (cJSON.c:1281).** A zero prebuffer allocates zero bytes and the C returns NULL
+  if the allocator does — so the function's answer for `prebuffer == 0` is
+  *platform-dependent*. glibc returns a unique non-NULL pointer, so the oracle
+  on this host succeeds; the port has no allocation to fail and succeeds
+  everywhere. On this oracle the two agree, which is why this is not a ledgered
+  divergence: a ledger row that never diverges is stale by construction and the
+  gate would flag it. It is recorded because "the differential shows no
+  divergence" must not be misread as "the two are the same function".
 
 - **The typed-array constructors' unchecked `(pointer, count)` pair.**
   `cJSON_CreateIntArray` / `FloatArray` / `DoubleArray` / `StringArray` take

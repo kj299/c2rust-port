@@ -61,7 +61,7 @@ echo "===== 1b. probe-then-port — transcripts pinned, tests generated ====="
 # fails closed on oracle drift, a tampered transcript, or a hand-edited/stale
 # generated test file. The generated tests themselves run under `cargo test`
 # in step 2.
-PROBE_SETS=(quirks plumbing builder utils access construct set seq place)
+PROBE_SETS=(quirks plumbing builder utils access construct set seq place opts)
 PROBE_FILES=()
 for set in "${PROBE_SETS[@]}"; do
   PROBE_FILES+=("$HERE/oracle/probes-$set.json")
@@ -215,6 +215,32 @@ echo "----- module 14 (dom-mutate-place): Insert + Replace, same PROGRAM -----"
     --matrix "$HERE/oracle/matrix-place.json" --ledger "$HERE/DIVERGENCES.md" \
     --json > "$HERE/reports/dom-mutate-place.json"
 
+echo "----- module 15 (entry-opts): the four *WithOpts / buffered entry points -----"
+# cJSON_ParseWithOpts, cJSON_ParseWithLengthOpts, cJSON_PrintBuffered and
+# cJSON_PrintPreallocated, all four behind the `opts` mode.
+#
+# Two things this module put on the compared contract that nothing else did:
+#
+#  1. `*return_parse_end`. The error TEXT stays a documented divergence, but the
+#     parse-end OFFSET is the *WithOpts pair's entire distinct behavior, so
+#     leaving it off would have gated nothing (LESSONS #26). It found a real
+#     port divergence immediately: cJSON's parse_string rewinds to a pointer it
+#     initializes before validating anything, so a non-quote object key reports
+#     the offset PAST it. Latent since module 3, invisible until now.
+#
+#  2. the `ensure` ACCOUNTING. The port deliberately designed cJSON's
+#     printbuffer bookkeeping away in module 4 because `Vec` growth subsumes it
+#     — correct for every growable printer, and wrong the moment
+#     cJSON_PrintPreallocated made the accounting itself the success predicate.
+#     print.rs now mirrors all fifteen ensure() call sites.
+#
+# The 5 opts-prealloc-* rows ASSERT the ledgered partial-write divergence still
+# diverges from shipped cJSON; the fuzzer below uses the corrected oracle.
+"$PY" "$KIT/harnesses/differential/diff_run.py" \
+    --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
+    --matrix "$HERE/oracle/matrix-opts.json" --ledger "$HERE/DIVERGENCES.md" \
+    --json > "$HERE/reports/entry-opts.json"
+
 echo "----- module 9 (cJSON_Utils): pointer / patch / merge / sort differentials -----"
 # JSON Pointer (RFC 6901), Patch (6902), Merge-Patch (7396), object sort. The 3
 # utils-tilde-* rows in the matrix ASSERT the ledgered decode fix still diverges
@@ -311,6 +337,19 @@ bash "$HERE/oracle/build_fixed.sh" > /dev/null
     --args seq --matrix "$HERE/oracle/matrix-place.json" \
     --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
     --json > "$HERE/reports/fuzz/dom-mutate-place.json"
+# opts mode: fuzz the four options entry points against the CORRECTED oracle —
+# the partial-write divergence is predicate-defined (EVERY buffer length between
+# "the first ensure fails" and the boundary triggers it), so the pristine oracle
+# would report a steady stream of known differences and drown a real one
+# (LESSONS #28). Its matrix seeds the corpus, so the fuzzer mutates the
+# "<flags>\t<prebuffer>\t<prealloc>\n<json>" framing as well as the document —
+# which is what sweeps the buffer length across and past the boundary, and what
+# sends negative and absurd lengths into both printers' guards.
+"$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
+    --oracle "$HERE/oracle/cjson_oracle_fixed" --rust "$RUST_DRIVER" \
+    --args opts --matrix "$HERE/oracle/matrix-opts.json" \
+    --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
+    --json > "$HERE/reports/fuzz/entry-opts.json"
 for m in scalar-parse string-parse buffer-plumbing recursive-core; do
   cp "$HERE/reports/fuzz/alloc-node.json" "$HERE/reports/fuzz/$m.json"
 done

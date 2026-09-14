@@ -9,6 +9,7 @@
     "dom-mutate-remove": "unsafe_audited",
     "dom-mutate-set": "unsafe_audited",
     "entry-minify": "unsafe_audited",
+    "entry-opts": "unsafe_audited",
     "ffi-builder": "unsafe_audited",
     "recursive-core": "unsafe_audited",
     "scalar-parse": "unsafe_audited",

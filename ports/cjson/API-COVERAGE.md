@@ -16,16 +16,20 @@ it down and lock the progress in).
 
 ## The headline number, stated before the tables
 
-**92 exported symbols across both headers: 78 ported, 10 out-of-scope, 4
+**92 exported symbols across both headers: 82 ported, 10 out-of-scope, 0
 unported.** This port covers cJSON_Utils completely and the whole of the base
 library's parse / print / minify / query / build / **accessor** /
-**constructor** / **setter** / **removal** / **placement** surface; **it does
-not cover the parse/print *options* surface** — four entry points, listed below.
-Anything that reads "cJSON is ported" without that sentence is overclaiming,
-which is why the gate prints the shortfall on every run rather than only on
-failure.
+**constructor** / **setter** / **removal** / **placement** / **options**
+surface. The only symbols not ported are the 10 recorded below as deliberate
+refusals under the Prime Directive, each with the reason written down.
 
-api-coverage: max-unported = 4
+The ratchet reaches zero here. That is a claim about COVERAGE, not about
+completeness of verification: every exported symbol is now on a compared
+contract, which is exactly what this table was built to measure and no more.
+The gate stays wired at 0 so the next symbol added to the header, or the next
+module that quietly drops one, fails loudly instead of passing.
+
+api-coverage: max-unported = 0
 
 Why it exists (LESSONS #34, mechanizing #26): module 9 (`cJSON_Utils`) shipped
 **"DONE" through all six green gates with two of these 14 symbols never ported and
@@ -99,7 +103,7 @@ wired into the gate. Two notes on getting the *number* right first:
   is precisely the rounding-up this gate exists to stop. Their own contract —
   NULL arguments, type mismatches, detached-item ownership — is never called.
 
-### Ported — 64
+### Ported — 68
 
 | Symbol | Status | Where it is gated |
 |---|---|---|
@@ -108,6 +112,10 @@ wired into the gate. Two notes on getting the *number* right first:
 | `cJSON_ParseWithLength` | ported | cdylib export; shim `cjson_rt`, all ABI `rt-*` vectors |
 | `cJSON_Print` | ported | cdylib export; shim `cjson_rt_fmt`, ABI `rt-fmt-*` vectors |
 | `cJSON_PrintUnformatted` | ported | cdylib export; shim `cjson_rt`, driver mode `print` |
+| `cJSON_ParseWithOpts` | ported | driver mode `opts`, fields `pwo`/`pwoend` — the parse-end offset on BOTH the success and failure paths |
+| `cJSON_ParseWithLengthOpts` | ported | driver mode `opts`, fields `pwl`/`pwlend`; `require_null_terminated` is where the two parsers disagree on identical bytes |
+| `cJSON_PrintBuffered` | ported | driver mode `opts`, field `pb`; the `prebuffer < 0` guard is its only observable behavior |
+| `cJSON_PrintPreallocated` | ported | driver mode `opts`, fields `ppa`/`ppabuf`/`ppamin` — `ppamin` scans for the smallest buffer that fits, so the whole `ensure` predicate is compared, not one sample of it |
 | `cJSON_Delete` | ported | cdylib export; every mode's teardown, checked under miri/ASan |
 | `cJSON_Minify` | ported | cdylib export; driver mode `minify`, 4 ABI vectors |
 | `cJSON_Duplicate` | ported | cdylib export; driver mode `dup` |
@@ -210,16 +218,20 @@ and a 20-digit overflow with both sides normalizing identically. That is a wider
 space than `findptr`'s single pointer, and narrower than `patch`'s two-document
 op grammar, where 2000 was demonstrably insufficient.
 
-### Unported — 4, against the ceiling declared at the top
+### Unported — 0, against the ceiling declared at the top
 
-Real work not done, recorded as such. Grouped by what would be needed.
+Nothing. The last four — the parse/print options surface — landed as module 15
+(`entry-opts`, driver mode `opts`); their rows are in the ported table above.
 
-| Symbol | Status | What is missing |
-|---|---|---|
-| `cJSON_ParseWithOpts` | unported | the `return_parse_end` / `require_null_terminated` options surface; no driver mode passes options |
-| `cJSON_ParseWithLengthOpts` | unported | same options surface, length-delimited |
-| `cJSON_PrintBuffered` | unported | the prebuffer growth strategy; only the default printer is compared |
-| `cJSON_PrintPreallocated` | unported | caller-owned output buffer. Needs a mode that compares the truncation/failure boundary, which is the interesting part — the header warns the estimate is not exact ("allocate 5 bytes more than you actually need") |
+Worth keeping the note the old row carried, because it turned out to be the
+substance of the module rather than a caveat. `cJSON.h` tells callers of
+`cJSON_PrintPreallocated` to "allocate 5 bytes more than you actually need" —
+an admission that the library does not state its own requirement. Measured, it
+is `strlen(output) + 2`: `ensure` reserves a NUL slot *on top of* the bytes
+asked for, so the obvious `strlen + 1` fails. Both the number and the failure
+BEHAVIOR (the C leaves a NUL-terminated truncation behind; the port leaves the
+buffer untouched) are now compared rather than described — see DIVERGENCES.md
+`opts-prealloc-*`.
 
 ### High-budget sweep on the `construct` mode (LESSONS #33)
 
@@ -301,6 +313,34 @@ independently mutable grammars (the document, the `<op>\t<selector>\t<arg>`
 framing, and the op sequence itself) and its steps COMPOSE, so the reachable
 state space is larger than the input space — an eight-op program reaches trees
 no single input describes.
+
+### High-budget sweep on the `opts` mode (LESSONS #33)
+
+Run before calling the last four entry points done:
+
+| Mode | Oracle | Seed | Iterations | Findings |
+|---|---|---|---|---|
+| `opts` | corrected | 1 | 20 000 | 0 |
+| `opts` | corrected | 2 | 20 000 | 0 |
+| `opts` | corrected | 3 | 20 000 | 0 |
+| `opts` | **pristine** | 7 | 4 000 | 25, all one class |
+
+60 000 generated inputs against the corrected oracle, zero divergences
+(executed 2026-09-13). Three seeds rather than four: `opts` mutates three
+grammars (the `<flags>\t<prebuffer>\t<prealloc>` framing, the document, and the
+buffer length) but unlike `seq` its operations do not COMPOSE — each input is
+one shot, so the reachable state space is the input space.
+
+The fourth row is a control, and it is the point of running it. A corrected
+reference oracle exists to stop a known divergence from drowning an unknown one
+(LESSONS #28) — which means it can also hide a real bug if the correction is
+wider than the decision it encodes. So the same mode was fuzzed against the
+**PRISTINE** oracle and every finding classified mechanically: all 25 distinct
+findings differ in `ppabuf` alone, on a call where `ppa=0`, with the port's
+buffer all zeros. That is exactly the ledgered class and nothing else, so the
+corrected oracle is masking the decision and not a defect. Asserting that a
+correction is narrow is cheap; measuring it is what makes the other three rows
+mean anything.
 
 ### What this table changed
 

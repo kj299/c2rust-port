@@ -1,0 +1,393 @@
+{
+  "probe_transcript": 1,
+  "module": "entry-opts",
+  "oracle_sha256": "7cfb20966336dde4c9bac8364f63b7d5932a407c5a7f5ff16fa08962fc9048a5",
+  "generated_by": "harnesses/probe/probe.py run",
+  "entries": [
+    {
+      "id": "opts-clean-rnt0",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MAkxNgkzMgp7ImEiOlsxLDJdLCJiIjoieHkifQ==",
+      "note": "baseline: both parsers accept, both report the parse end at the last byte",
+      "rc": 0,
+      "stdout_b64": "cHdsPTIwOnsiYSI6WzEsMl0sImIiOiJ4eSJ9O3B3bGVuZD0yMDtwd289MjA6eyJhIjpbMSwyXSwiYiI6Inh5In07cHdvZW5kPTIwO3BiPTIwOnsiYSI6WzEsMl0sImIiOiJ4eSJ9O3BwYW1pbj0yMjtwcGE9MTtwcGFidWY9MzI6N2IyMjYxMjIzYTViMzEyYzMyNWQyYzIyNjIyMjNhMjI3ODc5MjI3ZDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMA==",
+      "stdin_preview": "0\t16\t32\n{\"a\":[1,2],\"b\":\"xy\"}",
+      "stdout_preview": "pwl=20:{\"a\":[1,2],\"b\":\"xy\"};pwlend=20;pwo=20:{\"a\":[1,2],\"b\":\"xy\"};pwoend=20;pb=2\u2026"
+    },
+    {
+      "id": "opts-rnt1-no-terminator",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MQkxNgkwCnsiYSI6WzEsMl0sImIiOiJ4eSJ9",
+      "note": "THE distinguishing case. require_null_terminated needs a NUL INSIDE the buffer: the length form has none and fails, the string form re-derives strlen+1 and therefore always has one",
+      "rc": 0,
+      "stdout_b64": "cHdsPS07cHdsZW5kPTE5O3B3bz0yMDp7ImEiOlsxLDJdLCJiIjoieHkifTtwd29lbmQ9MjA7cGI9MjA6eyJhIjpbMSwyXSwiYiI6Inh5In07cHBhbWluPTIyO3BwYT0wO3BwYWJ1Zj0t",
+      "stdin_preview": "1\t16\t0\n{\"a\":[1,2],\"b\":\"xy\"}",
+      "stdout_preview": "pwl=-;pwlend=19;pwo=20:{\"a\":[1,2],\"b\":\"xy\"};pwoend=20;pb=20:{\"a\":[1,2],\"b\":\"xy\"}\u2026"
+    },
+    {
+      "id": "opts-rnt1-with-terminator",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MQkxNgkwCnsiYSI6WzEsMl0sImIiOiJ4eSJ9AA==",
+      "note": "same bytes plus one NUL: now the length form accepts too",
+      "rc": 0,
+      "stdout_b64": "cHdsPTIwOnsiYSI6WzEsMl0sImIiOiJ4eSJ9O3B3bGVuZD0yMDtwd289MjA6eyJhIjpbMSwyXSwiYiI6Inh5In07cHdvZW5kPTIwO3BiPTIwOnsiYSI6WzEsMl0sImIiOiJ4eSJ9O3BwYW1pbj0yMjtwcGE9MDtwcGFidWY9LQ==",
+      "stdin_preview": "1\t16\t0\n{\"a\":[1,2],\"b\":\"xy\"}\u0000",
+      "stdout_preview": "pwl=20:{\"a\":[1,2],\"b\":\"xy\"};pwlend=20;pwo=20:{\"a\":[1,2],\"b\":\"xy\"};pwoend=20;pb=2\u2026"
+    },
+    {
+      "id": "opts-rnt1-trailing-whitespace",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MQkxNgkwCnsiYSI6MX0gICAA",
+      "note": "the option skips whitespace FIRST, and the reported end is after the skip (probed: 10, not 7) -- the back-up quirk in buffer_skip_whitespace is what lands the offset on the terminator",
+      "rc": 0,
+      "stdout_b64": "cHdsPTc6eyJhIjoxfTtwd2xlbmQ9MTA7cHdvPTc6eyJhIjoxfTtwd29lbmQ9MTA7cGI9Nzp7ImEiOjF9O3BwYW1pbj05O3BwYT0wO3BwYWJ1Zj0t",
+      "stdin_preview": "1\t16\t0\n{\"a\":1}   \u0000",
+      "stdout_preview": "pwl=7:{\"a\":1};pwlend=10;pwo=7:{\"a\":1};pwoend=10;pb=7:{\"a\":1};ppamin=9;ppa=0;ppab\u2026"
+    },
+    {
+      "id": "opts-rnt1-trailing-garbage",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MQkxNgkwCnsiYSI6MX14eXo=",
+      "note": "trailing garbage: rejected by both parsers, error position at the garbage",
+      "rc": 0,
+      "stdout_b64": "cHdsPS07cHdsZW5kPTc7cHdvPS07cHdvZW5kPTc7cGI9LTtwcGFtaW49LTE7cHBhPTA7cHBhYnVmPS0=",
+      "stdin_preview": "1\t16\t0\n{\"a\":1}xyz",
+      "stdout_preview": "pwl=-;pwlend=7;pwo=-;pwoend=7;pb=-;ppamin=-1;ppa=0;ppabuf=-"
+    },
+    {
+      "id": "opts-rnt0-trailing-garbage",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MAkxNgkwCnsiYSI6MX14eXo=",
+      "note": "the same bytes without the option: accepted, end at 7 -- the laxness that require_null_terminated exists to turn off",
+      "rc": 0,
+      "stdout_b64": "cHdsPTc6eyJhIjoxfTtwd2xlbmQ9Nztwd289Nzp7ImEiOjF9O3B3b2VuZD03O3BiPTc6eyJhIjoxfTtwcGFtaW49OTtwcGE9MDtwcGFidWY9LQ==",
+      "stdin_preview": "0\t16\t0\n{\"a\":1}xyz",
+      "stdout_preview": "pwl=7:{\"a\":1};pwlend=7;pwo=7:{\"a\":1};pwoend=7;pb=7:{\"a\":1};ppamin=9;ppa=0;ppabuf\u2026"
+    },
+    {
+      "id": "opts-embedded-nul",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MQkxNgkwCnsiYSI6MX0AZ2FyYmFnZQ==",
+      "note": "an embedded NUL splits the two entry points: the length form sees past it and rejects the garbage, the string form's strlen stops at it and accepts",
+      "rc": 0,
+      "stdout_b64": "cHdsPS07cHdsZW5kPTg7cHdvPTc6eyJhIjoxfTtwd29lbmQ9NztwYj03OnsiYSI6MX07cHBhbWluPTk7cHBhPTA7cHBhYnVmPS0=",
+      "stdin_preview": "1\t16\t0\n{\"a\":1}\u0000garbage",
+      "stdout_preview": "pwl=-;pwlend=8;pwo=7:{\"a\":1};pwoend=7;pb=7:{\"a\":1};ppamin=9;ppa=0;ppabuf=-"
+    },
+    {
+      "id": "opts-err-object-key",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MAkxNgkwCntiYWQ=",
+      "note": "cJSON's parse_string rewinds to a pointer initialized BEFORE it validates anything, so a non-quote object key reports the offset PAST it (2, not 1). This probe is the regression for a real port divergence",
+      "rc": 0,
+      "stdout_b64": "cHdsPS07cHdsZW5kPTI7cHdvPS07cHdvZW5kPTI7cGI9LTtwcGFtaW49LTE7cHBhPTA7cHBhYnVmPS0=",
+      "stdin_preview": "0\t16\t0\n{bad",
+      "stdout_preview": "pwl=-;pwlend=2;pwo=-;pwoend=2;pb=-;ppamin=-1;ppa=0;ppabuf=-"
+    },
+    {
+      "id": "opts-err-object-comma",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MAkxNgkwCnssfQ==",
+      "note": "same class, reached by a comma where a key belongs",
+      "rc": 0,
+      "stdout_b64": "cHdsPS07cHdsZW5kPTI7cHdvPS07cHdvZW5kPTI7cGI9LTtwcGFtaW49LTE7cHBhPTA7cHBhYnVmPS0=",
+      "stdin_preview": "0\t16\t0\n{,}",
+      "stdout_preview": "pwl=-;pwlend=2;pwo=-;pwoend=2;pb=-;ppamin=-1;ppa=0;ppabuf=-"
+    },
+    {
+      "id": "opts-err-trailing-comma",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MAkxNgkwCnsiYSI6MSx9",
+      "note": "same class after a complete member: the C reports 8 for 8 bytes",
+      "rc": 0,
+      "stdout_b64": "cHdsPS07cHdsZW5kPTc7cHdvPS07cHdvZW5kPTg7cGI9LTtwcGFtaW49LTE7cHBhPTA7cHBhYnVmPS0=",
+      "stdin_preview": "0\t16\t0\n{\"a\":1,}",
+      "stdout_preview": "pwl=-;pwlend=7;pwo=-;pwoend=8;pb=-;ppamin=-1;ppa=0;ppabuf=-"
+    },
+    {
+      "id": "opts-err-array-element",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MAkxNgkwClsxLGJhZA==",
+      "note": "parse_array's failure does NOT rewind -- the offset is where parse_value gave up (3), which is why the key case above is worth its own probe",
+      "rc": 0,
+      "stdout_b64": "cHdsPS07cHdsZW5kPTM7cHdvPS07cHdvZW5kPTM7cGI9LTtwcGFtaW49LTE7cHBhPTA7cHBhYnVmPS0=",
+      "stdin_preview": "0\t16\t0\n[1,bad",
+      "stdout_preview": "pwl=-;pwlend=3;pwo=-;pwoend=3;pb=-;ppamin=-1;ppa=0;ppabuf=-"
+    },
+    {
+      "id": "opts-err-unterminated-object",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MAkxNgkwCnsiYSI6MQ==",
+      "note": "runs off the end: the position clamps to the last valid index",
+      "rc": 0,
+      "stdout_b64": "cHdsPS07cHdsZW5kPTU7cHdvPS07cHdvZW5kPTY7cGI9LTtwcGFtaW49LTE7cHBhPTA7cHBhYnVmPS0=",
+      "stdin_preview": "0\t16\t0\n{\"a\":1",
+      "stdout_preview": "pwl=-;pwlend=5;pwo=-;pwoend=6;pb=-;ppamin=-1;ppa=0;ppabuf=-"
+    },
+    {
+      "id": "opts-err-top-level",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MAkxNgkwCnh5enp5",
+      "note": "no value at all: position 0",
+      "rc": 0,
+      "stdout_b64": "cHdsPS07cHdsZW5kPTA7cHdvPS07cHdvZW5kPTA7cGI9LTtwcGFtaW49LTE7cHBhPTA7cHBhYnVmPS0=",
+      "stdin_preview": "0\t16\t0\nxyzzy",
+      "stdout_preview": "pwl=-;pwlend=0;pwo=-;pwoend=0;pb=-;ppamin=-1;ppa=0;ppabuf=-"
+    },
+    {
+      "id": "opts-err-whitespace-only",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MAkxNgkwCiAgIA==",
+      "note": "whitespace only -- the skip walks onto the terminator and backs up, so the position is the last index, not 0",
+      "rc": 0,
+      "stdout_b64": "cHdsPS07cHdsZW5kPTI7cHdvPS07cHdvZW5kPTM7cGI9LTtwcGFtaW49LTE7cHBhPTA7cHBhYnVmPS0=",
+      "stdin_preview": "0\t16\t0\n   ",
+      "stdout_preview": "pwl=-;pwlend=2;pwo=-;pwoend=3;pb=-;ppamin=-1;ppa=0;ppabuf=-"
+    },
+    {
+      "id": "opts-empty-input",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MAkxNgk4Cg==",
+      "note": "an empty document: the length form takes cJSON's `0 == buffer_length` refusal, the string form gets a 1-byte buffer holding only the NUL and fails in the parser instead",
+      "rc": 0,
+      "stdout_b64": "cHdsPS07cHdsZW5kPTA7cHdvPS07cHdvZW5kPTA7cGI9LTtwcGFtaW49LTE7cHBhPTA7cHBhYnVmPTg6MDAwMDAwMDAwMDAwMDAwMA==",
+      "stdin_preview": "0\t16\t8\n",
+      "stdout_preview": "pwl=-;pwlend=0;pwo=-;pwoend=0;pb=-;ppamin=-1;ppa=0;ppabuf=8:0000000000000000"
+    },
+    {
+      "id": "opts-prebuffer-negative",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MAktMQkzMgp7ImEiOlsxLDJdLCJiIjoieHkifQ==",
+      "note": "prebuffer < 0 is cJSON_PrintBuffered's ONLY guard (cJSON.c:1278) and the only behavior the prebuffer size has",
+      "rc": 0,
+      "stdout_b64": "cHdsPTIwOnsiYSI6WzEsMl0sImIiOiJ4eSJ9O3B3bGVuZD0yMDtwd289MjA6eyJhIjpbMSwyXSwiYiI6Inh5In07cHdvZW5kPTIwO3BiPS07cHBhbWluPTIyO3BwYT0xO3BwYWJ1Zj0zMjo3YjIyNjEyMjNhNWIzMTJjMzI1ZDJjMjI2MjIyM2EyMjc4NzkyMjdkMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw",
+      "stdin_preview": "0\t-1\t32\n{\"a\":[1,2],\"b\":\"xy\"}",
+      "stdout_preview": "pwl=20:{\"a\":[1,2],\"b\":\"xy\"};pwlend=20;pwo=20:{\"a\":[1,2],\"b\":\"xy\"};pwoend=20;pb=-\u2026"
+    },
+    {
+      "id": "opts-prebuffer-zero",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MAkwCTMyCnsiYSI6WzEsMl0sImIiOiJ4eSJ9",
+      "note": "prebuffer 0 still grows: the buffer is not noalloc, so the bytes match an unbuffered print. (The C's answer here depends on malloc(0) being non-NULL; the port's does not -- DIVERGENCES.md, structural eliminations)",
+      "rc": 0,
+      "stdout_b64": "cHdsPTIwOnsiYSI6WzEsMl0sImIiOiJ4eSJ9O3B3bGVuZD0yMDtwd289MjA6eyJhIjpbMSwyXSwiYiI6Inh5In07cHdvZW5kPTIwO3BiPTIwOnsiYSI6WzEsMl0sImIiOiJ4eSJ9O3BwYW1pbj0yMjtwcGE9MTtwcGFidWY9MzI6N2IyMjYxMjIzYTViMzEyYzMyNWQyYzIyNjIyMjNhMjI3ODc5MjI3ZDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMA==",
+      "stdin_preview": "0\t0\t32\n{\"a\":[1,2],\"b\":\"xy\"}",
+      "stdout_preview": "pwl=20:{\"a\":[1,2],\"b\":\"xy\"};pwlend=20;pwo=20:{\"a\":[1,2],\"b\":\"xy\"};pwoend=20;pb=2\u2026"
+    },
+    {
+      "id": "opts-prebuffer-one",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MAkxCTMyCnsiYSI6WzEsMl0sImIiOiJ4eSJ9",
+      "note": "a prebuffer far smaller than the output: every ensure reallocs and the result is unchanged",
+      "rc": 0,
+      "stdout_b64": "cHdsPTIwOnsiYSI6WzEsMl0sImIiOiJ4eSJ9O3B3bGVuZD0yMDtwd289MjA6eyJhIjpbMSwyXSwiYiI6Inh5In07cHdvZW5kPTIwO3BiPTIwOnsiYSI6WzEsMl0sImIiOiJ4eSJ9O3BwYW1pbj0yMjtwcGE9MTtwcGFidWY9MzI6N2IyMjYxMjIzYTViMzEyYzMyNWQyYzIyNjIyMjNhMjI3ODc5MjI3ZDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMA==",
+      "stdin_preview": "0\t1\t32\n{\"a\":[1,2],\"b\":\"xy\"}",
+      "stdout_preview": "pwl=20:{\"a\":[1,2],\"b\":\"xy\"};pwlend=20;pwo=20:{\"a\":[1,2],\"b\":\"xy\"};pwoend=20;pb=2\u2026"
+    },
+    {
+      "id": "opts-prealloc-boundary-exact",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MAkxNgkyMgp7ImEiOlsxLDJdLCJiIjoieHkifQ==",
+      "note": "strlen + 2, the smallest buffer that fits: the extra byte over strlen+1 is ensure's reserved NUL slot",
+      "rc": 0,
+      "stdout_b64": "cHdsPTIwOnsiYSI6WzEsMl0sImIiOiJ4eSJ9O3B3bGVuZD0yMDtwd289MjA6eyJhIjpbMSwyXSwiYiI6Inh5In07cHdvZW5kPTIwO3BiPTIwOnsiYSI6WzEsMl0sImIiOiJ4eSJ9O3BwYW1pbj0yMjtwcGE9MTtwcGFidWY9MjI6N2IyMjYxMjIzYTViMzEyYzMyNWQyYzIyNjIyMjNhMjI3ODc5MjI3ZDAwMDA=",
+      "stdin_preview": "0\t16\t22\n{\"a\":[1,2],\"b\":\"xy\"}",
+      "stdout_preview": "pwl=20:{\"a\":[1,2],\"b\":\"xy\"};pwlend=20;pwo=20:{\"a\":[1,2],\"b\":\"xy\"};pwoend=20;pb=2\u2026"
+    },
+    {
+      "id": "opts-prealloc-zero",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MAkxNgkwCnsiYSI6WzEsMl0sImIiOiJ4eSJ9",
+      "note": "a zero-length buffer: refused before anything is written",
+      "rc": 0,
+      "stdout_b64": "cHdsPTIwOnsiYSI6WzEsMl0sImIiOiJ4eSJ9O3B3bGVuZD0yMDtwd289MjA6eyJhIjpbMSwyXSwiYiI6Inh5In07cHdvZW5kPTIwO3BiPTIwOnsiYSI6WzEsMl0sImIiOiJ4eSJ9O3BwYW1pbj0yMjtwcGE9MDtwcGFidWY9LQ==",
+      "stdin_preview": "0\t16\t0\n{\"a\":[1,2],\"b\":\"xy\"}",
+      "stdout_preview": "pwl=20:{\"a\":[1,2],\"b\":\"xy\"};pwlend=20;pwo=20:{\"a\":[1,2],\"b\":\"xy\"};pwoend=20;pb=2\u2026"
+    },
+    {
+      "id": "opts-prealloc-negative",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MAkxNgktNQp7ImEiOlsxLDJdLCJiIjoieHkifQ==",
+      "note": "length < 0 is refused by the MODE on both sides -- the port's &mut [u8] cannot spell a negative length, so the guard has no core to live in",
+      "rc": 0,
+      "stdout_b64": "cHdsPTIwOnsiYSI6WzEsMl0sImIiOiJ4eSJ9O3B3bGVuZD0yMDtwd289MjA6eyJhIjpbMSwyXSwiYiI6Inh5In07cHdvZW5kPTIwO3BiPTIwOnsiYSI6WzEsMl0sImIiOiJ4eSJ9O3BwYW1pbj0yMjtwcGE9MDtwcGFidWY9LQ==",
+      "stdin_preview": "0\t16\t-5\n{\"a\":[1,2],\"b\":\"xy\"}",
+      "stdout_preview": "pwl=20:{\"a\":[1,2],\"b\":\"xy\"};pwlend=20;pwo=20:{\"a\":[1,2],\"b\":\"xy\"};pwoend=20;pb=2\u2026"
+    },
+    {
+      "id": "opts-prealloc-clamped",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MAkxNgk5OTk5OQp7ImEiOlsxLDJdLCJiIjoieHkifQ==",
+      "note": "a fuzz-sized request, clamped to CJSON_OPTS_MAX_BUF by both sides",
+      "rc": 0,
+      "stdout_b64": "cHdsPTIwOnsiYSI6WzEsMl0sImIiOiJ4eSJ9O3B3bGVuZD0yMDtwd289MjA6eyJhIjpbMSwyXSwiYiI6Inh5In07cHdvZW5kPTIwO3BiPTIwOnsiYSI6WzEsMl0sImIiOiJ4eSJ9O3BwYW1pbj0yMjtwcGE9MTtwcGFidWY9NDA5Njo3YjIyNjEyMjNhNWIzMTJjMzI1ZDJjMjI2MjIyM2EyMjc4NzkyMjdkMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMA==",
+      "stdin_preview": "0\t16\t99999\n{\"a\":[1,2],\"b\":\"xy\"}",
+      "stdout_preview": "pwl=20:{\"a\":[1,2],\"b\":\"xy\"};pwlend=20;pwo=20:{\"a\":[1,2],\"b\":\"xy\"};pwoend=20;pb=2\u2026"
+    },
+    {
+      "id": "opts-formatted",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MgkxNgk0MAp7ImEiOlsxLDJdLCJiIjoieHkifQ==",
+      "note": "format=1 exercises the separator, indent and close sites with their formatted lengths",
+      "rc": 0,
+      "stdout_b64": "cHdsPTIwOnsiYSI6WzEsMl0sImIiOiJ4eSJ9O3B3bGVuZD0yMDtwd289MjA6eyJhIjpbMSwyXSwiYiI6Inh5In07cHdvZW5kPTIwO3BiPTI4OnsKCSJhIjoJWzEsIDJdLAoJImIiOgkieHkiCn07cHBhbWluPTMwO3BwYT0xO3BwYWJ1Zj00MDo3YjBhMDkyMjYxMjIzYTA5NWIzMTJjMjAzMjVkMmMwYTA5MjI2MjIyM2EwOTIyNzg3OTIyMGE3ZDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMA==",
+      "stdin_preview": "2\t16\t40\n{\"a\":[1,2],\"b\":\"xy\"}",
+      "stdout_preview": "pwl=20:{\"a\":[1,2],\"b\":\"xy\"};pwlend=20;pwo=20:{\"a\":[1,2],\"b\":\"xy\"};pwoend=20;pb=2\u2026"
+    },
+    {
+      "id": "opts-formatted-nested",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MgkxNgk4MAp7ImsiOnsiZGVlcCI6eyJ4IjpbMSx7InkiOjJ9XX19fQ==",
+      "note": "nesting deep enough that print_object's close asks for depth+1, not 2",
+      "rc": 0,
+      "stdout_b64": "cHdsPTMyOnsiayI6eyJkZWVwIjp7IngiOlsxLHsieSI6Mn1dfX19O3B3bGVuZD0zMjtwd289MzI6eyJrIjp7ImRlZXAiOnsieCI6WzEseyJ5IjoyfV19fX07cHdvZW5kPTMyO3BiPTYzOnsKCSJrIjoJewoJCSJkZWVwIjoJewoJCQkieCI6CVsxLCB7CgkJCQkJInkiOgkyCgkJCQl9XQoJCX0KCX0KfTtwcGFtaW49NjU7cHBhPTE7cHBhYnVmPTgwOjdiMGEwOTIyNmIyMjNhMDk3YjBhMDkwOTIyNjQ2NTY1NzAyMjNhMDk3YjBhMDkwOTA5MjI3ODIyM2EwOTViMzEyYzIwN2IwYTA5MDkwOTA5MDkyMjc5MjIzYTA5MzIwYTA5MDkwOTA5N2Q1ZDBhMDkwOTdkMGEwOTdkMGE3ZDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=",
+      "stdin_preview": "2\t16\t80\n{\"k\":{\"deep\":{\"x\":[1,{\"y\":2}]}}}",
+      "stdout_preview": "pwl=32:{\"k\":{\"deep\":{\"x\":[1,{\"y\":2}]}}};pwlend=32;pwo=32:{\"k\":{\"deep\":{\"x\":[1,{\"\u2026"
+    },
+    {
+      "id": "opts-formatted-boundary",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MgkxNgkzMAp7ImEiOlsxLDJdLCJiIjoieHkifQ==",
+      "note": "the formatted boundary is strlen+2 of the FORMATTED bytes, which is a different number from the unformatted one",
+      "rc": 0,
+      "stdout_b64": "cHdsPTIwOnsiYSI6WzEsMl0sImIiOiJ4eSJ9O3B3bGVuZD0yMDtwd289MjA6eyJhIjpbMSwyXSwiYiI6Inh5In07cHdvZW5kPTIwO3BiPTI4OnsKCSJhIjoJWzEsIDJdLAoJImIiOgkieHkiCn07cHBhbWluPTMwO3BwYT0xO3BwYWJ1Zj0zMDo3YjBhMDkyMjYxMjIzYTA5NWIzMTJjMjAzMjVkMmMwYTA5MjI2MjIyM2EwOTIyNzg3OTIyMGE3ZDAwMDA=",
+      "stdin_preview": "2\t16\t30\n{\"a\":[1,2],\"b\":\"xy\"}",
+      "stdout_preview": "pwl=20:{\"a\":[1,2],\"b\":\"xy\"};pwlend=20;pwo=20:{\"a\":[1,2],\"b\":\"xy\"};pwoend=20;pb=2\u2026"
+    },
+    {
+      "id": "opts-formatted-rnt",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MwkxNgkwCnsiYSI6WzEsMl0sImIiOiJ4eSJ9AA==",
+      "note": "both bits set at once",
+      "rc": 0,
+      "stdout_b64": "cHdsPTIwOnsiYSI6WzEsMl0sImIiOiJ4eSJ9O3B3bGVuZD0yMDtwd289MjA6eyJhIjpbMSwyXSwiYiI6Inh5In07cHdvZW5kPTIwO3BiPTI4OnsKCSJhIjoJWzEsIDJdLAoJImIiOgkieHkiCn07cHBhbWluPTMwO3BwYT0wO3BwYWJ1Zj0t",
+      "stdin_preview": "3\t16\t0\n{\"a\":[1,2],\"b\":\"xy\"}\u0000",
+      "stdout_preview": "pwl=20:{\"a\":[1,2],\"b\":\"xy\"};pwlend=20;pwo=20:{\"a\":[1,2],\"b\":\"xy\"};pwoend=20;pb=2\u2026"
+    },
+    {
+      "id": "opts-scalar-null",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MAkxNgk2Cm51bGw=",
+      "note": "a bare literal: ensure(5) at offset 0, so 6 bytes is the boundary",
+      "rc": 0,
+      "stdout_b64": "cHdsPTQ6bnVsbDtwd2xlbmQ9NDtwd289NDpudWxsO3B3b2VuZD00O3BiPTQ6bnVsbDtwcGFtaW49NjtwcGE9MTtwcGFidWY9Njo2ZTc1NmM2YzAwMDA=",
+      "stdin_preview": "0\t16\t6\nnull",
+      "stdout_preview": "pwl=4:null;pwlend=4;pwo=4:null;pwoend=4;pb=4:null;ppamin=6;ppa=1;ppabuf=6:6e756c\u2026"
+    },
+    {
+      "id": "opts-scalar-false",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MAkxNgk3CmZhbHNl",
+      "note": "the widest literal: ensure(6)",
+      "rc": 0,
+      "stdout_b64": "cHdsPTU6ZmFsc2U7cHdsZW5kPTU7cHdvPTU6ZmFsc2U7cHdvZW5kPTU7cGI9NTpmYWxzZTtwcGFtaW49NztwcGE9MTtwcGFidWY9Nzo2NjYxNmM3MzY1MDAwMA==",
+      "stdin_preview": "0\t16\t7\nfalse",
+      "stdout_preview": "pwl=5:false;pwlend=5;pwo=5:false;pwoend=5;pb=5:false;ppamin=7;ppa=1;ppabuf=7:666\u2026"
+    },
+    {
+      "id": "opts-escaped-string",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MAkxNgkwClsiYVwiYlxcY1xuZCJd",
+      "note": "escapes make print_string's output_length exceed the input length, which is what its ensure is computed from",
+      "rc": 0,
+      "stdout_b64": "cHdsPTE0OlsiYVwiYlxcY1xuZCJdO3B3bGVuZD0xNDtwd289MTQ6WyJhXCJiXFxjXG5kIl07cHdvZW5kPTE0O3BiPTE0OlsiYVwiYlxcY1xuZCJdO3BwYW1pbj0xNjtwcGE9MDtwcGFidWY9LQ==",
+      "stdin_preview": "0\t16\t0\n[\"a\\\"b\\\\c\\nd\"]",
+      "stdout_preview": "pwl=14:[\"a\\\"b\\\\c\\nd\"];pwlend=14;pwo=14:[\"a\\\"b\\\\c\\nd\"];pwoend=14;pb=14:[\"a\\\"b\\\\c\\\u2026"
+    },
+    {
+      "id": "opts-control-escape",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MAkxNgkwClsiXHUwMDAxIl0=",
+      "note": "a <32 byte costs 5 extra output bytes (\\u00xx), the other escape width",
+      "rc": 0,
+      "stdout_b64": "cHdsPTEwOlsiXHUwMDAxIl07cHdsZW5kPTEwO3B3bz0xMDpbIlx1MDAwMSJdO3B3b2VuZD0xMDtwYj0xMDpbIlx1MDAwMSJdO3BwYW1pbj0xMjtwcGE9MDtwcGFidWY9LQ==",
+      "stdin_preview": "0\t16\t0\n[\"\\u0001\"]",
+      "stdout_preview": "pwl=10:[\"\\u0001\"];pwlend=10;pwo=10:[\"\\u0001\"];pwoend=10;pb=10:[\"\\u0001\"];ppamin=\u2026"
+    },
+    {
+      "id": "opts-empty-containers",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MAkxNgkwCnsiYSI6W10sImIiOnt9fQ==",
+      "note": "empty array and object: the loops never run, so the open and close sites are adjacent",
+      "rc": 0,
+      "stdout_b64": "cHdsPTE1OnsiYSI6W10sImIiOnt9fTtwd2xlbmQ9MTU7cHdvPTE1OnsiYSI6W10sImIiOnt9fTtwd29lbmQ9MTU7cGI9MTU6eyJhIjpbXSwiYiI6e319O3BwYW1pbj0xNztwcGE9MDtwcGFidWY9LQ==",
+      "stdin_preview": "0\t16\t0\n{\"a\":[],\"b\":{}}",
+      "stdout_preview": "pwl=15:{\"a\":[],\"b\":{}};pwlend=15;pwo=15:{\"a\":[],\"b\":{}};pwoend=15;pb=15:{\"a\":[],\u2026"
+    },
+    {
+      "id": "opts-unparseable-doc",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MAkxNgk4Cm5vdCBqc29uIGF0IGFsbA==",
+      "note": "nothing parses: the printers still run their guards and report `-`",
+      "rc": 0,
+      "stdout_b64": "cHdsPS07cHdsZW5kPTA7cHdvPS07cHdvZW5kPTA7cGI9LTtwcGFtaW49LTE7cHBhPTA7cHBhYnVmPTg6MDAwMDAwMDAwMDAwMDAwMA==",
+      "stdin_preview": "0\t16\t8\nnot json at all",
+      "stdout_preview": "pwl=-;pwlend=0;pwo=-;pwoend=0;pb=-;ppamin=-1;ppa=0;ppabuf=8:0000000000000000"
+    }
+  ],
+  "fingerprint": "aa0430df16e2758586337cf6b139608f3897800f78ba5d0afb22d53f0f787435"
+}

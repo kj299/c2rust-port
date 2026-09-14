@@ -703,6 +703,141 @@ fn split_tab(s: &[u8]) -> (&[u8], &[u8]) {
     }
 }
 
+/// The C mode's `CJSON_OPTS_MAX_BUF` — the clamp that keeps a fuzzed buffer
+/// length from asking for a gigabyte. Driver contract, shared by both sides.
+const OPTS_MAX_BUF: i32 = 4096;
+
+/// `opts`: stdin is `<flags>\t<prebuffer>\t<prealloc>\n<json>` — all four
+/// options entry points in one shot (`cJSON_ParseWithLengthOpts`,
+/// `cJSON_ParseWithOpts`, `cJSON_PrintBuffered`, `cJSON_PrintPreallocated`).
+/// See `oracle/cjson_modes.h` for the descriptor's field-by-field rationale.
+///
+/// Like `set`, an unparseable document is not an error: the printers are part
+/// of the surface under test and their guards still have to run.
+///
+/// `ppabuf` is the field that makes this module's intentional divergence
+/// measurable instead of merely claimed. On a buffer too small, the C leaves a
+/// NUL-terminated PREFIX of the document behind — `{"a":[1,2` reads back as a
+/// smaller, entirely plausible render — and this port leaves the buffer
+/// untouched. Reporting the buffer's bytes is what puts that difference in the
+/// compared output (LESSONS #31/#40); reporting only the `cJSON_bool` would
+/// have made the ledger row an assertion nothing checks.
+fn opts(input: &[u8]) -> (i32, Vec<u8>) {
+    let Some(nl) = input.iter().position(|&b| b == b'\n') else {
+        return (RC_USAGE, Vec::new());
+    };
+    let (head, rest) = input.split_at(nl);
+    let json = rest.get(1..).unwrap_or(&[]);
+    let (f_flags, tail) = split_tab(head);
+    let (f_prebuffer, f_prealloc) = split_tab(tail);
+    if !head.contains(&b'\t') || !tail.contains(&b'\t') {
+        return (RC_USAGE, Vec::new());
+    }
+    let flags = parse_index(f_flags);
+    let prebuffer = parse_index(f_prebuffer).min(OPTS_MAX_BUF);
+    let prealloc = parse_index(f_prealloc).min(OPTS_MAX_BUF);
+    let rnt = flags & 1 != 0;
+    let fmt = flags & 2 != 0;
+
+    // The length form sees the exact byte count; the string form re-derives
+    // `strlen + 1` from the same bytes. Their disagreement is the point.
+    let by_len = crate::parse_with_length_opts(json, rnt);
+    let by_str = crate::parse_with_opts(json, rnt);
+    let doc = by_len
+        .as_ref()
+        .ok()
+        .or(by_str.as_ref().ok())
+        .map(|(v, _)| v);
+
+    let mut out = Vec::new();
+    out.extend_from_slice(b"pwl=");
+    push_printed_opt(&mut out, by_len.as_ref().ok().map(|(v, _)| v));
+    out.extend_from_slice(b";pwlend=");
+    push_end(&mut out, &by_len);
+    out.extend_from_slice(b";pwo=");
+    push_printed_opt(&mut out, by_str.as_ref().ok().map(|(v, _)| v));
+    out.extend_from_slice(b";pwoend=");
+    push_end(&mut out, &by_str);
+
+    out.extend_from_slice(b";pb=");
+    let pb = doc.and_then(|v| crate::print_buffered(v, prebuffer, fmt));
+    push_bytes(&mut out, pb.as_deref());
+
+    // The smallest buffer length that succeeds: one number that pins the whole
+    // `ensure` predicate instead of one sample of it. Scanned, not computed
+    // from a closed form — the closed form is a THEOREM about today's fifteen
+    // call sites (see print.rs), and a scan keeps holding if that changes.
+    out.extend_from_slice(b";ppamin=");
+    let reference = doc.and_then(|v| crate::print_value(v, fmt));
+    let ppamin = reference.as_ref().and_then(|r| {
+        let limit = i32::try_from(r.len())
+            .unwrap_or(OPTS_MAX_BUF)
+            .saturating_add(4)
+            .min(OPTS_MAX_BUF);
+        (0..=limit).find(|&len| ppa_once(doc, len, fmt, None))
+    });
+    match ppamin {
+        Some(n) => out.extend_from_slice(format!("{n}").as_bytes()),
+        None => out.extend_from_slice(b"-1"),
+    }
+
+    let mut buf = vec![0_u8; usize::try_from(prealloc.max(0)).unwrap_or(0)];
+    let ok = ppa_once(doc, prealloc, fmt, Some(&mut buf));
+    out.extend_from_slice(b";ppa=");
+    out.extend_from_slice(if ok { b"1" } else { b"0" });
+    out.extend_from_slice(b";ppabuf=");
+    if prealloc > 0 {
+        out.extend_from_slice(format!("{}:", buf.len()).as_bytes());
+        for b in &buf {
+            out.extend_from_slice(format!("{b:02x}").as_bytes());
+        }
+    } else {
+        out.push(b'-');
+    }
+    (0, out)
+}
+
+/// One `cJSON_PrintPreallocated` call over a buffer of exactly `len` bytes.
+///
+/// The `len < 0` guard lives HERE rather than in the core, and deliberately so:
+/// `print_preallocated` takes a `&mut [u8]`, whose length cannot be negative, so
+/// the core has no branch to put it in. Answering false at the mode is the
+/// honest place for a guard the port made unrepresentable — the alternative, a
+/// hardcoded constant inside the core, would be a control nothing reaches
+/// (LESSONS #31). Same for the C's `buffer == NULL`, which has no spelling at
+/// all here and is recorded in DIVERGENCES.md instead.
+fn ppa_once(doc: Option<&Value>, len: i32, fmt: bool, out: Option<&mut Vec<u8>>) -> bool {
+    let Some(doc) = doc else { return false };
+    let Ok(len) = usize::try_from(len) else {
+        return false; // C: `length < 0` → false
+    };
+    let mut buf = vec![0_u8; len];
+    let ok = crate::print_preallocated(doc, &mut buf, fmt);
+    if let Some(slot) = out {
+        *slot = buf;
+    }
+    ok
+}
+
+/// `*return_parse_end` as an offset. The C sets it on BOTH paths — the parse
+/// end on success, the clamped error position on failure — so this is never
+/// absent, unlike the `-1` a NULL pointer would report.
+fn push_end(out: &mut Vec<u8>, r: &Result<(Value, usize), crate::ParseError>) {
+    let n = match r {
+        Ok((_, end)) => *end,
+        Err(e) => e.position,
+    };
+    out.extend_from_slice(format!("{n}").as_bytes());
+}
+
+/// A parsed document printed unformatted and length-prefixed, or `-`.
+fn push_printed_opt(out: &mut Vec<u8>, v: Option<&Value>) {
+    match v.and_then(|v| crate::print_value(v, false)) {
+        Some(bytes) => push_bytes(out, Some(&bytes)),
+        None => out.push(b'-'),
+    }
+}
+
 /// Everything up to the first NUL — the C driver hands `cjson_modes_construct`
 /// pointers into a NUL-split buffer, so both fields are C strings.
 fn cstr_prefix(s: &[u8]) -> &[u8] {
@@ -879,6 +1014,9 @@ pub fn run(mode: &str, input: &[u8]) -> (i32, Vec<u8>) {
     }
     if mode == "seq" {
         return seq(input);
+    }
+    if mode == "opts" {
+        return opts(input);
     }
 
     // cJSON_Utils modes (JSON Pointer / Patch / Merge / Sort) — one dispatch,

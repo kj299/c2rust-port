@@ -245,6 +245,19 @@ Then the loop — each step is a CI-enforced gate:
    the "call-twice-for-size" buffer dance → a growing `Vec` with length checks;
    pointer arithmetic over structs → slices + `repr(C)` with bounds; unions/FAMs →
    audited casts with a `// SAFETY:` proof; integer math → checked/`saturating`.
+
+   **When you drop C machinery as "subsumed by a safer construct", name the
+   entry points that make it redundant** (LESSONS #41). That claim is quantified
+   over the surface you have ported, not over the code: cJSON's port dropped the
+   printbuffer's `ensure` bookkeeping because `Vec` growth subsumes it — true for
+   every printer then on the contract, and false eleven modules later when
+   `cJSON_PrintPreallocated` turned the same bookkeeping into its success
+   predicate. The reasoning was correct and re-reading it would not have caught
+   anything; what changed was the API surface. So write the list down where you
+   dropped it, and read `API-COVERAGE.md`'s `unported` rows as **assumptions
+   still outstanding**, not merely work still to do. This is the design-side dual
+   of LESSONS #26 (a gate judges only the surface the driver exposes) and it
+   fails the same way: silently, and only when the surface grows.
 2. **Differential-test** against the oracle (`harnesses/differential/diff_run.py`).
    A divergence is a *triage*, not an auto-fail: {Rust bug → fix} vs {C bug →
    log in `DIVERGENCES.md`, keep the safe behavior}. The verdict is **stdout AND
@@ -272,6 +285,18 @@ Then the loop — each step is a CI-enforced gate:
    the fixed matrix never had. Each divergence is minimized to a committable
    reproducer and triaged like any other (fix the Rust, or ledger-pin the
    intentional fix-of-C-defect by fingerprint).
+
+   A *predicate-defined* divergence — one that fires for a whole class of inputs
+   rather than a nameable few — has no finite fingerprint set, so it needs a
+   **corrected reference oracle**: a patched copy of the C that shares the
+   port's decision, with the class asserted finitely against the PRISTINE oracle
+   in the matrix (LESSONS #28). **Then measure how wide that patch is**
+   (LESSONS #42): it is code you wrote against the subject under test, and if it
+   suppresses more than the ledgered class it suppresses real findings
+   invisibly — a clean report is this control's failure mode. So fuzz the same
+   mode against the pristine oracle too and classify every finding
+   **mechanically**, not by reading the first few hunks (which are the common
+   case by construction). Record both runs side by side.
 4. **Sanitize** (`harnesses/sanitizers/run_sanitizers.sh`): Miri over the pure
    logic and, for the `sys` layer, ASan/UBSan (and TSan if threaded). winlsof's
    worker-thread hang fix is exactly the class TSan/Miri reasoning catches.

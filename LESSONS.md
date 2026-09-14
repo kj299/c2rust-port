@@ -1659,3 +1659,104 @@ the emphasized half.
   ports/cjson/rust/crates/core/src/dom.rs (the placement section);
   skeleton/check.sh; CLAUDE.md (control table); Makefile;
   skills/porting-kit-oracle/SKILL.md; PLAYBOOK.md.
+
+## 041. "Subsumed by a safer construct" is a claim about the API surface you ported, not about the code
+
+*(2026-09-13, cJSON — module `entry-opts`, the four parse/print options entry
+points.)*
+
+- **What happened:** module 4 ported cJSON's `printbuffer` and deliberately
+  threw most of it away. The C's `ensure()` grows a manual byte buffer and
+  guards the growth against integer overflow; `Vec` does both intrinsically, so
+  the port kept `format` and `depth` and dropped the bookkeeping. The module
+  header said so in as many words, with a good argument. Eleven modules later,
+  `cJSON_PrintPreallocated` came up the queue — and it sets `noalloc`, in which
+  mode `ensure` cannot grow and simply refuses. Its arithmetic *is* the
+  function's success predicate. The port had to put all fifteen `ensure(needed)`
+  call sites back.
+- **The trap is that the original reasoning was correct.** It was not sloppy,
+  and re-reading it would not have caught anything: for `cJSON_Print`,
+  `cJSON_PrintUnformatted` and `cJSON_PrintBuffered` — every printer then on the
+  contract — the accounting genuinely is unobservable. What changed was not the
+  code, and not the argument. It was the **API surface**, and an entry point
+  that does nothing new except *expose internal bookkeeping as a return value*.
+- **The generalization:** when you drop C machinery as redundant, you are
+  asserting "no caller can see this" — which is quantified over the callers you
+  have ported. Unported entry points are not absent callers, they are
+  *pending* ones, and an entry point's whole contribution can be to promote an
+  internal invariant to an observable. So record **which entry points make the
+  machinery redundant**, in the place you dropped it, and treat that list as a
+  precondition to re-check when the API surface grows.
+- **This is the design-side dual of LESSONS #26.** #26 says a gate judges only
+  the surface the driver exposes — a claim about *testing*. This one says a
+  simplification is only sound over the surface you have ported — a claim about
+  *implementation*. Both fail the same way: silently, and only when the surface
+  grows. #26's remedy was mechanical (the api-coverage gate). This one's is not
+  yet, and saying so is better than pretending: the honest control today is that
+  the unported list in `API-COVERAGE.md` is read as a list of *assumptions still
+  outstanding*, not just work still to do.
+- **The same module, the same shape, on the test side.** The port's parse error
+  POSITION had never been on the compared contract — `driver.c` keeps error text
+  off stdout deliberately, and the offset went with it. `cJSON_ParseWithOpts`'
+  entire distinct behavior is `*return_parse_end`, so the `opts` mode had to
+  compare it, and it diverged on the first run: cJSON's `parse_string`
+  initializes `input_pointer` to `offset + 1` *before* it validates that the
+  byte is even a quote, and its `fail:` label rewinds to that pointer
+  unconditionally. So `{bad` reports 2 and the port reported 1. Latent since
+  module 3, through six green gates, invisible until a mode printed the number.
+  Fixed and pinned in the same change (`not_a_quote_reports_the_c_offset`).
+- **What the module measured that the library will not tell you:** cJSON's own
+  header says to "allocate 5 bytes more than you actually need" for
+  `cJSON_PrintPreallocated` — an admission that it does not state its
+  requirement. The requirement is `strlen(output) + 2`: `ensure` reserves a NUL
+  slot *on top of* `needed`, so the obvious `strlen + 1` returns false. Every
+  one of the fifteen sites works out to `offset_after + 2`, so the binding
+  constraint is always the last one. The port proves it as a test over a corpus
+  rather than implementing it as a closed form — the closed form is a theorem
+  about *those fifteen values*, and a per-site model keeps working if they
+  change.
+- **Section amended:** ports/cjson/rust/crates/core/src/print.rs (the `limit` /
+  `ensure` restructuring); .../parse.rs (`parse_with_length_opts`,
+  `parse_with_opts`); .../string.rs (the offset fix); .../modes.rs (the `opts`
+  mode); ports/cjson/oracle/{cjson_modes.c,cjson_modes.h,driver.c};
+  ports/cjson/{check.sh,DIVERGENCES.md,API-COVERAGE.md,README.md,progress.json}.
+  (`make_fixed_core.py` gained this module's third correction too, but the
+  lesson it carries is #42's, so it is listed there.)
+
+## 042. A corrected reference oracle can hide the bug it was built to reveal
+
+*(2026-09-13, cJSON — module `entry-opts`.)*
+
+- **What happened:** LESSONS #28 established the corrected reference oracle —
+  when a divergence is *predicate-defined* (every NaN, every non-number target,
+  and now every buffer length below the print boundary) there is no finite set
+  of fingerprints to pin, so differential FUZZING runs against a C that shares
+  the port's fix and any finding is real. `entry-opts` needed one: its
+  partial-write divergence fires for a whole interval of buffer lengths.
+- **The risk nobody had written down.** That oracle is a patch *I* wrote against
+  the subject under test. If the patch is WIDER than the decision it encodes, it
+  suppresses real divergences too — and it suppresses them invisibly, because a
+  suppressed finding looks exactly like no finding. Three seeds × 20 000
+  iterations of green is then evidence of nothing. The corrected oracle is the
+  one control in the kit whose failure mode is *a clean report*.
+- **The control:** fuzz the same mode against the **PRISTINE** oracle as well,
+  and classify every finding **mechanically** — not by reading a few. For
+  `entry-opts`: 25 distinct findings, and a script checked that each one differs
+  in the `ppabuf` field alone, on a call where `ppa=0`, with the port's buffer
+  all zeros. That is the ledgered class exactly, so the correction is narrow.
+  Had the script found a 26th shape, the corrected oracle would have been eating
+  it silently on every green run since.
+- **Why mechanically matters.** The natural move is to eyeball the first few
+  hunks, and the first few hunks are the common case by construction — the rare
+  shape is the one that will not be in them. Parsing the descriptor's fields and
+  asserting the diff key-set is cheap; it is also the only version of this check
+  that scales past the point where reading stops being honest.
+- **The generalization:** *any time a harness suppresses a known difference, the
+  suppression's width is itself untested.* Ledgered fingerprints are safe here —
+  they name exact inputs, so they cannot over-match. A patched oracle is not:
+  it is a behavioral change with an unbounded blast radius, and it deserves a
+  measurement, not an argument. Budget it as part of adopting the corrected
+  oracle, in the same change, the way a fix gets its regression test.
+- **Section amended:** ports/cjson/API-COVERAGE.md (the `opts` sweep table now
+  carries a PRISTINE-oracle control row alongside the corrected-oracle rows);
+  PLAYBOOK.md; skills/porting-kit-diff-fuzz/SKILL.md.

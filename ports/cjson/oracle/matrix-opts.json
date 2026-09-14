@@ -1,0 +1,420 @@
+[
+ {
+  "name": "opts-clean-rnt0",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MAkxNgkzMgp7ImEiOlsxLDJdLCJiIjoieHkifQ==",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-rnt1-no-terminator",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MQkxNgkwCnsiYSI6WzEsMl0sImIiOiJ4eSJ9",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-rnt1-with-terminator",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MQkxNgkwCnsiYSI6WzEsMl0sImIiOiJ4eSJ9AA==",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-rnt1-trailing-whitespace",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MQkxNgkwCnsiYSI6MX0gICAA",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-rnt1-trailing-garbage",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MQkxNgkwCnsiYSI6MX14eXo=",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-rnt0-trailing-garbage",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MAkxNgkwCnsiYSI6MX14eXo=",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-embedded-nul",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MQkxNgkwCnsiYSI6MX0AZ2FyYmFnZQ==",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-err-object-key",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MAkxNgkwCntiYWQ=",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-err-object-comma",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MAkxNgkwCnssfQ==",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-err-trailing-comma",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MAkxNgkwCnsiYSI6MSx9",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-err-array-element",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MAkxNgkwClsxLGJhZA==",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-err-unterminated-object",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MAkxNgkwCnsiYSI6MQ==",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-err-top-level",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MAkxNgkwCnh5enp5",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-err-whitespace-only",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MAkxNgkwCiAgIA==",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-empty-input",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MAkxNgk4Cg==",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-prebuffer-negative",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MAktMQkzMgp7ImEiOlsxLDJdLCJiIjoieHkifQ==",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-prebuffer-zero",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MAkwCTMyCnsiYSI6WzEsMl0sImIiOiJ4eSJ9",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-prebuffer-one",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MAkxCTMyCnsiYSI6WzEsMl0sImIiOiJ4eSJ9",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-prealloc-boundary-exact",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MAkxNgkyMgp7ImEiOlsxLDJdLCJiIjoieHkifQ==",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-prealloc-zero",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MAkxNgkwCnsiYSI6WzEsMl0sImIiOiJ4eSJ9",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-prealloc-negative",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MAkxNgktNQp7ImEiOlsxLDJdLCJiIjoieHkifQ==",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-prealloc-clamped",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MAkxNgk5OTk5OQp7ImEiOlsxLDJdLCJiIjoieHkifQ==",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-formatted",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MgkxNgk0MAp7ImEiOlsxLDJdLCJiIjoieHkifQ==",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-formatted-nested",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MgkxNgk4MAp7ImsiOnsiZGVlcCI6eyJ4IjpbMSx7InkiOjJ9XX19fQ==",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-formatted-boundary",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MgkxNgkzMAp7ImEiOlsxLDJdLCJiIjoieHkifQ==",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-formatted-rnt",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MwkxNgkwCnsiYSI6WzEsMl0sImIiOiJ4eSJ9AA==",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-scalar-null",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MAkxNgk2Cm51bGw=",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-scalar-false",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MAkxNgk3CmZhbHNl",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-escaped-string",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MAkxNgkwClsiYVwiYlxcY1xuZCJd",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-control-escape",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MAkxNgkwClsiXHUwMDAxIl0=",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-empty-containers",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MAkxNgkwCnsiYSI6W10sImIiOnt9fQ==",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-unparseable-doc",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MAkxNgk4Cm5vdCBqc29uIGF0IGFsbA==",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-prealloc-one-short",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MAkxNgkyMQp7ImEiOlsxLDJdLCJiIjoieHkifQ==",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-prealloc-tiny",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MAkxNgkzCnsiYSI6WzEsMl0sImIiOiJ4eSJ9",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-prealloc-mid",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MAkxNgkxMAp7ImEiOlsxLDJdLCJiIjoieHkifQ==",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-prealloc-fmt-short",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MgkxNgkyOQp7ImEiOlsxLDJdLCJiIjoieHkifQ==",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-prealloc-nested-short",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MgkxNgk2NAp7ImsiOnsiZGVlcCI6eyJ4IjpbMSx7InkiOjJ9XX19fQ==",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ },
+ {
+  "name": "opts-prealloc-scalar-short",
+  "args": [
+   "opts"
+  ],
+  "stdin_b64": "MAkxNgk1Cm51bGw=",
+  "expect_rc": 0,
+  "mods": [
+   "entry-opts"
+  ]
+ }
+]

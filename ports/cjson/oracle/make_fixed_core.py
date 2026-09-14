@@ -2,11 +2,13 @@
 """Emit `cJSON_fixed.c` — the vendored cJSON.c with the corrections the port
 makes deliberately, so differential FUZZING has a reference that shares them.
 
-Two sites, three corrections:
+Three sites, four corrections:
 
-  1. `cJSON_CreateNumber`   — no longer converts a NaN to `int`.
-  2. `cJSON_SetNumberHelper` — same NaN fix, AND it no longer writes number
+  1. `cJSON_CreateNumber`     — no longer converts a NaN to `int`.
+  2. `cJSON_SetNumberHelper`  — same NaN fix, AND it no longer writes number
      fields into a node that is not a number.
+  3. `cJSON_PrintPreallocated` — no longer leaves a partially written,
+     NUL-terminated truncation in the caller's buffer when it fails.
 
 ## 1. The NaN -> int conversion (cJSON.c:2452-2476, and again at :384)
 
@@ -71,6 +73,44 @@ so the operation is a no-op there, which is also the safer answer. That is a
 predicate-defined divergence (EVERY non-number target), so it is corrected here
 for the fuzzer and asserted finitely by `matrix-set.json` against the pristine
 oracle. See DIVERGENCES.md `set-*-type-confusion` (6 pinned rows).
+
+## 3. `cJSON_PrintPreallocated` leaves a truncation behind (cJSON.c:1305)
+
+    return print_value(item, &p);
+
+That is the whole function body after setup: the caller gets a `cJSON_bool` and
+nothing else. But `print_value`'s writers each NUL-terminate their own fragment,
+so a buffer one byte too small comes back holding a **terminated, well-formed
+looking, shorter render** — `{"a":[1,2],"b":"xy` + `\\0`. A caller who ignores
+the return value (CWE-252) cannot tell that from a successful print of a smaller
+document, and "one byte too small" is the likely case rather than an exotic one:
+`ensure` reserves a NUL slot on top of `needed`, so the real requirement is
+`strlen + 2` and the obvious `strlen + 1` fails.
+
+The port writes nothing on failure, so the boolean is the only channel. That is
+predicate-defined — EVERY buffer length between "the first ensure fails" and the
+boundary triggers it, so there is no finite fingerprint set — hence the
+correction here and the finite assertions in `matrix-opts.json` against the
+PRISTINE oracle (DIVERGENCES.md `opts-prealloc-*`, 5 pinned rows).
+
+The correction is spelled "restore zeros" because this reference cannot know
+the caller's prior buffer contents. That is exact for the `opts` driver mode,
+which zeroes the buffer before every call on both sides — a coupling this patch
+depends on, and the reason the mode zeroes rather than leaving it uninitialized.
+
+## How wide is a correction? Measure it (LESSONS #42)
+
+Every patch in this file is code written against the subject under test, and its
+failure mode is a CLEAN report: a correction wider than the decision it encodes
+suppresses real divergences indistinguishably from finding none. So adopting one
+obliges a measurement, in the same change — fuzz the same driver mode against the
+PRISTINE oracle and classify every finding mechanically (parse the descriptor,
+assert the set of differing fields is the known one), rather than reading the
+first few hunks, which are the common case by construction. For `opts`: 25
+distinct pristine-oracle findings, all differing in `ppabuf` alone on a call
+where `ppa=0`, with the port's buffer all zeros — the ledgered class exactly.
+Recorded in API-COVERAGE.md's sweep table beside the corrected-oracle rows,
+which is what makes those rows mean anything.
 
 The pristine vendored source is never modified; this file is generated
 (gitignored) and used only to build the fuzz oracle.
@@ -187,6 +227,48 @@ CJSON_PUBLIC(double) cJSON_SetNumberHelper(cJSON *object, double number)
 }
 """
 
+# The whole function again, for the same uniqueness reason as the setter.
+PREALLOC_PRISTINE = """\
+    p.buffer = (unsigned char*)buffer;
+    p.length = (size_t)length;
+    p.offset = 0;
+    p.noalloc = true;
+    p.format = format;
+    p.hooks = global_hooks;
+
+    return print_value(item, &p);
+}
+"""
+
+PREALLOC_FIXED = """\
+    p.buffer = (unsigned char*)buffer;
+    p.length = (size_t)length;
+    p.offset = 0;
+    p.noalloc = true;
+    p.format = format;
+    p.hooks = global_hooks;
+
+    if (print_value(item, &p))
+    {
+        return true;
+    }
+    /* fixed: the shipped function returns print_value's verdict and leaves
+     * whatever it managed to write in the caller's buffer. Because every
+     * writer NUL-terminates its own fragment, that buffer comes back holding a
+     * terminated, well-formed-looking, SHORTER render -- indistinguishable
+     * from a successful print of a smaller document to any caller that ignores
+     * the return value (CWE-252). Write nothing instead.
+     *
+     * "Write nothing" is spelled as "restore zeros" because this reference
+     * cannot know the caller's prior contents; it is exact for the `opts`
+     * driver mode, which zeroes the buffer before every call on BOTH sides.
+     * That coupling is the whole reason this patch is safe, and it is why the
+     * mode zeroes rather than leaving the buffer uninitialized. */
+    memset(buffer, 0, (size_t)length);
+    return false;
+}
+"""
+
 # (what it fixes, pristine text, replacement). Each is asserted to occur EXACTLY
 # once — see main().
 PATCHES = [
@@ -195,6 +277,11 @@ PATCHES = [
         "cJSON_SetNumberHelper's NaN->int conversion and missing type check",
         SETTER_PRISTINE,
         SETTER_FIXED,
+    ),
+    (
+        "cJSON_PrintPreallocated's partial write on failure",
+        PREALLOC_PRISTINE,
+        PREALLOC_FIXED,
     ),
 ]
 
@@ -218,9 +305,10 @@ def main():
         "/* GENERATED by make_fixed_core.py from the vendored cJSON.c — "
         "DO NOT EDIT.\n"
         " * Changes: cJSON_CreateNumber's and cJSON_SetNumberHelper's NaN->int\n"
-        " * conversions, and cJSON_SetNumberHelper's missing type check\n"
+        " * conversions, cJSON_SetNumberHelper's missing type check, and\n"
+        " * cJSON_PrintPreallocated's partial write on failure\n"
         " * (DIVERGENCES.md create-number-nan-valueint, set-number-nan-valueint,\n"
-        " * set-*-type-confusion). */\n"
+        " * set-*-type-confusion, opts-prealloc-*). */\n"
     )
     open(OUT, "w", encoding="utf-8").write(banner + text)
     print(f"wrote {OUT}")

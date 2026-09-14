@@ -756,3 +756,138 @@ char *cjson_modes_query(const char *key, const char *json, size_t json_len) {
     cJSON_Delete(item);
     return out;
 }
+
+/* ---- `opts` mode: the four options entry points ---- */
+
+/* Raw bytes as `<n>:<hex>`. The preallocated buffer is memset to 0 before the
+ * call and the C writes a NUL-terminated PREFIX into it on failure, so interior
+ * NULs are the whole point and sb_bytes' C-string form would hide exactly the
+ * divergence this field exists to measure. */
+static void sb_hex(struct sbuf *b, const unsigned char *p, size_t n) {
+    static const char HEX[] = "0123456789abcdef";
+    size_t i;
+    if (p == NULL) {
+        sb_str(b, "-");
+        return;
+    }
+    sb_int(b, (long)n);
+    sb_str(b, ":");
+    for (i = 0; i < n; i++) {
+        char t[2];
+        t[0] = HEX[(p[i] >> 4) & 0xF];
+        t[1] = HEX[p[i] & 0xF];
+        sb_add(b, t, 2);
+    }
+}
+
+/* cJSON_PrintPreallocated over a buffer allocated to EXACTLY `len`, zeroed
+ * first. `out` (when non-NULL) receives the buffer's bytes afterwards. A
+ * negative `len` never reaches cJSON: the port cannot spell it, so both sides
+ * answer false here instead (see the header). */
+static int ppa_once(cJSON *doc, int len, int fmt, unsigned char *out) {
+    char *buf;
+    int r;
+    if (doc == NULL || len < 0) return 0;
+    buf = (char *)malloc((size_t)len + 1); /* +1: malloc(0) must not be NULL */
+    if (buf == NULL) return 0;
+    memset(buf, 0, (size_t)len + 1);
+    r = cJSON_PrintPreallocated(doc, buf, len, fmt) ? 1 : 0;
+    if (out != NULL && len > 0) memcpy(out, buf, (size_t)len);
+    free(buf);
+    return r;
+}
+
+char *cjson_modes_opts(int flags, int prebuffer, int prealloc,
+                       const char *json, size_t json_len) {
+    int rnt = (flags & 1) ? 1 : 0;
+    int fmt = (flags & 2) ? 1 : 0;
+    const char *end_l = NULL;
+    const char *end_o = NULL;
+    cJSON *by_len;
+    cJSON *by_str;
+    cJSON *doc;
+    char *pwl = NULL;
+    char *pwo = NULL;
+    char *pb = NULL;
+    char *ref = NULL;
+    unsigned char *ppabuf = NULL;
+    int ppa = 0;
+    long ppamin = -1;
+    size_t cap;
+    struct sbuf b;
+
+    if (prebuffer > CJSON_OPTS_MAX_BUF) prebuffer = CJSON_OPTS_MAX_BUF;
+    if (prealloc > CJSON_OPTS_MAX_BUF) prealloc = CJSON_OPTS_MAX_BUF;
+
+    /* The length form first: it sees the exact byte count, so an embedded NUL
+     * or a missing terminator is visible to it and not to the string form. */
+    by_len = cJSON_ParseWithLengthOpts(json, json_len, &end_l, rnt);
+    by_str = cJSON_ParseWithOpts(json, &end_o, rnt);
+    doc = (by_len != NULL) ? by_len : by_str;
+
+    if (by_len != NULL) pwl = cJSON_PrintUnformatted(by_len);
+    if (by_str != NULL) pwo = cJSON_PrintUnformatted(by_str);
+    if (doc != NULL) pb = cJSON_PrintBuffered(doc, prebuffer, fmt);
+    if (doc != NULL) ref = fmt ? cJSON_Print(doc) : cJSON_PrintUnformatted(doc);
+
+    /* The predicate, not a sample of it: scan for the smallest length that
+     * succeeds. Bounded by the reference print's length, which is what the
+     * accounting is a function of. */
+    if (ref != NULL) {
+        int len;
+        int limit = (int)strlen(ref) + 4;
+        if (limit > CJSON_OPTS_MAX_BUF) limit = CJSON_OPTS_MAX_BUF;
+        for (len = 0; len <= limit; len++) {
+            if (ppa_once(doc, len, fmt, NULL)) {
+                ppamin = len;
+                break;
+            }
+        }
+    }
+
+    if (prealloc > 0) {
+        ppabuf = (unsigned char *)malloc((size_t)prealloc);
+        if (ppabuf != NULL) memset(ppabuf, 0, (size_t)prealloc);
+    }
+    ppa = ppa_once(doc, prealloc, fmt, ppabuf);
+
+    cap = 4096 + json_len * 4
+        + (pwl ? strlen(pwl) : 0) * 2 + (pwo ? strlen(pwo) : 0) * 2
+        + (pb ? strlen(pb) : 0) * 2 + (size_t)(prealloc > 0 ? prealloc : 0) * 2;
+    b.p = (char *)malloc(cap);
+    b.cap = cap;
+    b.len = 0;
+    b.ok = (b.p != NULL);
+    if (b.p != NULL) b.p[0] = '\0';
+
+    sb_str(&b, "pwl=");
+    sb_bytes(&b, pwl);
+    sb_str(&b, ";pwlend=");
+    sb_int(&b, end_l ? (long)(end_l - json) : -1);
+    sb_str(&b, ";pwo=");
+    sb_bytes(&b, pwo);
+    sb_str(&b, ";pwoend=");
+    sb_int(&b, end_o ? (long)(end_o - json) : -1);
+    sb_str(&b, ";pb=");
+    sb_bytes(&b, pb);
+    sb_str(&b, ";ppamin=");
+    sb_int(&b, ppamin);
+    sb_str(&b, ";ppa=");
+    sb_int(&b, ppa);
+    sb_str(&b, ";ppabuf=");
+    sb_hex(&b, ppabuf, (size_t)(prealloc > 0 ? prealloc : 0));
+
+    free(ppabuf);
+    cJSON_free(ref);
+    cJSON_free(pb);
+    cJSON_free(pwo);
+    cJSON_free(pwl);
+    cJSON_Delete(by_str);
+    cJSON_Delete(by_len);
+
+    if (!b.ok) {
+        free(b.p);
+        return NULL;
+    }
+    return b.p;
+}

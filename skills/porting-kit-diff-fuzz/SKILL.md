@@ -38,6 +38,18 @@ Needs a runnable C oracle (or a golden-replay wrapper, `porting-kit/harnesses/go
    just this fuzz seed.
 5. A **rust-side TIMEOUT** finding is a hang on some input — a design smell, not a
    wrap-it target (LESSONS #1/#6); design the blocking path out.
+6. **If you fuzz against a CORRECTED oracle, measure how wide the correction is**
+   (LESSONS #42). A divergence class that is *predicate-defined* — every NaN,
+   every buffer length below a boundary — has no finite fingerprint set, so the
+   fix goes into a patched copy of the C and the fuzzer runs against that
+   (LESSONS #28). That patch is code you wrote against the subject under test:
+   if it is wider than the decision it encodes, it suppresses real divergences,
+   and a suppressed finding is indistinguishable from no finding. So also fuzz
+   the same mode against the **PRISTINE** oracle and classify every finding
+   **mechanically** — parse the descriptor, assert the set of differing fields
+   is the known one — rather than eyeballing the first few hunks, which are the
+   common case by construction. Record both runs side by side; the pristine row
+   is what makes the corrected rows mean anything.
 
 ## Notes
 - Fidelity is shared, not reimplemented: every input is judged by
