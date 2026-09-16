@@ -117,7 +117,8 @@ round-trips), `\uZZZZ` (invalid hex) parses as a NUL rather than failing, and
 the printer truncates at the first interior NUL. All three quirks are pinned in
 unit tests and C-validated vectors.
 
-Run the whole port gate (also a CI job, `cjson-port`):
+Run the whole port gate (also the last step of CI's `gates` job — it was its own
+`cjson-port` job until the four jobs were consolidated to cut billed minutes):
 
     bash ports/cjson/check.sh   # oracle lock → fmt/clippy/test → diff_run 25/25 → unsafe-audit → progress ingest
 

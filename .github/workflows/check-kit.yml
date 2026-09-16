@@ -2,12 +2,41 @@
 # kit — there is no root Rust workspace — so the kit's own `porting-ci.template.yml`
 # (build/miri/sanitizers/differential against crates/**) does NOT apply here. The
 # kit's gate is `make check-kit` (its harness self-tests + doc/skills integrity),
-# plus building the skeleton it ships.
+# plus building the skeleton it ships and the two live port gates.
 #
 # Only official actions/checkout is used (LESSONS #10); everything else runs via tools already
 # on the ubuntu runner (make, python3, rustup+stable). This sidesteps Actions
 # policies that allow only first-party actions — a third-party `uses:` there
 # fails the whole run at startup.
+#
+# ## Why this is ONE job (2026-09-16)
+#
+# It was four: `check-kit`, `skeleton`, `exit-test`, `cjson-port`. They ran in
+# parallel and read nicely as four named checks — and on a PRIVATE repository
+# GitHub bills each job ROUNDED UP TO A WHOLE MINUTE, so four jobs cost at least
+# four minutes per run however little work they did, and three of them each paid
+# again for `rustup toolchain install`. Consolidating costs wall-clock (the
+# stages are now serial) and buys back those roundings and two redundant
+# toolchain installs.
+#
+# The fast-feedback the split used to give is recovered by ORDERING instead:
+# `make check-kit` needs no toolchain and runs FIRST, so a docs/harness/skills
+# integrity break — much the most common failure here — still fails in well
+# under a minute, having installed nothing. The expensive nightly+miri install
+# is deferred to just before the only step that needs it.
+#
+# Two things deliberately NOT done:
+#
+#   * No `paths`/`paths-ignore` filter. It is the obvious next saving and it is
+#     a trap this project has already been bitten by: in the sibling repo a
+#     workflow watching `porting-kit/**` excluded `**.md`, and a LESSONS.md
+#     corruption then merged with zero checks (kj299/lsof#82, #83). Markdown-only
+#     is exactly the change this gate exists to catch — the lesson-link and
+#     skills-integrity checkers read prose.
+#   * No `actions/cache`. Measured, not assumed: both Cargo.lock files contain
+#     three packages and every one is a `path` crate, so there is no registry to
+#     restore and target-caching would save seconds of compiling three tiny
+#     local crates — while adding the `uses:` this file exists to minimise.
 name: check-kit
 
 on:
@@ -18,63 +47,64 @@ on:
 permissions:
   contents: read
 
+# Supersede in-flight PR runs: an iterative branch pushes many times and every
+# obsoleted run otherwise bills to completion. `main` is exempt — a post-merge
+# run is the record for that commit and must not be cancelled by the next merge.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  check-kit:
-    name: make check-kit (harness self-tests + integrity)
+  gates:
+    name: kit gates (check-kit + skeleton + adler32 + cJSON port)
     runs-on: ubuntu-latest
+    # The default is 360 minutes. This repo's own LESSONS #1/#6 are about a
+    # harness that HUNG; a hang here would quietly bill six hours of a metered
+    # private-repo quota. Observed runtime is a couple of minutes, so this is
+    # ~10x headroom and still a ceiling.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      # make + python3 (3.12) are preinstalled on the ubuntu runner; check-kit
-      # needs no Rust toolchain. Runs every harness self-test, the doc-flag
-      # drift check, and the skills-integrity check.
+
+      # ---- stage 1: no toolchain required, so it runs before we install one --
+      # make + python3 (3.12) are preinstalled on the ubuntu runner. Runs every
+      # harness self-test, the doc-flag drift check, and the skills-integrity
+      # check. Ordered first so the cheapest and most frequently broken gate is
+      # also the fastest to report.
       - run: python3 --version && make --version | head -1
       - run: make check-kit
 
-  skeleton:
-    name: skeleton workspace (fmt + clippy + build + test)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: skeleton
-    steps:
-      - uses: actions/checkout@v4
+      # ---- stage 2: stable toolchain, shared by everything below -------------
       # rustup + a stable toolchain are preinstalled; ensure the components.
+      - run: rustup toolchain install stable --profile minimal --component clippy,rustfmt --no-self-update
+      - run: rustup default stable
+
       # The skeleton must pass the very lints it configures (workspace [lints]:
       # arithmetic_side_effects, cast_possible_truncation, the unsafe docs) or
       # every port that copies it starts red.
-      - run: rustup toolchain install stable --profile minimal --component clippy,rustfmt --no-self-update
-      - run: rustup default stable
       - run: cargo fmt --all -- --check
+        working-directory: skeleton
       - run: cargo clippy --all-targets -- -D warnings
+        working-directory: skeleton
       - run: cargo build --release
+        working-directory: skeleton
       - run: cargo test --all
+        working-directory: skeleton
 
-  exit-test:
-    name: adler32 exit test (every gate over a real C→Rust library)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
       # The one gate that exercises inter-harness COMPOSITION on a real port —
       # cc + cargo needed, so it can't live in the toolchain-free `make
-      # check-kit` and would otherwise rot silently (LESSONS #13). cc/gcc and rustup+stable
-      # are preinstalled on the ubuntu runner.
-      - run: rustup toolchain install stable --profile minimal --no-self-update
-      - run: rustup default stable
+      # check-kit` and would otherwise rot silently (LESSONS #13). cc/gcc is
+      # preinstalled on the ubuntu runner.
       - run: examples/adler32/run.sh
 
-  cjson-port:
-    name: cJSON port gate (oracle + differential over the ported modules)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      # The keystone port's live gate: locks the C oracle (build + validate all
-      # vectors against the vendored cJSON), then diffs the Rust port over the
-      # matrices its ported modules support. Runs in CI from day one so the
-      # port's gates cannot rot unexecuted (LESSONS #13).
-      - run: rustup toolchain install stable --profile minimal --component clippy,rustfmt --no-self-update
-      - run: rustup default stable
+      # ---- stage 3: the expensive install, deferred to its only consumer -----
       # nightly+miri so the port's `sanitized` gate RUNS here rather than SKIPping:
       # the ffi crate's C-ABI shim is the port's entire memory-safety surface, and
       # check.sh only advances `sanitized` when miri actually ran (LESSONS #6, #18).
       - run: rustup toolchain install nightly --profile minimal --component miri --no-self-update
+
+      # The keystone port's live gate: locks the C oracle (build + validate all
+      # vectors against the vendored cJSON), then diffs the Rust port over the
+      # matrices its ported modules support. Runs in CI from day one so the
+      # port's gates cannot rot unexecuted (LESSONS #13).
       - run: ports/cjson/check.sh
