@@ -72,6 +72,32 @@ mkdir -p "$HERE/reports/fuzz"
     --matrix "$HERE/oracle/matrix.json" --ledger "$HERE/DIVERGENCES.md" \
     --iterations 2000 --timeout 5 --json > "$HERE/reports/fuzz/MODULE.json"
 
+echo "===== 3c. oracle-sanitize — the C DRIVER is code this port wrote ====="
+# LESSONS #40. `oracle/driver.c` is not vendored C, it is yours: it sizes
+# buffers and transfers ownership by hand, and a leak or an overread there
+# changes no stdout, so the differential and the fuzzer stay green over it.
+# Build a sanitized twin of the same sources and drive every matrix case
+# through it. Toolchain-optional, but the SKIP must be loud.
+# Three outcomes, not two. "You have not written the build script" and "your
+# compiler cannot do ASan" are different facts, and reporting the second when the
+# first is true tells a port its environment is thin when actually its control is
+# missing — the same conflation LESSONS #40's own self-test had.
+if [ ! -x "$HERE/oracle/build_asan.sh" ]; then
+  echo "TODO  oracle-sanitize: no oracle/build_asan.sh yet. Write one (same"
+  echo "      sources as build.sh, plus -fsanitize=address,undefined) — until"
+  echo "      then the C driver you wrote is checked by nothing."
+elif bash "$HERE/oracle/build_asan.sh" > /dev/null 2>&1; then
+  # one --matrix flag per file: the flag takes a single path, so a bare glob
+  # would hand argparse positionals it rejects.
+  SAN_MATRICES=()
+  for m in "$HERE"/oracle/matrix*.json; do SAN_MATRICES+=(--matrix "$m"); done
+  "$PY" "$KIT/harnesses/oracle-sanitize/sanitize_oracle.py" \
+      --oracle "$HERE/oracle/oracle_asan" "${SAN_MATRICES[@]}"
+else
+  echo "SKIP  oracle-sanitize: build_asan.sh exists but did not build (no"
+  echo "      ASan-capable compiler?). The C driver was NOT checked this run."
+fi
+
 echo "===== 4. sanitizers (toolchain-optional, but SKIP must be loud) ====="
 mkdir -p "$HERE/reports/sanitize"
 if cargo +nightly miri --version >/dev/null 2>&1; then

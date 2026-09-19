@@ -6,6 +6,9 @@ oracle/cjson_oracle
 # files and the binary are all regenerable and never committed (the pristine
 # vendored source is the only truth).
 oracle/cjson_oracle_fixed
+# Sanitized twin of the oracle (build_asan.sh) -- same sources, plus ASan/UBSan
+# and leak detection. Only ever fed to harnesses/oracle-sanitize.
+oracle/cjson_oracle_asan
 oracle/cJSON_Utils_fixed.c
 oracle/cJSON_fixed.c
 oracle/corpus/

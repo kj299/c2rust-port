@@ -16,6 +16,7 @@ check-kit:
 	@echo "== c-flaw-scan ==";      $(PY) $(H)/c-flaw-scan/scan_c_flaws.py --self-test
 	@echo "== api-coverage ==";     $(PY) $(H)/api-coverage/check_api.py --self-test
 	@echo "== control-coverage =="; $(PY) $(H)/control-coverage/check_controls.py --self-test
+	@echo "== oracle-sanitize =="; $(PY) $(H)/oracle-sanitize/sanitize_oracle.py --self-test
 	@echo "== control-coverage: the shipped gate TEMPLATE must wire every control =="; \
 	  $(PY) $(H)/control-coverage/check_controls.py --controls CLAUDE.md --gate skeleton/check.sh
 	@echo "== diff-fuzz ==";        $(PY) $(H)/diff-fuzz/diff_fuzz.py --self-test

@@ -1454,3 +1454,309 @@ the emphasized half.
   ports/cjson/spikes/ (new, 3 reproducers + run.sh);
   ports/cjson/API-COVERAGE.md (the mutation rows point at the spike);
   skeleton/FLAW-SCAN.md.
+
+## 038. The hazard you READ instead of RAN is the one that is wrong
+
+*(2026-09-07, cJSON — module `dom-mutate-set`, the two in-place setters.)*
+
+- **What happened:** `MUTATION-API-SPIKE.md` opens its findings with *"Everything
+  below was executed against the vendored v1.7.18 under ASan/UBSan, not inferred
+  from reading."* That was true of H1–H3, the scary ones. H4–H6 — the small
+  module's hazards — were **read**. H6 looked at
+  `strcpy(object->valuestring, valuestring)` in `cJSON_SetValuestring`, checked
+  that the destination is always at least as long as the source, concluded
+  *"memory-safe as written"*, and moved on to interior NULs.
+
+  Buffer length was the right answer to the wrong question. Nothing stops the
+  source pointing **into** the destination:
+  `cJSON_SetValuestring(item, item->valuestring + 2)` is a plausible in-place
+  prefix strip, it passes the length test, and it is an overlapping copy —
+  undefined per C17 7.24.2.3. ASan says so the first time you run it
+  (`strcpy-param-overlap`, cJSON.c:418). Ten lines of C, one compile, one run.
+- **Two things that should have made it louder.** First, that exact line was
+  already one of the Phase-0 flaw scan's 17 copy-sink hits, and `FLAW-SCAN.md`
+  had already triaged it as benign — by the same reading, about the same
+  question. Second, the spike existed *specifically* to stop this: "spike the
+  scary module before scheduling it" is the kit's most expensive habit, and the
+  spike did find the aliasing bug in `DetachItemViaPointer`, because it ran it.
+  It missed the aliasing bug in `SetValuestring`, three functions away, because
+  it only read it.
+- **Why mixing the two is worse than reading everything.** A document that says
+  "executed, not inferred" lends the credibility of its executed claims to its
+  read ones. A reader — including the author, three sessions later — cannot tell
+  which is which, so the weakest claim inherits the strongest claim's authority.
+  This is LESSONS #37's shape (a record's *reach* must be stated) applied to a
+  spike instead of a scan, and LESSONS #35's (an unstated scope argument is the
+  next place the hole moves to).
+- **The rule:** *in any document that claims its findings were executed, label
+  every claim as executed or read, per claim.* And for anything you are about to
+  call benign, write the ten-line program that would prove it isn't, and run it.
+  If you cannot think of such a program, that itself goes in the record — it is
+  a much more useful sentence than "safe".
+- **Kit change:** `skeleton/SPIKE.md` (new) — a hazard-log template whose table
+  carries a mandatory per-hazard **Evidence** column (`ran: <reproducer>` or
+  `read`) and a closing rule that a `read` row may not be called benign without
+  saying what was not tried. `skills/porting-kit-module/SKILL.md`'s spike step
+  now points at it and states the per-claim labelling rule. `PLAYBOOK.md`'s
+  Phase-4 spike bullet likewise.
+- **The same discipline, applied to the new gate.** The module's differential
+  was fail-closed-verified by injection (LESSONS #6/#18), and one injection
+  *stayed green*: deleting `set_valuestring`'s NUL truncation changed nothing
+  across all 52 matrix rows. Not a hole — the C physically cannot store an
+  interior NUL there and every reader on both sides truncates, so it is a
+  canonicalization rather than an observable behavior. But the only way to learn
+  which of a module's claims its gate actually holds is to try to break each one.
+  The answer was a unit test plus a comment saying the differential cannot see
+  this, not a bigger descriptor. Two other injections (dropping the type guard,
+  making the number setter a no-op) went red with 48 divergences each.
+- **What the module found on top of it:** `cJSON_SetNumberHelper` performs **no
+  type check** — it writes `valueint`/`valuedouble` into any node, leaving a
+  `cJSON_String` that carries a number (CWE-843, and both fields are public).
+  The spike's H4/H5 caught the missing NULL check and the NaN cast in that same
+  function and did not mention the type check, for the same reason: nobody ran
+  it. Both are now ledgered, and the port's enum makes the confused state
+  unrepresentable.
+- **Section amended:** ports/cjson/MUTATION-API-SPIKE.md (H7, a status header,
+  and §4/§5/§6 updated); ports/cjson/FLAW-SCAN.md (L4/L5, and the copy-sink
+  triage's own miss called out); ports/cjson/spikes/setvaluestring_alias.c (new);
+  ports/cjson/spikes/run.sh; ports/cjson/DIVERGENCES.md (10 pinned rows + 4
+  structural eliminations); ports/cjson/oracle/make_fixed_core.py (a second
+  patch site, and a patch LIST instead of one hardcoded pair);
+  ports/cjson/oracle/cjson_modes.{c,h} + driver.c (the `set` mode);
+  ports/cjson/rust/crates/core/src/dom.rs (`set_valuestring`, `set_number`,
+  `value_double`, `get_object_item_mut`);
+  ports/cjson/rust/crates/core/src/modes.rs (the `set` mode; `push_bytes` made
+  NUL-truncating to match its C counterpart); ports/cjson/check.sh;
+  ports/cjson/API-COVERAGE.md (ratchet 18 -> 16); skeleton/SPIKE.md (new);
+  skills/porting-kit-module/SKILL.md; PLAYBOOK.md.
+
+## 039. A value-comparing differential never touches the C's redundant state
+
+*(2026-09-07, cJSON — module `dom-mutate-remove`, the six Detach/Delete entry points.)*
+
+- **The structure.** cJSON's child list is doubly linked, and
+  `parent->child->prev` does double duty as a **last-item cache** so
+  `add_item_to_array` can append in O(1). It is denormalized state: nothing you
+  can print depends on it, and every accessor answers correctly whether or not it
+  is right.
+- **What that does to a differential.** Every mode this port had was single-shot
+  — one input, one operation, compare the bytes. Detach is precisely an operation
+  that *rewrites* that cache, and a wrong rewrite changes no printed byte. The
+  spike had already reproduced the shape (H1b): a corrupted cache returns
+  success, prints an unchanged document, and cashes in on a **later, unrelated**
+  call, where an append to document A lands in document B. A differential that
+  compares only after the operation reports MATCH on exactly that.
+- **The fix is not "compare harder", it is an op whose job is to CONSUME the
+  cache.** The `seq` mode's input is a *program*, the descriptor is emitted after
+  **every** step, and one of its seven ops — `app`, an append — exists for no
+  other reason than that appending is the only operation that reads the last-item
+  cache. Drop it and the mode compares the normalized view of the tree and
+  nothing else, very thoroughly, forever.
+- **The generalization:** *before designing a mode, ask what state the C keeps
+  that no output depends on.* A last-item cache, a length stored beside a
+  pointer, a memoized count, a free list, a dirty flag, a cached hash. For each,
+  name the operation that consumes it and put that operation in the mode.
+  Otherwise the gate is green over a field it never read — the LESSONS #26
+  shape ("a gate judges only the surface the driver exposes") one level down,
+  inside a data structure rather than across an API.
+- **Corollary for any multi-step mode: emit the descriptor after every step, not
+  only at the end.** A bug that corrupts state at step 2 and is masked by step 5
+  is invisible to a final-state comparison — and masking is not hypothetical
+  here: cJSON's own `cJSON_InsertItemInArray` carries an explicit
+  *"return false if after_inserted is a corrupted array item"* guard, which is
+  evidence this area has silently repaired itself before.
+- **What it cost and what it bought.** The harness was the entire expense. The
+  port itself needed no ledger entry at all — 48 matrix rows, 48 MATCH, the first
+  module in four that diverges from shipped cJSON nowhere. That asymmetry is the
+  argument for putting a new harness in the *scariest* module rather than the
+  smallest one: `dom-mutate-place` now inherits it for free, which is exactly
+  what MUTATION-API-SPIKE.md §4 predicted when it refused to bolt the sequence
+  mode onto a cheaper increment.
+- **Also worth keeping:** `cJSON_DetachItemFromArray` is **not array-only** — the
+  index walk has no type check, so it takes the *n*-th member of an OBJECT and
+  hands back a node still carrying that member's key. That is the fourth time a
+  `dom.rs` doc comment has asserted a type check the C never performs
+  (`get_array_size`, `get_array_item`, `add_item_to_array` were the first three).
+  It was probed before a line of Rust was written this time, which is the only
+  reason it did not become the fourth to ship wrong.
+- **Kit change:** `skeleton/SPIKE.md`'s "Harness machinery the module will need"
+  section now asks the redundant-state question by name, and `PLAYBOOK.md`
+  Phase 4 and `skills/porting-kit-module/SKILL.md` carry the rule next to the
+  differential gate.
+- **Section amended:** skills/porting-kit-module/SKILL.md;
+  ports/cjson/oracle/cjson_modes.h (the `seq` contract, incl. why `app` exists);
+  ports/cjson/oracle/cjson_modes.c (`sb_step`, emitted per step);
+  ports/cjson/rust/crates/core/src/modes.rs (`seq`);
+  ports/cjson/rust/crates/core/src/dom.rs (the removal family);
+  ports/cjson/check.sh (the module-13 block); skeleton/SPIKE.md; PLAYBOOK.md.
+- **The rest of the increment**, which this lesson did not drive: `oracle/driver.c`
+  (the `seq` dispatch), `spikes/detach_relink.c` + `spikes/run.sh` (the evidence
+  that the four reachable detach entry points are safe), `oracle/probes-seq.json`
+  and `oracle/matrix-seq.json` (48 each), `API-COVERAGE.md` (ratchet 16 → 9, and
+  `cJSON_DetachItemViaPointer` moved to `out-of-scope`), `DIVERGENCES.md` (two
+  structural eliminations and the `app` scope refusal), `MUTATION-API-SPIKE.md`,
+  `README.md`, `progress.json`.
+
+## 040. The oracle is your code too, and nothing was checking it
+
+*(2026-09-08, cJSON — module `dom-mutate-place`, Insert + Replace.)*
+
+- **What happened:** module 14's first probe program leaked. LeakSanitizer named
+  `cJSON_New_Item`, and the cause was a rule nobody had written down:
+  `cJSON_InsertItemInArray` and `cJSON_ReplaceItemIn*` adopt the new node only
+  when they SUCCEED. On a negative index, a NULL item, a missing key or a
+  non-container parent, the caller still owns it. Fine — that is what probes are
+  for. The uncomfortable part came next: the identical ownership rule was about
+  to be written three lines away in `oracle/cjson_modes.c`, the C driver the
+  differential actually executes, **and nothing in the kit would have caught it
+  there.**
+- **Why not.** A leak does not change stdout. `diff_run` compares stdout, so it
+  stays green. `diff_fuzz` compares stdout, so it stays green. The sanitizer gate
+  runs miri and ASan over the *Rust* workspace, which is the port's declared
+  memory-safety surface — and the C driver is not in it. The oracle is compiled
+  plain, deliberately, because it has to behave like the shipped library.
+  `ports/cjson/oracle` had been in that position for fourteen modules: about a
+  thousand lines of hand-written C, sizing buffers and transferring ownership by
+  hand, unchecked and clean only by luck and review.
+- **The generalization:** *the code a harness adds in order to observe the
+  subject is invisible to that harness's own verdict.* This is LESSONS #39's
+  shape turned on the test rig instead of the library — there the C kept state no
+  output depended on, here the harness has behavior no comparison depends on.
+  Whenever you write code so a gate can watch something, ask what watches THAT.
+  For a differential port the answer is not subtle: the driver is C, so run it
+  under the sanitizers you already run on everything else.
+- **Kit change:** a new control, `harnesses/oracle-sanitize/sanitize_oracle.py`,
+  and a row in CLAUDE.md's table so `control-coverage` obliges every port's gate
+  to call it. The port builds a sanitized twin of its own oracle
+  (`oracle/build_asan.sh`, same sources plus ASan/UBSan/LSan) and the harness
+  drives every matrix case through it, failing on any sanitizer report. Two
+  fail-closed refusals it needs and would be worthless without: an empty case set
+  (0-of-0, LESSONS #18) and an **uninstrumented** binary — a build that silently
+  dropped `-fsanitize` would report clean forever, so the harness checks the
+  binary for the sanitizer runtime and refuses one that has none. Both are
+  mutation-sweep entries. `skeleton/check.sh` ships the step so a new port
+  inherits it.
+- **A smaller instance of the same bug, inside the new control.** Its self-test
+  compiles a deliberately leaky fixture, and my first fixture did not compile —
+  so the self-test printed `SKIP  no sanitizer-capable C compiler` on a machine
+  that had *just* built a sanitized oracle. A broken test and a missing toolchain
+  are not the same event, and collapsing them makes the second one a hiding place
+  for the first. The probe now separates them: a compiler that cannot build the
+  TRIVIAL fixture is a skip; one that builds it and then chokes on the real
+  fixture is a FAIL.
+- **What the module itself found**, all executed rather than read
+  (`spikes/place_relink.c`): `cJSON_InsertItemInArray` with an index past the end
+  does not fail — it falls through to `add_item_to_array` and appends. And
+  `cJSON_ReplaceItemInObject` rewrites the replacement's key to the LOOKUP
+  string before it looks anything up, so a case-insensitive replace of `a` in
+  `{"A":1}` leaves `{"a":…}` and even a *failed* replace has already overwritten
+  the caller's node. Both are pinned as probes. Neither is a defect; both are the
+  opposite of what the function names suggest.
+- **Section amended:** harnesses/oracle-sanitize/sanitize_oracle.py (new);
+  harnesses/gate-mutation/mutate_gates.py (two entries);
+  ports/cjson/oracle/build_asan.sh (new); ports/cjson/check.sh (step 4a);
+  ports/cjson/oracle/cjson_modes.c (the placement ops' ownership handling);
+  ports/cjson/rust/crates/core/src/dom.rs (the placement section);
+  skeleton/check.sh; CLAUDE.md (control table); Makefile;
+  skills/porting-kit-oracle/SKILL.md; PLAYBOOK.md.
+
+## 041. "Subsumed by a safer construct" is a claim about the API surface you ported, not about the code
+
+*(2026-09-13, cJSON — module `entry-opts`, the four parse/print options entry
+points.)*
+
+- **What happened:** module 4 ported cJSON's `printbuffer` and deliberately
+  threw most of it away. The C's `ensure()` grows a manual byte buffer and
+  guards the growth against integer overflow; `Vec` does both intrinsically, so
+  the port kept `format` and `depth` and dropped the bookkeeping. The module
+  header said so in as many words, with a good argument. Eleven modules later,
+  `cJSON_PrintPreallocated` came up the queue — and it sets `noalloc`, in which
+  mode `ensure` cannot grow and simply refuses. Its arithmetic *is* the
+  function's success predicate. The port had to put all fifteen `ensure(needed)`
+  call sites back.
+- **The trap is that the original reasoning was correct.** It was not sloppy,
+  and re-reading it would not have caught anything: for `cJSON_Print`,
+  `cJSON_PrintUnformatted` and `cJSON_PrintBuffered` — every printer then on the
+  contract — the accounting genuinely is unobservable. What changed was not the
+  code, and not the argument. It was the **API surface**, and an entry point
+  that does nothing new except *expose internal bookkeeping as a return value*.
+- **The generalization:** when you drop C machinery as redundant, you are
+  asserting "no caller can see this" — which is quantified over the callers you
+  have ported. Unported entry points are not absent callers, they are
+  *pending* ones, and an entry point's whole contribution can be to promote an
+  internal invariant to an observable. So record **which entry points make the
+  machinery redundant**, in the place you dropped it, and treat that list as a
+  precondition to re-check when the API surface grows.
+- **This is the design-side dual of LESSONS #26.** #26 says a gate judges only
+  the surface the driver exposes — a claim about *testing*. This one says a
+  simplification is only sound over the surface you have ported — a claim about
+  *implementation*. Both fail the same way: silently, and only when the surface
+  grows. #26's remedy was mechanical (the api-coverage gate). This one's is not
+  yet, and saying so is better than pretending: the honest control today is that
+  the unported list in `API-COVERAGE.md` is read as a list of *assumptions still
+  outstanding*, not just work still to do.
+- **The same module, the same shape, on the test side.** The port's parse error
+  POSITION had never been on the compared contract — `driver.c` keeps error text
+  off stdout deliberately, and the offset went with it. `cJSON_ParseWithOpts`'
+  entire distinct behavior is `*return_parse_end`, so the `opts` mode had to
+  compare it, and it diverged on the first run: cJSON's `parse_string`
+  initializes `input_pointer` to `offset + 1` *before* it validates that the
+  byte is even a quote, and its `fail:` label rewinds to that pointer
+  unconditionally. So `{bad` reports 2 and the port reported 1. Latent since
+  module 3, through six green gates, invisible until a mode printed the number.
+  Fixed and pinned in the same change (`not_a_quote_reports_the_c_offset`).
+- **What the module measured that the library will not tell you:** cJSON's own
+  header says to "allocate 5 bytes more than you actually need" for
+  `cJSON_PrintPreallocated` — an admission that it does not state its
+  requirement. The requirement is `strlen(output) + 2`: `ensure` reserves a NUL
+  slot *on top of* `needed`, so the obvious `strlen + 1` returns false. Every
+  one of the fifteen sites works out to `offset_after + 2`, so the binding
+  constraint is always the last one. The port proves it as a test over a corpus
+  rather than implementing it as a closed form — the closed form is a theorem
+  about *those fifteen values*, and a per-site model keeps working if they
+  change.
+- **Section amended:** ports/cjson/rust/crates/core/src/print.rs (the `limit` /
+  `ensure` restructuring); .../parse.rs (`parse_with_length_opts`,
+  `parse_with_opts`); .../string.rs (the offset fix); .../modes.rs (the `opts`
+  mode); ports/cjson/oracle/{cjson_modes.c,cjson_modes.h,driver.c};
+  ports/cjson/{check.sh,DIVERGENCES.md,API-COVERAGE.md,README.md,progress.json}.
+  (`make_fixed_core.py` gained this module's third correction too, but the
+  lesson it carries is #42's, so it is listed there.)
+
+## 042. A corrected reference oracle can hide the bug it was built to reveal
+
+*(2026-09-13, cJSON — module `entry-opts`.)*
+
+- **What happened:** LESSONS #28 established the corrected reference oracle —
+  when a divergence is *predicate-defined* (every NaN, every non-number target,
+  and now every buffer length below the print boundary) there is no finite set
+  of fingerprints to pin, so differential FUZZING runs against a C that shares
+  the port's fix and any finding is real. `entry-opts` needed one: its
+  partial-write divergence fires for a whole interval of buffer lengths.
+- **The risk nobody had written down.** That oracle is a patch *I* wrote against
+  the subject under test. If the patch is WIDER than the decision it encodes, it
+  suppresses real divergences too — and it suppresses them invisibly, because a
+  suppressed finding looks exactly like no finding. Three seeds × 20 000
+  iterations of green is then evidence of nothing. The corrected oracle is the
+  one control in the kit whose failure mode is *a clean report*.
+- **The control:** fuzz the same mode against the **PRISTINE** oracle as well,
+  and classify every finding **mechanically** — not by reading a few. For
+  `entry-opts`: 25 distinct findings, and a script checked that each one differs
+  in the `ppabuf` field alone, on a call where `ppa=0`, with the port's buffer
+  all zeros. That is the ledgered class exactly, so the correction is narrow.
+  Had the script found a 26th shape, the corrected oracle would have been eating
+  it silently on every green run since.
+- **Why mechanically matters.** The natural move is to eyeball the first few
+  hunks, and the first few hunks are the common case by construction — the rare
+  shape is the one that will not be in them. Parsing the descriptor's fields and
+  asserting the diff key-set is cheap; it is also the only version of this check
+  that scales past the point where reading stops being honest.
+- **The generalization:** *any time a harness suppresses a known difference, the
+  suppression's width is itself untested.* Ledgered fingerprints are safe here —
+  they name exact inputs, so they cannot over-match. A patched oracle is not:
+  it is a behavioral change with an unbounded blast radius, and it deserves a
+  measurement, not an argument. Budget it as part of adopting the corrected
+  oracle, in the same change, the way a fix gets its regression test.
+- **Section amended:** ports/cjson/API-COVERAGE.md (the `opts` sweep table now
+  carries a PRISTINE-oracle control row alongside the corrected-oracle rows);
+  PLAYBOOK.md; skills/porting-kit-diff-fuzz/SKILL.md.

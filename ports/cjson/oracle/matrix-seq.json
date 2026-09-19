@@ -1,0 +1,530 @@
+[
+ {
+  "name": "seq-detach-first-then-append",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEwLDIwLDMwXQpkYQkJMAphcHAJCTk5Cg==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-detach-middle-then-append",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEwLDIwLDMwXQpkYQkJMQphcHAJCTk5Cg==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-detach-last-then-append",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEwLDIwLDMwXQpkYQkJMgphcHAJCTk5Cg==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-detach-only-then-append",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzQyXQpkYQkJMAphcHAJCTk5Cg==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-detach-all-then-append",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEsMl0KZGEJCTAKZGEJCTAKYXBwCQk3Cg==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-detach-array-empty",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "W10KZGEJCTAK",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-detach-index-negative",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEsMl0KZGEJCS0xCg==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-detach-index-out-of-range",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEsMl0KZGEJCTk5Cg==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-detach-index-junk",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEsMl0KZGEJCXp6Cg==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-detach-index-overflow-high",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEsMl0KZGEJCTIxNDc0ODM2NDgK",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-detach-index-overflow-low",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEsMl0KZGEJCS0yMTQ3NDgzNjQ5Cg==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-detach-index-leading-space",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEsMiwzXQpkYQkJICAyCg==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-detach-index-plus",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEsMiwzXQpkYQkJKzEK",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-detach-object-by-index",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyJhIjoxLCJiIjoyfQpkYQkJMAo=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-detach-object-by-index-then-append",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyJhIjoxLCJiIjoyfQpkYQkJMAphcHAJCTUK",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-detach-scalar-root",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "NwpkYQkJMAp4YQkJMAo=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-detach-object-ci-hit",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyJLIjoxfQpkbwkJawo=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-detach-object-cs-miss",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyJLIjoxfQpkb3MJCWsK",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-detach-object-cs-hit",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyJrIjoxLCJLIjoyfQpkb3MJCWsKZG9zCQlrCg==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-detach-dupkey-twice",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyJrIjoxLCJrIjoyfQpkbwkJawpkbwkJawpkbwkJawo=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-detach-object-on-array",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEsMl0KZG8JCWsKZG9zCQlrCg==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-detach-empty-key",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyIiOjEsImEiOjJ9CmRvcwkJCmRvCQkK",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-delete-array-past-empty",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEsMiwzXQp4YQkJMAp4YQkJMAp4YQkJMAp4YQkJMAo=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-delete-object-ci",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyJLIjoxLCJiIjoyfQp4bwkJawo=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-delete-object-cs",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyJLIjoxLCJrIjoyfQp4b3MJCWsK",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-delete-missing-key",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyJhIjoxfQp4bwkJenoKeG9zCQl6ego=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-delete-then-detach-same",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEsMiwzXQp4YQkJMQpkYQkJMQo=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-nested-object-detach",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyJvIjp7IngiOjEsInkiOjJ9fQpkb3MJbwl4Cg==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-nested-array-detach-then-append",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyJhcnIiOlsxLDIsM119CmRhCWFycgkxCmFwcAlhcnIJOQo=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-selector-missing",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyJhIjoxfQpkYQl6egkwCmRvCXp6CWEK",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-selector-on-array-root",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEsMl0KZGEJYQkwCg==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-selector-is-case-sensitive",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyJBIjpbMSwyXX0KZGEJYQkwCmRhCUEJMAo=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-app-scalar-refused",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyJhIjo3fQphcHAJYQk1Cg==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-app-object-refused",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyJhIjoxfQphcHAJCTUK",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-app-array-ok",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzFdCmFwcAkJNQphcHAJCS0zCg==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-no-ops",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEwLDIwLDMwXQo=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-unknown-opcode",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEwLDIwLDMwXQpub3BlCQkwCmRhCQkwCg==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-opcode-case",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEwLDIwLDMwXQpEQQkJMAo=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-op-cap",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEsMiwzLDQsNSw2LDcsOCw5LDBdCmRhCQkwCmRhCQkwCmRhCQkwCmRhCQkwCmRhCQkwCmRhCQkwCmRhCQkwCmRhCQkwCmRhCQkwCmRhCQkwCg==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-missing-fields",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEsMiwzXQpkYQpkYQkKZGEJCQo=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-blank-op-lines",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEsMiwzXQoKCmRhCQkwCg==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-trailing-no-newline",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEsMiwzXQpkYQkJMA==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-nul-truncates-ops",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEsMiwzXQpkYQkJMAoAeGEJCTAKeGEJCTAK",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-high-bytes-in-key",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyLDvyI6MX0KZG9zCQnDvwo=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-lone-high-byte-key",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyJhIjoxfQpkb3MJCYD/Cg==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-doc-unparseable",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "e29vcHMKZGEJCTAK",
+  "expect_rc": 1,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-doc-empty",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "CmRhCQkwCg==",
+  "expect_rc": 1,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-interleaved",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyJhIjoxLCJiIjoyLCJhcnIiOlsxMCwyMCwzMF0sIm8iOnsieCI6MX19CmRhCQkwCmFwcAlhcnIJOTkKeG8JCWIKZG9zCW8JeApkYQlhcnIJMAphcHAJYXJyCTEK",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ }
+]

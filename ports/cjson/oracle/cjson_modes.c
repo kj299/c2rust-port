@@ -13,6 +13,7 @@
  * all (LESSONS #26): a gate judges only the surface the driver exposes, and an
  * accessor no mode calls is ungated whatever the matrix says.
  */
+#include <limits.h>
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -425,6 +426,308 @@ char *cjson_modes_construct(long count, const char *name, const char *raw,
     return b.p;
 }
 
+/* ---- `set` mode: the two in-place setters -------------------------------- */
+
+/* One item, as the struct fields a C caller reads straight off the pointer plus
+ * its printed form. `valuedouble` is here because it is the field
+ * cJSON_SetNumberHelper writes, and it writes it WITHOUT a type check — so a
+ * string node can end up carrying a number, which no accessor would ever show.
+ * The descriptor shows it, which is the whole point: an intentional divergence
+ * has to be observable or the ledger entry is asserting something unmeasured
+ * (LESSONS #31). */
+static void sb_item(struct sbuf *b, const cJSON *it) {
+    char *printed;
+    if (it == NULL) {
+        sb_str(b, "-");
+        return;
+    }
+    sb_str(b, "t");
+    sb_int(b, it->type);
+    sb_str(b, ",i");
+    sb_int(b, it->valueint);
+    sb_str(b, ",d");
+    sb_double(b, it->valuedouble);
+    sb_str(b, ",s");
+    sb_bytes(b, it->valuestring);
+    sb_str(b, ",p");
+    printed = cJSON_PrintUnformatted(it);
+    sb_str(b, printed ? printed : "-");
+    cJSON_free(printed);
+}
+
+char *cjson_modes_set(double num, const char *key, const char *newstr,
+                      const char *json, size_t json_len) {
+    /* A NULL root is NOT an error here (unlike `access`/`query`): the setters
+     * are the surface under test and they must still run, so an unparseable
+     * document just means the document-target calls take their NULL path. */
+    cJSON *root = cJSON_ParseWithLength(json, json_len);
+    cJSON *target = (root != NULL)
+                        ? cJSON_GetObjectItemCaseSensitive(root, key)
+                        : NULL;
+
+    /* Called with `target` even when it is NULL: cJSON_SetValuestring's FIRST
+     * guard is `object == NULL`, so passing NULL is how that branch is
+     * exercised rather than assumed. cJSON_SetNumberHelper below has no such
+     * guard, which is why it is the one call that must be conditional. */
+    const char *sv = cJSON_SetValuestring(target, newstr);
+    int have_sn = (target != NULL);
+    double sn = have_sn ? cJSON_SetNumberHelper(target, num) : 0.0;
+
+    /* A fresh string node whose OLD value is the key: with key and newstr both
+     * caller-controlled, one input reaches either side of
+     * `strlen(new) <= strlen(old)` (cJSON.c:416). The two paths are not
+     * distinguishable from outside — the shorter one reuses the buffer and the
+     * longer one allocates, but both leave `valuestring` equal to the new C
+     * string and both return it — so this crosses the branch without being
+     * able to tell which side it took. Said out loud because assuming a branch
+     * is covered because an input reaches it is how the C's own defects
+     * survive. */
+    cJSON *s2 = cJSON_CreateString(key);
+    const char *sv2 = cJSON_SetValuestring(s2, newstr);
+    /* the documented NULL-replacement error path (cJSON.c:402 comment) */
+    const char *svnull = cJSON_SetValuestring(s2, NULL);
+
+    /* A NUMBER node: first the "not a cJSON_String" guard, then the setter that
+     * owns this node's type. Same node for both so the descriptor shows the
+     * number setter's effect on a node the string setter just refused. */
+    cJSON *n2 = cJSON_CreateNumber(0);
+    const char *svnum = cJSON_SetValuestring(n2, newstr);
+    double sn2 = (n2 != NULL) ? cJSON_SetNumberHelper(n2, num) : 0.0;
+
+    char *proot = (root != NULL) ? cJSON_PrintUnformatted(root) : NULL;
+
+    size_t cap = 4096 + (strlen(key) + strlen(newstr) + json_len
+                         + (proot ? strlen(proot) : 0)) * 8;
+    struct sbuf b;
+    b.p = (char *)malloc(cap);
+    b.cap = cap;
+    b.len = 0;
+    b.ok = (b.p != NULL);
+    if (b.p != NULL) b.p[0] = '\0';
+
+    sb_str(&b, "tgt=");
+    sb_item(&b, target);
+    sb_str(&b, ";sv=");
+    sb_bytes(&b, sv);
+    sb_str(&b, ";sn=");
+    if (have_sn) sb_double(&b, sn); else sb_str(&b, "-");
+    sb_str(&b, ";s2=");
+    sb_item(&b, s2);
+    sb_str(&b, ";sv2=");
+    sb_bytes(&b, sv2);
+    sb_str(&b, ";svnull=");
+    sb_bytes(&b, svnull);
+    sb_str(&b, ";svnum=");
+    sb_bytes(&b, svnum);
+    sb_str(&b, ";n2=");
+    sb_item(&b, n2);
+    sb_str(&b, ";sn2=");
+    sb_double(&b, sn2);
+    sb_str(&b, ";doc=");
+    sb_str(&b, proot ? proot : "-");
+
+    cJSON_free(proot);
+    cJSON_Delete(n2);
+    cJSON_Delete(s2);
+    cJSON_Delete(root);
+
+    if (!b.ok) {
+        free(b.p);
+        return NULL;
+    }
+    return b.p;
+}
+
+/* ---- `seq` mode: the removal + placement surfaces, driven as a program ---- */
+
+/* The driver's index rule, identical to `access`'s: strtol base 10 with the
+ * result clamped into int, so junk reads as 0 and an overflowing literal
+ * saturates instead of wrapping. Both sides must agree on this before
+ * cJSON_DetachItemFromArray ever sees an int. */
+static int seq_index(const char *s) {
+    long v = strtol(s, NULL, 10);
+    if (v > INT_MAX) v = INT_MAX;
+    if (v < INT_MIN) v = INT_MIN;
+    return (int)v;
+}
+
+/* One step's record. `r` is the op's own answer (`-` where the C returns void),
+ * `got`/`key` the detached node and the key it still carries, `sz` the target's
+ * child count AFTER the op, and `doc` the whole document. `doc` is what makes a
+ * later-surfacing corruption visible (LESSONS #39 -- after EVERY step, because
+ * a bug that corrupts state at step 2 and is masked at step 5 is invisible to a
+ * final-state comparison); `sz` is what makes it visible even when
+ * the printer hides it (the printer ignores a child hung off a scalar, but
+ * cJSON_GetArraySize does not). */
+static void sb_step(struct sbuf *b, const char *name, int r,
+                    cJSON *got, cJSON *target, cJSON *root) {
+    char *pgot = (got != NULL) ? cJSON_PrintUnformatted(got) : NULL;
+    char *pdoc = (root != NULL) ? cJSON_PrintUnformatted(root) : NULL;
+    sb_str(b, "|");
+    sb_str(b, name);
+    sb_str(b, ":r=");
+    if (r < 0) sb_str(b, "-"); else sb_int(b, r);
+    sb_str(b, ",got=");
+    sb_str(b, pgot ? pgot : "-");
+    sb_str(b, ",key=");
+    sb_bytes(b, (got != NULL) ? got->string : NULL);
+    sb_str(b, ",sz=");
+    sb_int(b, (target != NULL) ? cJSON_GetArraySize(target) : -1);
+    sb_str(b, ",doc=");
+    sb_str(b, pdoc ? pdoc : "-");
+    cJSON_free(pgot);
+    cJSON_free(pdoc);
+}
+
+char *cjson_modes_seq(const char *json, size_t json_len,
+                      const char *ops, size_t ops_len) {
+    cJSON *root = cJSON_ParseWithLength(json, json_len);
+    if (root == NULL) return NULL;
+
+    /* A private, NUL-terminated copy: the fields are split in place with NULs so
+     * every one reaches cJSON as a C string, and the caller's buffer is left
+     * alone. */
+    char *buf = (char *)malloc(ops_len + 1);
+    if (buf == NULL) { cJSON_Delete(root); return NULL; }
+    memcpy(buf, ops, ops_len);
+    buf[ops_len] = '\0';
+
+    char *proot = cJSON_PrintUnformatted(root);
+    size_t p = (proot != NULL) ? strlen(proot) : 0;
+    /* Every step prints at most the document, the detached node and its key.
+     * Only `app` and `ins` GROW the document, by one number each -- at most 11
+     * digits per step, so CJSON_SEQ_MAX_OPS steps add far less than the 256
+     * bytes of slack carried per step below. */
+    size_t cap = 4096 + (size_t)(CJSON_SEQ_MAX_OPS + 1) * (3 * (p + 256) + 192);
+    struct sbuf b;
+    b.p = (char *)malloc(cap);
+    b.cap = cap;
+    b.len = 0;
+    b.ok = (b.p != NULL);
+    if (b.p != NULL) b.p[0] = '\0';
+
+    sb_str(&b, "init=");
+    sb_str(&b, proot ? proot : "-");
+    cJSON_free(proot);
+
+    char *line = buf;
+    for (int n = 0; n < CJSON_SEQ_MAX_OPS && line != NULL && *line != '\0'; n++) {
+        char *nl = strchr(line, '\n');
+        if (nl != NULL) *nl = '\0';
+        char *next = (nl != NULL) ? nl + 1 : NULL;
+
+        /* <opcode>\t<selector>\t<arg>; a missing field reads as empty */
+        char *sel = strchr(line, '\t');
+        char *arg = NULL;
+        if (sel != NULL) {
+            *sel++ = '\0';
+            arg = strchr(sel, '\t');
+            if (arg != NULL) *arg++ = '\0';
+        }
+        if (sel == NULL) sel = (char *)"";
+        if (arg == NULL) arg = (char *)"";
+
+        /* Empty selector = the root; otherwise a case-sensitive key of it. One
+         * level, on purpose -- see cjson_modes.h. */
+        cJSON *target = (*sel == '\0')
+                            ? root
+                            : cJSON_GetObjectItemCaseSensitive(root, sel);
+
+        cJSON *got = NULL;
+        int r = -1;
+        const char *name = "?";
+        if (strcmp(line, "da") == 0) {
+            name = "da";
+            got = cJSON_DetachItemFromArray(target, seq_index(arg));
+            r = (got != NULL);
+        } else if (strcmp(line, "xa") == 0) {
+            name = "xa";
+            cJSON_DeleteItemFromArray(target, seq_index(arg));
+        } else if (strcmp(line, "do") == 0) {
+            name = "do";
+            got = cJSON_DetachItemFromObject(target, arg);
+            r = (got != NULL);
+        } else if (strcmp(line, "dos") == 0) {
+            name = "dos";
+            got = cJSON_DetachItemFromObjectCaseSensitive(target, arg);
+            r = (got != NULL);
+        } else if (strcmp(line, "xo") == 0) {
+            name = "xo";
+            cJSON_DeleteItemFromObject(target, arg);
+        } else if (strcmp(line, "xos") == 0) {
+            name = "xos";
+            cJSON_DeleteItemFromObjectCaseSensitive(target, arg);
+        } else if (strcmp(line, "app") == 0) {
+            name = "app";
+            /* ARRAY targets only -- the C would accept any parent, and the two
+             * malformed trees that produces (a child hung off a scalar, an
+             * object member with a NULL key) are the `scalar-parent-child`
+             * class this module deliberately does not own. */
+            if (cJSON_IsArray(target)) {
+                r = cJSON_AddItemToArray(target, cJSON_CreateNumber(seq_index(arg))) ? 1 : 0;
+            } else {
+                r = 0;
+            }
+        } else if (strcmp(line, "ins") == 0) {
+            name = "ins";
+            /* ARRAY only, same reason as `app`. Note what this op does NOT
+             * fail at: an index past the end is not an error -- the C falls
+             * through to add_item_to_array and appends (probed, see
+             * spikes/place_relink.c), so `ins 99` on a 2-element array
+             * succeeds and grows it to 3. */
+            r = 0;
+            if (cJSON_IsArray(target)) {
+                cJSON *item = cJSON_CreateNumber(seq_index(arg));
+                r = cJSON_InsertItemInArray(target, seq_index(arg), item) ? 1 : 0;
+                /* Ownership transfers only on SUCCESS; on every failure path
+                 * the caller still owns the node. Omitting this leaks, which is
+                 * how it was found -- LeakSanitizer named the `which < 0` case
+                 * in this mode's own probe program. The gate that would now
+                 * catch the same slip HERE, rather than in a throwaway probe,
+                 * is check.sh step 4a (LESSONS #40): this file is the C the
+                 * port wrote, and a leak in it changes no stdout. */
+                if (!r) cJSON_Delete(item);
+            }
+        } else if (strcmp(line, "rep") == 0) {
+            name = "rep";
+            r = 0;
+            if (cJSON_IsArray(target)) {
+                cJSON *item = cJSON_CreateNumber(seq_index(arg));
+                r = cJSON_ReplaceItemInArray(target, seq_index(arg), item) ? 1 : 0;
+                if (!r) cJSON_Delete(item);
+            }
+        } else if (strcmp(line, "ro") == 0 || strcmp(line, "ros") == 0) {
+            /* NOT restricted to a container: every way these fail -- missing
+             * key, non-object parent, empty container -- is representable on
+             * both sides, so the guards themselves are worth comparing.
+             *
+             * The value is the key's length purely so successive replaces are
+             * distinguishable in the descriptor; the interesting part is the
+             * position and the KEY, which the C rewrites to the lookup string
+             * (a case-insensitive replace of `a` in {"A":1} leaves {"a":...}). */
+            int cs = (line[2] == 's');
+            name = cs ? "ros" : "ro";
+            cJSON *item = cJSON_CreateNumber((double)strlen(arg));
+            r = (cs ? cJSON_ReplaceItemInObjectCaseSensitive(target, arg, item)
+                    : cJSON_ReplaceItemInObject(target, arg, item)) ? 1 : 0;
+            if (!r) cJSON_Delete(item);
+        }
+
+        sb_step(&b, name, r, got, target, root);
+        /* the detach entry points transfer OWNERSHIP to the caller */
+        cJSON_Delete(got);
+        line = next;
+    }
+
+    free(buf);
+    cJSON_Delete(root);
+    if (!b.ok) {
+        free(b.p);
+        return NULL;
+    }
+    return b.p;
+}
+
 char *cjson_modes_query(const char *key, const char *json, size_t json_len) {
     cJSON *item = cJSON_ParseWithLength(json, json_len);
     if (item == NULL) return NULL;
@@ -452,4 +755,139 @@ char *cjson_modes_query(const char *key, const char *json, size_t json_len) {
     cJSON_free(printed);
     cJSON_Delete(item);
     return out;
+}
+
+/* ---- `opts` mode: the four options entry points ---- */
+
+/* Raw bytes as `<n>:<hex>`. The preallocated buffer is memset to 0 before the
+ * call and the C writes a NUL-terminated PREFIX into it on failure, so interior
+ * NULs are the whole point and sb_bytes' C-string form would hide exactly the
+ * divergence this field exists to measure. */
+static void sb_hex(struct sbuf *b, const unsigned char *p, size_t n) {
+    static const char HEX[] = "0123456789abcdef";
+    size_t i;
+    if (p == NULL) {
+        sb_str(b, "-");
+        return;
+    }
+    sb_int(b, (long)n);
+    sb_str(b, ":");
+    for (i = 0; i < n; i++) {
+        char t[2];
+        t[0] = HEX[(p[i] >> 4) & 0xF];
+        t[1] = HEX[p[i] & 0xF];
+        sb_add(b, t, 2);
+    }
+}
+
+/* cJSON_PrintPreallocated over a buffer allocated to EXACTLY `len`, zeroed
+ * first. `out` (when non-NULL) receives the buffer's bytes afterwards. A
+ * negative `len` never reaches cJSON: the port cannot spell it, so both sides
+ * answer false here instead (see the header). */
+static int ppa_once(cJSON *doc, int len, int fmt, unsigned char *out) {
+    char *buf;
+    int r;
+    if (doc == NULL || len < 0) return 0;
+    buf = (char *)malloc((size_t)len + 1); /* +1: malloc(0) must not be NULL */
+    if (buf == NULL) return 0;
+    memset(buf, 0, (size_t)len + 1);
+    r = cJSON_PrintPreallocated(doc, buf, len, fmt) ? 1 : 0;
+    if (out != NULL && len > 0) memcpy(out, buf, (size_t)len);
+    free(buf);
+    return r;
+}
+
+char *cjson_modes_opts(int flags, int prebuffer, int prealloc,
+                       const char *json, size_t json_len) {
+    int rnt = (flags & 1) ? 1 : 0;
+    int fmt = (flags & 2) ? 1 : 0;
+    const char *end_l = NULL;
+    const char *end_o = NULL;
+    cJSON *by_len;
+    cJSON *by_str;
+    cJSON *doc;
+    char *pwl = NULL;
+    char *pwo = NULL;
+    char *pb = NULL;
+    char *ref = NULL;
+    unsigned char *ppabuf = NULL;
+    int ppa = 0;
+    long ppamin = -1;
+    size_t cap;
+    struct sbuf b;
+
+    if (prebuffer > CJSON_OPTS_MAX_BUF) prebuffer = CJSON_OPTS_MAX_BUF;
+    if (prealloc > CJSON_OPTS_MAX_BUF) prealloc = CJSON_OPTS_MAX_BUF;
+
+    /* The length form first: it sees the exact byte count, so an embedded NUL
+     * or a missing terminator is visible to it and not to the string form. */
+    by_len = cJSON_ParseWithLengthOpts(json, json_len, &end_l, rnt);
+    by_str = cJSON_ParseWithOpts(json, &end_o, rnt);
+    doc = (by_len != NULL) ? by_len : by_str;
+
+    if (by_len != NULL) pwl = cJSON_PrintUnformatted(by_len);
+    if (by_str != NULL) pwo = cJSON_PrintUnformatted(by_str);
+    if (doc != NULL) pb = cJSON_PrintBuffered(doc, prebuffer, fmt);
+    if (doc != NULL) ref = fmt ? cJSON_Print(doc) : cJSON_PrintUnformatted(doc);
+
+    /* The predicate, not a sample of it: scan for the smallest length that
+     * succeeds. Bounded by the reference print's length, which is what the
+     * accounting is a function of. */
+    if (ref != NULL) {
+        int len;
+        int limit = (int)strlen(ref) + 4;
+        if (limit > CJSON_OPTS_MAX_BUF) limit = CJSON_OPTS_MAX_BUF;
+        for (len = 0; len <= limit; len++) {
+            if (ppa_once(doc, len, fmt, NULL)) {
+                ppamin = len;
+                break;
+            }
+        }
+    }
+
+    if (prealloc > 0) {
+        ppabuf = (unsigned char *)malloc((size_t)prealloc);
+        if (ppabuf != NULL) memset(ppabuf, 0, (size_t)prealloc);
+    }
+    ppa = ppa_once(doc, prealloc, fmt, ppabuf);
+
+    cap = 4096 + json_len * 4
+        + (pwl ? strlen(pwl) : 0) * 2 + (pwo ? strlen(pwo) : 0) * 2
+        + (pb ? strlen(pb) : 0) * 2 + (size_t)(prealloc > 0 ? prealloc : 0) * 2;
+    b.p = (char *)malloc(cap);
+    b.cap = cap;
+    b.len = 0;
+    b.ok = (b.p != NULL);
+    if (b.p != NULL) b.p[0] = '\0';
+
+    sb_str(&b, "pwl=");
+    sb_bytes(&b, pwl);
+    sb_str(&b, ";pwlend=");
+    sb_int(&b, end_l ? (long)(end_l - json) : -1);
+    sb_str(&b, ";pwo=");
+    sb_bytes(&b, pwo);
+    sb_str(&b, ";pwoend=");
+    sb_int(&b, end_o ? (long)(end_o - json) : -1);
+    sb_str(&b, ";pb=");
+    sb_bytes(&b, pb);
+    sb_str(&b, ";ppamin=");
+    sb_int(&b, ppamin);
+    sb_str(&b, ";ppa=");
+    sb_int(&b, ppa);
+    sb_str(&b, ";ppabuf=");
+    sb_hex(&b, ppabuf, (size_t)(prealloc > 0 ? prealloc : 0));
+
+    free(ppabuf);
+    cJSON_free(ref);
+    cJSON_free(pb);
+    cJSON_free(pwo);
+    cJSON_free(pwl);
+    cJSON_Delete(by_str);
+    cJSON_Delete(by_len);
+
+    if (!b.ok) {
+        free(b.p);
+        return NULL;
+    }
+    return b.p;
 }

@@ -346,6 +346,498 @@ fn construct(input: &[u8]) -> (i32, Vec<u8>) {
     (0, out)
 }
 
+/// The driver's `<bits>` field: up to 16 hex digits, stopping at the first
+/// character that is not one (a NUL included, since the C reads the field as a
+/// C string). Missing digits read as 0.
+///
+/// The double arrives as raw IEEE-754 bits rather than decimal text for the same
+/// reason [`encode_double`] emits bits: decimal would put `strtod` against
+/// Rust's float parser on the compared contract, and it could not spell the
+/// values this mode exists for — a NaN payload, a signalling NaN, `-0.0`. The
+/// rule is hand-rolled on both sides so it is two lines shared, not two
+/// libraries' notions of prefixes, whitespace and overflow.
+fn parse_bits(field: &[u8]) -> u64 {
+    let mut v: u64 = 0;
+    for &b in field.iter().take(16) {
+        let Some(d) = char::from(b).to_digit(16) else {
+            break;
+        };
+        // `wrapping_shl`: the workspace denies arithmetic_side_effects, and 16
+        // digits is exactly 64 bits, so nothing is discarded anyway.
+        v = v.wrapping_shl(4) | u64::from(d);
+    }
+    v
+}
+
+/// One item as the C's `sb_item` spells it: the struct fields a C caller reads
+/// straight off the pointer, then the printed form. `-` for a missing item.
+///
+/// `valuedouble` is in here deliberately. It is the field `cJSON_SetNumberHelper`
+/// writes WITHOUT a type check, so a `cJSON_String` node can end up carrying a
+/// number — a state the port cannot represent and refuses to create. That is an
+/// intentional divergence, and a divergence has to be *visible* in the compared
+/// bytes or its ledger entry is asserting something nothing measures
+/// (LESSONS #31).
+fn push_item(out: &mut Vec<u8>, item: Option<&Value>) {
+    let Some(it) = item else {
+        out.push(b'-');
+        return;
+    };
+    out.extend_from_slice(
+        format!(
+            "t{},i{},d{:016x},s",
+            dom::type_code(it),
+            dom::value_int(it),
+            dom::value_double(it).to_bits()
+        )
+        .as_bytes(),
+    );
+    push_bytes(out, dom::value_string(it));
+    out.extend_from_slice(b",p");
+    push_printed(out, Some(it));
+}
+
+/// `set`: stdin is `<bits>\t<key>\t<newstr>\n<json>` — both in-place setters
+/// (`cJSON_SetValuestring`, `cJSON_SetNumberHelper`) in one shot.
+///
+/// Unlike `access`/`query`, an unparseable document is NOT an error: the setters
+/// are the surface under test, so they still run and the descriptor reports
+/// `doc=-`. That also keeps the fuzzer productive — a mode that exits 1 on most
+/// mutations compares its error path over and over and its subject almost never.
+///
+/// This mode is what turned three of `MUTATION-API-SPIKE.md`'s hazards from
+/// `read` rows into executed ones (LESSONS #38), and the first thing it executed
+/// was a defect two readings of the same function had missed:
+/// `cJSON_SetNumberHelper` performs no type check. Which is why the descriptor
+/// carries the target's raw struct fields rather than only what an accessor
+/// would report — a mode that only shows the tidy view finds only tidy bugs.
+fn set_mode(input: &[u8]) -> (i32, Vec<u8>) {
+    let Some(nl) = input.iter().position(|&b| b == b'\n') else {
+        return (RC_USAGE, Vec::new());
+    };
+    let (head, rest) = input.split_at(nl);
+    let json = rest.get(1..).unwrap_or(&[]);
+    let Some(t1) = head.iter().position(|&b| b == b'\t') else {
+        return (RC_USAGE, Vec::new());
+    };
+    let (bits_field, after) = head.split_at(t1);
+    let after = after.get(1..).unwrap_or(&[]);
+    let Some(t2) = after.iter().position(|&b| b == b'\t') else {
+        return (RC_USAGE, Vec::new());
+    };
+    let (key_field, new_field) = after.split_at(t2);
+    let new_field = new_field.get(1..).unwrap_or(&[]);
+
+    let num = f64::from_bits(parse_bits(bits_field));
+    // Both fields reach the C as pointers into a NUL-split buffer, so both are
+    // C strings before cJSON ever sees them.
+    let key = cstr_prefix(key_field);
+    let newstr = cstr_prefix(new_field);
+
+    let mut root = crate::parse_with_length(json).ok().map(|(v, _)| v);
+
+    // The document target, mutated then described. `sv`/`sn` are copied out of
+    // the borrow so the document can be printed afterwards; in the C the same
+    // two values are plain pointers into a tree nothing stops you mutating
+    // again, which is the difference this port exists to make.
+    let mut tgt = Vec::new();
+    let mut sv: Option<Vec<u8>> = None;
+    let mut sn: Option<f64> = None;
+    match root
+        .as_mut()
+        .and_then(|r| dom::get_object_item_mut(r, key, true))
+    {
+        Some(t) => {
+            sv = dom::set_valuestring(t, Some(newstr)).map(<[u8]>::to_vec);
+            // Conditional on the target existing, because the C's
+            // cJSON_SetNumberHelper has no NULL check at all — calling it with
+            // one is a segfault in the oracle, and a segfault is not an answer
+            // to compare against.
+            sn = Some(dom::set_number(t, num));
+            push_item(&mut tgt, Some(&*t));
+        }
+        // cJSON_SetValuestring's own `object == NULL` guard answers NULL here;
+        // the port's `None` target reaches the same result by having nothing to
+        // call it on.
+        None => push_item(&mut tgt, None),
+    }
+
+    // A fresh string node whose OLD text is the key, so one input can land on
+    // either side of the C's `strlen(new) <= strlen(old)` branch. Both sides of
+    // it produce the same observable result — see `dom::set_valuestring`.
+    let mut s2 = Value::String(key.to_vec());
+    let sv2 = dom::set_valuestring(&mut s2, Some(newstr)).map(<[u8]>::to_vec);
+    let svnull = dom::set_valuestring(&mut s2, None).map(<[u8]>::to_vec);
+
+    // A NUMBER node: first the "not a string" guard, then the setter that owns
+    // this node's type.
+    let mut n2 = dom::number(0.0);
+    let svnum = dom::set_valuestring(&mut n2, Some(newstr)).map(<[u8]>::to_vec);
+    let sn2 = dom::set_number(&mut n2, num);
+
+    let mut out = b"tgt=".to_vec();
+    out.extend_from_slice(&tgt);
+    out.extend_from_slice(b";sv=");
+    push_bytes(&mut out, sv.as_deref());
+    out.extend_from_slice(b";sn=");
+    match sn {
+        Some(d) => out.extend_from_slice(format!("{:016x}", d.to_bits()).as_bytes()),
+        None => out.push(b'-'),
+    }
+    out.extend_from_slice(b";s2=");
+    push_item(&mut out, Some(&s2));
+    out.extend_from_slice(b";sv2=");
+    push_bytes(&mut out, sv2.as_deref());
+    out.extend_from_slice(b";svnull=");
+    push_bytes(&mut out, svnull.as_deref());
+    out.extend_from_slice(b";svnum=");
+    push_bytes(&mut out, svnum.as_deref());
+    out.extend_from_slice(b";n2=");
+    push_item(&mut out, Some(&n2));
+    out.extend_from_slice(format!(";sn2={:016x};doc=", sn2.to_bits()).as_bytes());
+    match root.as_ref().and_then(|r| crate::print_value(r, false)) {
+        Some(p) => out.extend_from_slice(&p),
+        None => out.push(b'-'),
+    }
+    (0, out)
+}
+
+/// Op cap for `seq`, matching `CJSON_SEQ_MAX_OPS` in `cjson_modes.h`. It bounds
+/// the descriptor whatever the fuzzer sends; the C's list surgery is per
+/// operation, so a longer program buys no new code path.
+const SEQ_MAX_OPS: usize = 8;
+
+/// `seq`: stdin is `<json>\n<op>\t<selector>\t<arg>\n…` — the removal surface
+/// (`cJSON_DetachItemFrom{Array,Object,ObjectCaseSensitive}` and the three
+/// `cJSON_DeleteItemFrom*`) driven as a PROGRAM.
+///
+/// Every other mode is single-shot, and a single-shot differential cannot see
+/// this module's whole reason for existing. cJSON's detach rewires a
+/// doubly-linked child list whose `child->prev` doubles as the last-item cache;
+/// corrupt it and both sides still print the same document, with the divergence
+/// appearing only when some LATER operation consumes the cache
+/// (MUTATION-API-SPIKE.md H1b). So the descriptor is emitted after EVERY step,
+/// and `app` exists to be that later operation — LESSONS #39: ask what state the
+/// C keeps that no output depends on, then put the op that consumes it in the
+/// mode, or the gate is green over a field it never read.
+///
+/// The op grammar is index/key based, which is what makes the H1 state
+/// unreachable rather than merely untested: there is no way to name an item
+/// belonging to one parent while naming a different parent, so the sequence
+/// that would trigger the C's missing membership check cannot be spelled.
+fn seq(input: &[u8]) -> (i32, Vec<u8>) {
+    let (json, ops) = match input.iter().position(|&b| b == b'\n') {
+        Some(i) => (&input[..i], input.get(i.saturating_add(1)..).unwrap_or(&[])),
+        None => (input, &[][..]),
+    };
+    let Ok((mut root, _)) = crate::parse_with_length(json) else {
+        return (RC_PARSE, Vec::new());
+    };
+
+    let mut out = b"init=".to_vec();
+    push_printed(&mut out, Some(&root));
+
+    // The C copies the op region into a NUL-terminated buffer and walks it with
+    // `strchr`, so everything past an interior NUL is invisible to it
+    // (LESSONS #29).
+    let mut rest = cstr_prefix(ops);
+    for _ in 0..SEQ_MAX_OPS {
+        if rest.is_empty() {
+            break;
+        }
+        let (line, next) = match rest.iter().position(|&b| b == b'\n') {
+            Some(i) => (&rest[..i], rest.get(i.saturating_add(1)..).unwrap_or(&[])),
+            None => (rest, &[][..]),
+        };
+        rest = next;
+
+        // `<opcode>\t<selector>\t<arg>`; a missing field reads as empty, exactly
+        // as the C's two `strchr` calls leave it.
+        let (opcode, after) = split_tab(line);
+        let (sel, arg) = split_tab(after);
+
+        // `-1` renders as `-`: the three Delete entry points return void, so
+        // there is no answer to compare, and pretending otherwise would invent
+        // a result the C never produced.
+        let (name, mut r): (&str, i32) = match opcode {
+            b"da" | b"do" | b"dos" | b"app" | b"ins" | b"rep" | b"ro" | b"ros" => {
+                (core_name(opcode), 0)
+            }
+            b"xa" | b"xo" | b"xos" => (core_name(opcode), -1),
+            _ => ("?", -1),
+        };
+        let mut got: Option<dom::Detached> = None;
+        let mut sz: i64 = -1;
+
+        {
+            // Empty selector = the root, else a case-sensitive key of it. One
+            // level down, deliberately — see `cjson_modes.h`.
+            let target = if sel.is_empty() {
+                Some(&mut root)
+            } else {
+                dom::get_object_item_mut(&mut root, sel, true)
+            };
+            if let Some(t) = target {
+                let index = parse_index(arg);
+                // A negative index is the C's own guard in
+                // cJSON_DetachItemFromArray, kept here because this is the layer
+                // that still has a signed index to reject.
+                let at = if index < 0 {
+                    None
+                } else {
+                    Some(index.unsigned_abs() as usize)
+                };
+                match opcode {
+                    b"da" => got = at.and_then(|i| dom::detach_from_array(t, i)),
+                    b"xa" => {
+                        if let Some(i) = at {
+                            dom::delete_from_array(t, i);
+                        }
+                    }
+                    b"do" => got = dom::detach_from_object(t, arg, false),
+                    b"dos" => got = dom::detach_from_object(t, arg, true),
+                    b"xo" => dom::delete_from_object(t, arg, false),
+                    b"xos" => dom::delete_from_object(t, arg, true),
+                    b"app" => {
+                        // ARRAY targets only. The C accepts any parent and
+                        // produces a tree the port cannot represent — a child
+                        // hung off a scalar, or an object member with a NULL
+                        // key. That is `scalar-parent-child`, which belongs to
+                        // cJSON_AddItemTo* and is its own increment; refusing it
+                        // here is a scope decision, stated rather than silent.
+                        if matches!(t, Value::Array(_)) {
+                            r = i32::from(dom::add_item_to_array(t, dom::number(f64::from(index))));
+                        }
+                    }
+                    // `ins`/`rep` are array-only for exactly the same reason as
+                    // `app`. Their negative-index guard lives here too: the C
+                    // rejects `which < 0` before the lookup, and `at` is None
+                    // precisely then.
+                    b"ins" => {
+                        if let (Value::Array(_), Some(i)) = (&*t, at) {
+                            r = i32::from(dom::insert_in_array(
+                                t,
+                                i,
+                                dom::number(f64::from(index)),
+                            ));
+                        }
+                    }
+                    b"rep" => {
+                        if let (Value::Array(_), Some(i)) = (&*t, at) {
+                            r = i32::from(dom::replace_in_array(
+                                t,
+                                i,
+                                dom::number(f64::from(index)),
+                            ));
+                        }
+                    }
+                    // NOT restricted to a container: every way these fail is
+                    // representable, so the guards themselves are compared. The
+                    // value is the key's length only so successive replaces are
+                    // told apart; the interesting part is the position and the
+                    // KEY, which the C rewrites to the lookup string.
+                    b"ro" | b"ros" => {
+                        let cs = opcode == b"ros";
+                        // The C measures with `strlen(arg)`, so an interior NUL
+                        // shortens the value as well as the key (LESSONS #29).
+                        let len = cstr_prefix(arg).len();
+                        #[allow(clippy::cast_precision_loss)] // bounded by the op line
+                        let v = dom::number(len as f64);
+                        r = i32::from(dom::replace_in_object(t, arg, v, cs));
+                    }
+                    _ => {}
+                }
+                if got.is_some() {
+                    r = 1;
+                }
+                sz = i64::try_from(dom::get_array_size(t)).unwrap_or(i64::MAX);
+            }
+        }
+
+        out.extend_from_slice(b"|");
+        out.extend_from_slice(name.as_bytes());
+        out.extend_from_slice(b":r=");
+        if r < 0 {
+            out.push(b'-');
+        } else {
+            out.extend_from_slice(format!("{r}").as_bytes());
+        }
+        out.extend_from_slice(b",got=");
+        push_printed(&mut out, got.as_ref().map(|d| &d.value));
+        out.extend_from_slice(b",key=");
+        push_bytes(&mut out, got.as_ref().and_then(|d| d.key.as_deref()));
+        out.extend_from_slice(format!(",sz={sz},doc=").as_bytes());
+        push_printed(&mut out, Some(&root));
+        // `got` drops here — the C's matching `cJSON_Delete(got)`, except that
+        // forgetting it would be a leak there and is not expressible here.
+    }
+    (0, out)
+}
+
+/// The opcode echoed back in its canonical spelling. Only recognized opcodes
+/// reach this; everything else renders as `?`, so a fuzzed opcode cannot put
+/// arbitrary bytes into the descriptor.
+fn core_name(opcode: &[u8]) -> &'static str {
+    match opcode {
+        b"da" => "da",
+        b"xa" => "xa",
+        b"do" => "do",
+        b"dos" => "dos",
+        b"xo" => "xo",
+        b"xos" => "xos",
+        b"app" => "app",
+        b"ins" => "ins",
+        b"rep" => "rep",
+        b"ro" => "ro",
+        b"ros" => "ros",
+        _ => "?",
+    }
+}
+
+/// Split at the first tab, mirroring the C's `strchr(line, '\t')`: no tab means
+/// the whole slice is the first field and the second is empty.
+fn split_tab(s: &[u8]) -> (&[u8], &[u8]) {
+    match s.iter().position(|&b| b == b'\t') {
+        Some(i) => (&s[..i], s.get(i.saturating_add(1)..).unwrap_or(&[])),
+        None => (s, &[][..]),
+    }
+}
+
+/// The C mode's `CJSON_OPTS_MAX_BUF` — the clamp that keeps a fuzzed buffer
+/// length from asking for a gigabyte. Driver contract, shared by both sides.
+const OPTS_MAX_BUF: i32 = 4096;
+
+/// `opts`: stdin is `<flags>\t<prebuffer>\t<prealloc>\n<json>` — all four
+/// options entry points in one shot (`cJSON_ParseWithLengthOpts`,
+/// `cJSON_ParseWithOpts`, `cJSON_PrintBuffered`, `cJSON_PrintPreallocated`).
+/// See `oracle/cjson_modes.h` for the descriptor's field-by-field rationale.
+///
+/// Like `set`, an unparseable document is not an error: the printers are part
+/// of the surface under test and their guards still have to run.
+///
+/// `ppabuf` is the field that makes this module's intentional divergence
+/// measurable instead of merely claimed. On a buffer too small, the C leaves a
+/// NUL-terminated PREFIX of the document behind — `{"a":[1,2` reads back as a
+/// smaller, entirely plausible render — and this port leaves the buffer
+/// untouched. Reporting the buffer's bytes is what puts that difference in the
+/// compared output (LESSONS #31/#40); reporting only the `cJSON_bool` would
+/// have made the ledger row an assertion nothing checks.
+fn opts(input: &[u8]) -> (i32, Vec<u8>) {
+    let Some(nl) = input.iter().position(|&b| b == b'\n') else {
+        return (RC_USAGE, Vec::new());
+    };
+    let (head, rest) = input.split_at(nl);
+    let json = rest.get(1..).unwrap_or(&[]);
+    let (f_flags, tail) = split_tab(head);
+    let (f_prebuffer, f_prealloc) = split_tab(tail);
+    if !head.contains(&b'\t') || !tail.contains(&b'\t') {
+        return (RC_USAGE, Vec::new());
+    }
+    let flags = parse_index(f_flags);
+    let prebuffer = parse_index(f_prebuffer).min(OPTS_MAX_BUF);
+    let prealloc = parse_index(f_prealloc).min(OPTS_MAX_BUF);
+    let rnt = flags & 1 != 0;
+    let fmt = flags & 2 != 0;
+
+    // The length form sees the exact byte count; the string form re-derives
+    // `strlen + 1` from the same bytes. Their disagreement is the point.
+    let by_len = crate::parse_with_length_opts(json, rnt);
+    let by_str = crate::parse_with_opts(json, rnt);
+    let doc = by_len
+        .as_ref()
+        .ok()
+        .or(by_str.as_ref().ok())
+        .map(|(v, _)| v);
+
+    let mut out = Vec::new();
+    out.extend_from_slice(b"pwl=");
+    push_printed_opt(&mut out, by_len.as_ref().ok().map(|(v, _)| v));
+    out.extend_from_slice(b";pwlend=");
+    push_end(&mut out, &by_len);
+    out.extend_from_slice(b";pwo=");
+    push_printed_opt(&mut out, by_str.as_ref().ok().map(|(v, _)| v));
+    out.extend_from_slice(b";pwoend=");
+    push_end(&mut out, &by_str);
+
+    out.extend_from_slice(b";pb=");
+    let pb = doc.and_then(|v| crate::print_buffered(v, prebuffer, fmt));
+    push_bytes(&mut out, pb.as_deref());
+
+    // The smallest buffer length that succeeds: one number that pins the whole
+    // `ensure` predicate instead of one sample of it. Scanned, not computed
+    // from a closed form — the closed form is a THEOREM about today's fifteen
+    // call sites (see print.rs), and a scan keeps holding if that changes.
+    out.extend_from_slice(b";ppamin=");
+    let reference = doc.and_then(|v| crate::print_value(v, fmt));
+    let ppamin = reference.as_ref().and_then(|r| {
+        let limit = i32::try_from(r.len())
+            .unwrap_or(OPTS_MAX_BUF)
+            .saturating_add(4)
+            .min(OPTS_MAX_BUF);
+        (0..=limit).find(|&len| ppa_once(doc, len, fmt, None))
+    });
+    match ppamin {
+        Some(n) => out.extend_from_slice(format!("{n}").as_bytes()),
+        None => out.extend_from_slice(b"-1"),
+    }
+
+    let mut buf = vec![0_u8; usize::try_from(prealloc.max(0)).unwrap_or(0)];
+    let ok = ppa_once(doc, prealloc, fmt, Some(&mut buf));
+    out.extend_from_slice(b";ppa=");
+    out.extend_from_slice(if ok { b"1" } else { b"0" });
+    out.extend_from_slice(b";ppabuf=");
+    if prealloc > 0 {
+        out.extend_from_slice(format!("{}:", buf.len()).as_bytes());
+        for b in &buf {
+            out.extend_from_slice(format!("{b:02x}").as_bytes());
+        }
+    } else {
+        out.push(b'-');
+    }
+    (0, out)
+}
+
+/// One `cJSON_PrintPreallocated` call over a buffer of exactly `len` bytes.
+///
+/// The `len < 0` guard lives HERE rather than in the core, and deliberately so:
+/// `print_preallocated` takes a `&mut [u8]`, whose length cannot be negative, so
+/// the core has no branch to put it in. Answering false at the mode is the
+/// honest place for a guard the port made unrepresentable — the alternative, a
+/// hardcoded constant inside the core, would be a control nothing reaches
+/// (LESSONS #31). Same for the C's `buffer == NULL`, which has no spelling at
+/// all here and is recorded in DIVERGENCES.md instead.
+fn ppa_once(doc: Option<&Value>, len: i32, fmt: bool, out: Option<&mut Vec<u8>>) -> bool {
+    let Some(doc) = doc else { return false };
+    let Ok(len) = usize::try_from(len) else {
+        return false; // C: `length < 0` → false
+    };
+    let mut buf = vec![0_u8; len];
+    let ok = crate::print_preallocated(doc, &mut buf, fmt);
+    if let Some(slot) = out {
+        *slot = buf;
+    }
+    ok
+}
+
+/// `*return_parse_end` as an offset. The C sets it on BOTH paths — the parse
+/// end on success, the clamped error position on failure — so this is never
+/// absent, unlike the `-1` a NULL pointer would report.
+fn push_end(out: &mut Vec<u8>, r: &Result<(Value, usize), crate::ParseError>) {
+    let n = match r {
+        Ok((_, end)) => *end,
+        Err(e) => e.position,
+    };
+    out.extend_from_slice(format!("{n}").as_bytes());
+}
+
+/// A parsed document printed unformatted and length-prefixed, or `-`.
+fn push_printed_opt(out: &mut Vec<u8>, v: Option<&Value>) {
+    match v.and_then(|v| crate::print_value(v, false)) {
+        Some(bytes) => push_bytes(out, Some(&bytes)),
+        None => out.push(b'-'),
+    }
+}
+
 /// Everything up to the first NUL — the C driver hands `cjson_modes_construct`
 /// pointers into a NUL-split buffer, so both fields are C strings.
 fn cstr_prefix(s: &[u8]) -> &[u8] {
@@ -353,12 +845,20 @@ fn cstr_prefix(s: &[u8]) -> &[u8] {
         .unwrap_or(s)
 }
 
-/// Length-prefixed bytes, or `-` for NULL. Length-prefixed rather than
-/// delimited because `["a,b"]` and `["a","b"]` would otherwise render
-/// identically and a real divergence between them would be invisible.
+/// Length-prefixed bytes, or `-` for NULL — the exact counterpart of the C
+/// descriptors' `sb_bytes`. Length-prefixed rather than delimited because
+/// `["a,b"]` and `["a","b"]` would otherwise render identically and a real
+/// divergence between them would be invisible.
+///
+/// The bytes are C-STRING bytes: `sb_bytes` measures with `strlen` and writes
+/// with `%s`, so both stop at the first NUL, and so does this (LESSONS #29 — the
+/// truncation has to hold at every boundary). It makes no difference to
+/// `construct`, whose values are already NUL-truncated at construction, but it
+/// does to `set`, which can be handed a PARSED string with an interior NUL.
 fn push_bytes(out: &mut Vec<u8>, s: Option<&[u8]>) {
     match s {
         Some(s) => {
+            let s = &s[..s.iter().position(|&b| b == 0).unwrap_or(s.len())];
             out.extend_from_slice(format!("{}:", s.len()).as_bytes());
             out.extend_from_slice(s);
         }
@@ -508,6 +1008,15 @@ pub fn run(mode: &str, input: &[u8]) -> (i32, Vec<u8>) {
     }
     if mode == "construct" {
         return construct(input);
+    }
+    if mode == "set" {
+        return set_mode(input);
+    }
+    if mode == "seq" {
+        return seq(input);
+    }
+    if mode == "opts" {
+        return opts(input);
     }
 
     // cJSON_Utils modes (JSON Pointer / Patch / Merge / Sort) — one dispatch,

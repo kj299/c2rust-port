@@ -1,0 +1,513 @@
+{
+  "probe_transcript": 1,
+  "module": "dom-mutate-set",
+  "oracle_sha256": "00cb523fb94ed0b2cea1c5f26f838e8d2c85c0cefb5f43d40e3b83814dec9472",
+  "generated_by": "harnesses/probe/probe.py run",
+  "entries": [
+    {
+      "id": "set-no-target-missing-key",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "M2ZmMDAwMDAwMDAwMDAwMAl6egl4CnsibiI6MX0=",
+      "note": "no such key: cJSON_SetValuestring's OWN `object == NULL` guard, and the one call the mode must skip (cJSON_SetNumberHelper has no NULL check at all -- sn=-)",
+      "rc": 0,
+      "stdout_b64": "dGd0PS07c3Y9LTtzbj0tO3MyPXQxNixpMCxkMDAwMDAwMDAwMDAwMDAwMCxzMTp4LHAieCI7c3YyPTE6eDtzdm51bGw9LTtzdm51bT0tO24yPXQ4LGkxLGQzZmYwMDAwMDAwMDAwMDAwLHMtLHAxO3NuMj0zZmYwMDAwMDAwMDAwMDAwO2RvYz17Im4iOjF9",
+      "stdin_preview": "3ff0000000000000\tzz\tx\n{\"n\":1}",
+      "stdout_preview": "tgt=-;sv=-;sn=-;s2=t16,i0,d0000000000000000,s1:x,p\"x\";sv2=1:x;svnull=-;svnum=-;n\u2026"
+    },
+    {
+      "id": "set-no-target-root-array",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "M2ZmMDAwMDAwMDAwMDAwMAlrCXgKWzEsMiwzXQ==",
+      "note": "cJSON_GetObjectItemCaseSensitive on an ARRAY answers NULL, so the whole document path takes its no-target branch",
+      "rc": 0,
+      "stdout_b64": "dGd0PS07c3Y9LTtzbj0tO3MyPXQxNixpMCxkMDAwMDAwMDAwMDAwMDAwMCxzMTp4LHAieCI7c3YyPTE6eDtzdm51bGw9LTtzdm51bT0tO24yPXQ4LGkxLGQzZmYwMDAwMDAwMDAwMDAwLHMtLHAxO3NuMj0zZmYwMDAwMDAwMDAwMDAwO2RvYz1bMSwyLDNd",
+      "stdin_preview": "3ff0000000000000\tk\tx\n[1,2,3]",
+      "stdout_preview": "tgt=-;sv=-;sn=-;s2=t16,i0,d0000000000000000,s1:x,p\"x\";sv2=1:x;svnull=-;svnum=-;n\u2026"
+    },
+    {
+      "id": "set-no-target-root-scalar",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "M2ZmMDAwMDAwMDAwMDAwMAlrCXgKInRvcCI=",
+      "note": "same for a scalar root -- the lookup has no child list to walk",
+      "rc": 0,
+      "stdout_b64": "dGd0PS07c3Y9LTtzbj0tO3MyPXQxNixpMCxkMDAwMDAwMDAwMDAwMDAwMCxzMTp4LHAieCI7c3YyPTE6eDtzdm51bGw9LTtzdm51bT0tO24yPXQ4LGkxLGQzZmYwMDAwMDAwMDAwMDAwLHMtLHAxO3NuMj0zZmYwMDAwMDAwMDAwMDAwO2RvYz0idG9wIg==",
+      "stdin_preview": "3ff0000000000000\tk\tx\n\"top\"",
+      "stdout_preview": "tgt=-;sv=-;sn=-;s2=t16,i0,d0000000000000000,s1:x,p\"x\";sv2=1:x;svnull=-;svnum=-;n\u2026"
+    },
+    {
+      "id": "set-doc-unparseable",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "M2ZmMDAwMDAwMDAwMDAwMAlrCXgKe29vcHM=",
+      "note": "an unparseable document is NOT an error in this mode (rc=0, doc=-): the setters are the surface under test and must still run. Every other mode exits 1 here",
+      "rc": 0,
+      "stdout_b64": "dGd0PS07c3Y9LTtzbj0tO3MyPXQxNixpMCxkMDAwMDAwMDAwMDAwMDAwMCxzMTp4LHAieCI7c3YyPTE6eDtzdm51bGw9LTtzdm51bT0tO24yPXQ4LGkxLGQzZmYwMDAwMDAwMDAwMDAwLHMtLHAxO3NuMj0zZmYwMDAwMDAwMDAwMDAwO2RvYz0t",
+      "stdin_preview": "3ff0000000000000\tk\tx\n{oops",
+      "stdout_preview": "tgt=-;sv=-;sn=-;s2=t16,i0,d0000000000000000,s1:x,p\"x\";sv2=1:x;svnull=-;svnum=-;n\u2026"
+    },
+    {
+      "id": "set-doc-empty",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "M2ZmMDAwMDAwMDAwMDAwMAlrCXgK",
+      "note": "empty document: ParseWithLength(.., 0) fails, same no-target path",
+      "rc": 0,
+      "stdout_b64": "dGd0PS07c3Y9LTtzbj0tO3MyPXQxNixpMCxkMDAwMDAwMDAwMDAwMDAwMCxzMTp4LHAieCI7c3YyPTE6eDtzdm51bGw9LTtzdm51bT0tO24yPXQ4LGkxLGQzZmYwMDAwMDAwMDAwMDAwLHMtLHAxO3NuMj0zZmYwMDAwMDAwMDAwMDAwO2RvYz0t",
+      "stdin_preview": "3ff0000000000000\tk\tx\n",
+      "stdout_preview": "tgt=-;sv=-;sn=-;s2=t16,i0,d0000000000000000,s1:x,p\"x\";sv2=1:x;svnull=-;svnum=-;n\u2026"
+    },
+    {
+      "id": "set-number-target-in-range",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "NDAwODAwMDAwMDAwMDAwMAluCXgKeyJuIjoxfQ==",
+      "note": "the ordinary path: a NUMBER target, so cJSON_SetValuestring refuses it (not a cJSON_String) and cJSON_SetNumberHelper owns it",
+      "rc": 0,
+      "stdout_b64": "dGd0PXQ4LGkzLGQ0MDA4MDAwMDAwMDAwMDAwLHMtLHAzO3N2PS07c249NDAwODAwMDAwMDAwMDAwMDtzMj10MTYsaTAsZDAwMDAwMDAwMDAwMDAwMDAsczE6eCxwIngiO3N2Mj0xOng7c3ZudWxsPS07c3ZudW09LTtuMj10OCxpMyxkNDAwODAwMDAwMDAwMDAwMCxzLSxwMztzbjI9NDAwODAwMDAwMDAwMDAwMDtkb2M9eyJuIjozfQ==",
+      "stdin_preview": "4008000000000000\tn\tx\n{\"n\":1}",
+      "stdout_preview": "tgt=t8,i3,d4008000000000000,s-,p3;sv=-;sn=4008000000000000;s2=t16,i0,d0000000000\u2026"
+    },
+    {
+      "id": "set-number-target-zero",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "MDAwMDAwMDAwMDAwMDAwMAluCQp7Im4iOjQyfQ==",
+      "note": "setting 0 over an existing number, with an EMPTY replacement string",
+      "rc": 0,
+      "stdout_b64": "dGd0PXQ4LGkwLGQwMDAwMDAwMDAwMDAwMDAwLHMtLHAwO3N2PS07c249MDAwMDAwMDAwMDAwMDAwMDtzMj10MTYsaTAsZDAwMDAwMDAwMDAwMDAwMDAsczA6LHAiIjtzdjI9MDo7c3ZudWxsPS07c3ZudW09LTtuMj10OCxpMCxkMDAwMDAwMDAwMDAwMDAwMCxzLSxwMDtzbjI9MDAwMDAwMDAwMDAwMDAwMDtkb2M9eyJuIjowfQ==",
+      "stdin_preview": "0000000000000000\tn\t\n{\"n\":42}",
+      "stdout_preview": "tgt=t8,i0,d0000000000000000,s-,p0;sv=-;sn=0000000000000000;s2=t16,i0,d0000000000\u2026"
+    },
+    {
+      "id": "set-number-target-neg-zero",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "ODAwMDAwMDAwMDAwMDAwMAluCXgKeyJuIjoxfQ==",
+      "note": "-0.0: valueint is 0 and the sign survives only in valuedouble's bits, which is why the descriptor carries bits rather than a formatted float",
+      "rc": 0,
+      "stdout_b64": "dGd0PXQ4LGkwLGQ4MDAwMDAwMDAwMDAwMDAwLHMtLHAwO3N2PS07c249ODAwMDAwMDAwMDAwMDAwMDtzMj10MTYsaTAsZDAwMDAwMDAwMDAwMDAwMDAsczE6eCxwIngiO3N2Mj0xOng7c3ZudWxsPS07c3ZudW09LTtuMj10OCxpMCxkODAwMDAwMDAwMDAwMDAwMCxzLSxwMDtzbjI9ODAwMDAwMDAwMDAwMDAwMDtkb2M9eyJuIjowfQ==",
+      "stdin_preview": "8000000000000000\tn\tx\n{\"n\":1}",
+      "stdout_preview": "tgt=t8,i0,d8000000000000000,s-,p0;sv=-;sn=8000000000000000;s2=t16,i0,d0000000000\u2026"
+    },
+    {
+      "id": "set-number-target-fraction",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "YzAxZTAwMDAwMDAwMDAwMAluCXgKeyJuIjoxfQ==",
+      "note": "-7.5 truncates TOWARD ZERO into valueint (-7) while valuedouble stays exact",
+      "rc": 0,
+      "stdout_b64": "dGd0PXQ4LGktNyxkYzAxZTAwMDAwMDAwMDAwMCxzLSxwLTcuNTtzdj0tO3NuPWMwMWUwMDAwMDAwMDAwMDA7czI9dDE2LGkwLGQwMDAwMDAwMDAwMDAwMDAwLHMxOngscCJ4IjtzdjI9MTp4O3N2bnVsbD0tO3N2bnVtPS07bjI9dDgsaS03LGRjMDFlMDAwMDAwMDAwMDAwLHMtLHAtNy41O3NuMj1jMDFlMDAwMDAwMDAwMDAwO2RvYz17Im4iOi03LjV9",
+      "stdin_preview": "c01e000000000000\tn\tx\n{\"n\":1}",
+      "stdout_preview": "tgt=t8,i-7,dc01e000000000000,s-,p-7.5;sv=-;sn=c01e000000000000;s2=t16,i0,d000000\u2026"
+    },
+    {
+      "id": "set-number-target-saturate-high",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "NDFlNjVhMGJjMDAwMDAwMAluCXgKeyJuIjoxfQ==",
+      "note": "3e9 > INT_MAX: the first saturation guard (cJSON.c:386)",
+      "rc": 0,
+      "stdout_b64": "dGd0PXQ4LGkyMTQ3NDgzNjQ3LGQ0MWU2NWEwYmMwMDAwMDAwLHMtLHAzMDAwMDAwMDAwO3N2PS07c249NDFlNjVhMGJjMDAwMDAwMDtzMj10MTYsaTAsZDAwMDAwMDAwMDAwMDAwMDAsczE6eCxwIngiO3N2Mj0xOng7c3ZudWxsPS07c3ZudW09LTtuMj10OCxpMjE0NzQ4MzY0NyxkNDFlNjVhMGJjMDAwMDAwMCxzLSxwMzAwMDAwMDAwMDtzbjI9NDFlNjVhMGJjMDAwMDAwMDtkb2M9eyJuIjozMDAwMDAwMDAwfQ==",
+      "stdin_preview": "41e65a0bc0000000\tn\tx\n{\"n\":1}",
+      "stdout_preview": "tgt=t8,i2147483647,d41e65a0bc0000000,s-,p3000000000;sv=-;sn=41e65a0bc0000000;s2=\u2026"
+    },
+    {
+      "id": "set-number-target-saturate-low",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "YzFlNjVhMGJjMDAwMDAwMAluCXgKeyJuIjoxfQ==",
+      "note": "-3e9 < INT_MIN: the second saturation guard",
+      "rc": 0,
+      "stdout_b64": "dGd0PXQ4LGktMjE0NzQ4MzY0OCxkYzFlNjVhMGJjMDAwMDAwMCxzLSxwLTMwMDAwMDAwMDA7c3Y9LTtzbj1jMWU2NWEwYmMwMDAwMDAwO3MyPXQxNixpMCxkMDAwMDAwMDAwMDAwMDAwMCxzMTp4LHAieCI7c3YyPTE6eDtzdm51bGw9LTtzdm51bT0tO24yPXQ4LGktMjE0NzQ4MzY0OCxkYzFlNjVhMGJjMDAwMDAwMCxzLSxwLTMwMDAwMDAwMDA7c24yPWMxZTY1YTBiYzAwMDAwMDA7ZG9jPXsibiI6LTMwMDAwMDAwMDB9",
+      "stdin_preview": "c1e65a0bc0000000\tn\tx\n{\"n\":1}",
+      "stdout_preview": "tgt=t8,i-2147483648,dc1e65a0bc0000000,s-,p-3000000000;sv=-;sn=c1e65a0bc0000000;s\u2026"
+    },
+    {
+      "id": "set-number-target-int-max",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "NDFkZmZmZmZmZmMwMDAwMAluCXgKeyJuIjoxfQ==",
+      "note": "exactly INT_MAX as a double: `number >= INT_MAX` is TRUE, so it saturates rather than casting -- the boundary is inclusive",
+      "rc": 0,
+      "stdout_b64": "dGd0PXQ4LGkyMTQ3NDgzNjQ3LGQ0MWRmZmZmZmZmYzAwMDAwLHMtLHAyMTQ3NDgzNjQ3O3N2PS07c249NDFkZmZmZmZmZmMwMDAwMDtzMj10MTYsaTAsZDAwMDAwMDAwMDAwMDAwMDAsczE6eCxwIngiO3N2Mj0xOng7c3ZudWxsPS07c3ZudW09LTtuMj10OCxpMjE0NzQ4MzY0NyxkNDFkZmZmZmZmZmMwMDAwMCxzLSxwMjE0NzQ4MzY0NztzbjI9NDFkZmZmZmZmZmMwMDAwMDtkb2M9eyJuIjoyMTQ3NDgzNjQ3fQ==",
+      "stdin_preview": "41dfffffffc00000\tn\tx\n{\"n\":1}",
+      "stdout_preview": "tgt=t8,i2147483647,d41dfffffffc00000,s-,p2147483647;sv=-;sn=41dfffffffc00000;s2=\u2026"
+    },
+    {
+      "id": "set-number-target-int-max-minus-one",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "NDFkZmZmZmZmZjgwMDAwMAluCXgKeyJuIjoxfQ==",
+      "note": "one representable step below: the cast branch, not the guard",
+      "rc": 0,
+      "stdout_b64": "dGd0PXQ4LGkyMTQ3NDgzNjQ2LGQ0MWRmZmZmZmZmODAwMDAwLHMtLHAyMTQ3NDgzNjQ2O3N2PS07c249NDFkZmZmZmZmZjgwMDAwMDtzMj10MTYsaTAsZDAwMDAwMDAwMDAwMDAwMDAsczE6eCxwIngiO3N2Mj0xOng7c3ZudWxsPS07c3ZudW09LTtuMj10OCxpMjE0NzQ4MzY0NixkNDFkZmZmZmZmZjgwMDAwMCxzLSxwMjE0NzQ4MzY0NjtzbjI9NDFkZmZmZmZmZjgwMDAwMDtkb2M9eyJuIjoyMTQ3NDgzNjQ2fQ==",
+      "stdin_preview": "41dfffffff800000\tn\tx\n{\"n\":1}",
+      "stdout_preview": "tgt=t8,i2147483646,d41dfffffff800000,s-,p2147483646;sv=-;sn=41dfffffff800000;s2=\u2026"
+    },
+    {
+      "id": "set-number-target-int-min",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "YzFlMDAwMDAwMDAwMDAwMAluCXgKeyJuIjoxfQ==",
+      "note": "exactly INT_MIN as a double: `number <= (double)INT_MIN` is TRUE, also inclusive",
+      "rc": 0,
+      "stdout_b64": "dGd0PXQ4LGktMjE0NzQ4MzY0OCxkYzFlMDAwMDAwMDAwMDAwMCxzLSxwLTIxNDc0ODM2NDg7c3Y9LTtzbj1jMWUwMDAwMDAwMDAwMDAwO3MyPXQxNixpMCxkMDAwMDAwMDAwMDAwMDAwMCxzMTp4LHAieCI7c3YyPTE6eDtzdm51bGw9LTtzdm51bT0tO24yPXQ4LGktMjE0NzQ4MzY0OCxkYzFlMDAwMDAwMDAwMDAwMCxzLSxwLTIxNDc0ODM2NDg7c24yPWMxZTAwMDAwMDAwMDAwMDA7ZG9jPXsibiI6LTIxNDc0ODM2NDh9",
+      "stdin_preview": "c1e0000000000000\tn\tx\n{\"n\":1}",
+      "stdout_preview": "tgt=t8,i-2147483648,dc1e0000000000000,s-,p-2147483648;sv=-;sn=c1e0000000000000;s\u2026"
+    },
+    {
+      "id": "set-number-target-inf",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "N2ZmMDAwMDAwMDAwMDAwMAluCXgKeyJuIjoxfQ==",
+      "note": "+inf saturates to INT_MAX and PRINTS as null (cJSON refuses to emit a non-finite number)",
+      "rc": 0,
+      "stdout_b64": "dGd0PXQ4LGkyMTQ3NDgzNjQ3LGQ3ZmYwMDAwMDAwMDAwMDAwLHMtLHBudWxsO3N2PS07c249N2ZmMDAwMDAwMDAwMDAwMDtzMj10MTYsaTAsZDAwMDAwMDAwMDAwMDAwMDAsczE6eCxwIngiO3N2Mj0xOng7c3ZudWxsPS07c3ZudW09LTtuMj10OCxpMjE0NzQ4MzY0NyxkN2ZmMDAwMDAwMDAwMDAwMCxzLSxwbnVsbDtzbjI9N2ZmMDAwMDAwMDAwMDAwMDtkb2M9eyJuIjpudWxsfQ==",
+      "stdin_preview": "7ff0000000000000\tn\tx\n{\"n\":1}",
+      "stdout_preview": "tgt=t8,i2147483647,d7ff0000000000000,s-,pnull;sv=-;sn=7ff0000000000000;s2=t16,i0\u2026"
+    },
+    {
+      "id": "set-number-target-neg-inf",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "ZmZmMDAwMDAwMDAwMDAwMAluCXgKeyJuIjoxfQ==",
+      "note": "-inf saturates to INT_MIN, prints null",
+      "rc": 0,
+      "stdout_b64": "dGd0PXQ4LGktMjE0NzQ4MzY0OCxkZmZmMDAwMDAwMDAwMDAwMCxzLSxwbnVsbDtzdj0tO3NuPWZmZjAwMDAwMDAwMDAwMDA7czI9dDE2LGkwLGQwMDAwMDAwMDAwMDAwMDAwLHMxOngscCJ4IjtzdjI9MTp4O3N2bnVsbD0tO3N2bnVtPS07bjI9dDgsaS0yMTQ3NDgzNjQ4LGRmZmYwMDAwMDAwMDAwMDAwLHMtLHBudWxsO3NuMj1mZmYwMDAwMDAwMDAwMDAwO2RvYz17Im4iOm51bGx9",
+      "stdin_preview": "fff0000000000000\tn\tx\n{\"n\":1}",
+      "stdout_preview": "tgt=t8,i-2147483648,dfff0000000000000,s-,pnull;sv=-;sn=fff0000000000000;s2=t16,i\u2026"
+    },
+    {
+      "id": "set-number-target-huge",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "N2ZlMWNjZjM4NWViYzhhMAluCXgKeyJuIjoxfQ==",
+      "note": "1e308: finite but far past INT_MAX; prints in full precision",
+      "rc": 0,
+      "stdout_b64": "dGd0PXQ4LGkyMTQ3NDgzNjQ3LGQ3ZmUxY2NmMzg1ZWJjOGEwLHMtLHAxZSszMDg7c3Y9LTtzbj03ZmUxY2NmMzg1ZWJjOGEwO3MyPXQxNixpMCxkMDAwMDAwMDAwMDAwMDAwMCxzMTp4LHAieCI7c3YyPTE6eDtzdm51bGw9LTtzdm51bT0tO24yPXQ4LGkyMTQ3NDgzNjQ3LGQ3ZmUxY2NmMzg1ZWJjOGEwLHMtLHAxZSszMDg7c24yPTdmZTFjY2YzODVlYmM4YTA7ZG9jPXsibiI6MWUrMzA4fQ==",
+      "stdin_preview": "7fe1ccf385ebc8a0\tn\tx\n{\"n\":1}",
+      "stdout_preview": "tgt=t8,i2147483647,d7fe1ccf385ebc8a0,s-,p1e+308;sv=-;sn=7fe1ccf385ebc8a0;s2=t16,\u2026"
+    },
+    {
+      "id": "set-number-target-subnormal",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "MDAwMDAwMDAwMDAwMDAwMQluCXgKeyJuIjoxfQ==",
+      "note": "the smallest positive subnormal: valueint 0, valuedouble non-zero",
+      "rc": 0,
+      "stdout_b64": "dGd0PXQ4LGkwLGQwMDAwMDAwMDAwMDAwMDAxLHMtLHA0Ljk0MDY1NjQ1ODQxMjQ3ZS0zMjQ7c3Y9LTtzbj0wMDAwMDAwMDAwMDAwMDAxO3MyPXQxNixpMCxkMDAwMDAwMDAwMDAwMDAwMCxzMTp4LHAieCI7c3YyPTE6eDtzdm51bGw9LTtzdm51bT0tO24yPXQ4LGkwLGQwMDAwMDAwMDAwMDAwMDAxLHMtLHA0Ljk0MDY1NjQ1ODQxMjQ3ZS0zMjQ7c24yPTAwMDAwMDAwMDAwMDAwMDE7ZG9jPXsibiI6NC45NDA2NTY0NTg0MTI0N2UtMzI0fQ==",
+      "stdin_preview": "0000000000000001\tn\tx\n{\"n\":1}",
+      "stdout_preview": "tgt=t8,i0,d0000000000000001,s-,p4.94065645841247e-324;sv=-;sn=0000000000000001;s\u2026"
+    },
+    {
+      "id": "set-number-target-half",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "M2ZlMDAwMDAwMDAwMDAwMAluCXgKeyJuIjoxfQ==",
+      "note": "0.5 truncates to 0 -- a number whose valueint and valuedouble disagree, which is what the printer's integer fast-path keys off",
+      "rc": 0,
+      "stdout_b64": "dGd0PXQ4LGkwLGQzZmUwMDAwMDAwMDAwMDAwLHMtLHAwLjU7c3Y9LTtzbj0zZmUwMDAwMDAwMDAwMDAwO3MyPXQxNixpMCxkMDAwMDAwMDAwMDAwMDAwMCxzMTp4LHAieCI7c3YyPTE6eDtzdm51bGw9LTtzdm51bT0tO24yPXQ4LGkwLGQzZmUwMDAwMDAwMDAwMDAwLHMtLHAwLjU7c24yPTNmZTAwMDAwMDAwMDAwMDA7ZG9jPXsibiI6MC41fQ==",
+      "stdin_preview": "3fe0000000000000\tn\tx\n{\"n\":1}",
+      "stdout_preview": "tgt=t8,i0,d3fe0000000000000,s-,p0.5;sv=-;sn=3fe0000000000000;s2=t16,i0,d00000000\u2026"
+    },
+    {
+      "id": "set-dup-key-first-wins",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "NDAwODAwMDAwMDAwMDAwMAlrCXgKeyJrIjoxLCJrIjoyfQ==",
+      "note": "duplicate keys: the C walks the child list and stops at the FIRST match, so only the first is set",
+      "rc": 0,
+      "stdout_b64": "dGd0PXQ4LGkzLGQ0MDA4MDAwMDAwMDAwMDAwLHMtLHAzO3N2PS07c249NDAwODAwMDAwMDAwMDAwMDtzMj10MTYsaTAsZDAwMDAwMDAwMDAwMDAwMDAsczE6eCxwIngiO3N2Mj0xOng7c3ZudWxsPS07c3ZudW09LTtuMj10OCxpMyxkNDAwODAwMDAwMDAwMDAwMCxzLSxwMztzbjI9NDAwODAwMDAwMDAwMDAwMDtkb2M9eyJrIjozLCJrIjoyfQ==",
+      "stdin_preview": "4008000000000000\tk\tx\n{\"k\":1,\"k\":2}",
+      "stdout_preview": "tgt=t8,i3,d4008000000000000,s-,p3;sv=-;sn=4008000000000000;s2=t16,i0,d0000000000\u2026"
+    },
+    {
+      "id": "set-lookup-is-case-sensitive",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "M2ZmMDAwMDAwMDAwMDAwMAlrCXgKeyJLIjoxfQ==",
+      "note": "this mode uses cJSON_GetObjectItemCaseSensitive, so `k` does not find `K` -- no target",
+      "rc": 0,
+      "stdout_b64": "dGd0PS07c3Y9LTtzbj0tO3MyPXQxNixpMCxkMDAwMDAwMDAwMDAwMDAwMCxzMTp4LHAieCI7c3YyPTE6eDtzdm51bGw9LTtzdm51bT0tO24yPXQ4LGkxLGQzZmYwMDAwMDAwMDAwMDAwLHMtLHAxO3NuMj0zZmYwMDAwMDAwMDAwMDAwO2RvYz17IksiOjF9",
+      "stdin_preview": "3ff0000000000000\tk\tx\n{\"K\":1}",
+      "stdout_preview": "tgt=-;sv=-;sn=-;s2=t16,i0,d0000000000000000,s1:x,p\"x\";sv2=1:x;svnull=-;svnum=-;n\u2026"
+    },
+    {
+      "id": "set-newstr-empty-on-empty-key",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "M2ZmMDAwMDAwMDAwMDAwMAkJCnt9",
+      "note": "empty key AND empty replacement: s2 is CreateString(\"\"), then set to \"\" -- strlen(new) <= strlen(old) with both zero",
+      "rc": 0,
+      "stdout_b64": "dGd0PS07c3Y9LTtzbj0tO3MyPXQxNixpMCxkMDAwMDAwMDAwMDAwMDAwMCxzMDoscCIiO3N2Mj0wOjtzdm51bGw9LTtzdm51bT0tO24yPXQ4LGkxLGQzZmYwMDAwMDAwMDAwMDAwLHMtLHAxO3NuMj0zZmYwMDAwMDAwMDAwMDAwO2RvYz17fQ==",
+      "stdin_preview": "3ff0000000000000\t\t\n{}",
+      "stdout_preview": "tgt=-;sv=-;sn=-;s2=t16,i0,d0000000000000000,s0:,p\"\";sv2=0:;svnull=-;svnum=-;n2=t\u2026"
+    },
+    {
+      "id": "set-newstr-longer-than-key",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "M2ZmMDAwMDAwMDAwMDAwMAlrCWFiY2RlZmdoaWprbG1ub3AKe30=",
+      "note": "s2's old text is 1 byte and the new is 16: the ALLOCATING side of cJSON.c:416. Crossed, but not distinguishable from outside -- both paths leave the same valuestring",
+      "rc": 0,
+      "stdout_b64": "dGd0PS07c3Y9LTtzbj0tO3MyPXQxNixpMCxkMDAwMDAwMDAwMDAwMDAwMCxzMTY6YWJjZGVmZ2hpamtsbW5vcCxwImFiY2RlZmdoaWprbG1ub3AiO3N2Mj0xNjphYmNkZWZnaGlqa2xtbm9wO3N2bnVsbD0tO3N2bnVtPS07bjI9dDgsaTEsZDNmZjAwMDAwMDAwMDAwMDAscy0scDE7c24yPTNmZjAwMDAwMDAwMDAwMDA7ZG9jPXt9",
+      "stdin_preview": "3ff0000000000000\tk\tabcdefghijklmnop\n{}",
+      "stdout_preview": "tgt=-;sv=-;sn=-;s2=t16,i0,d0000000000000000,s16:abcdefghijklmnop,p\"abcdefghijklm\u2026"
+    },
+    {
+      "id": "set-newstr-shorter-than-key",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "M2ZmMDAwMDAwMDAwMDAwMAlhYmNkZWZnaGlqCXoKe30=",
+      "note": "the reverse: the in-place strcpy side of the same branch",
+      "rc": 0,
+      "stdout_b64": "dGd0PS07c3Y9LTtzbj0tO3MyPXQxNixpMCxkMDAwMDAwMDAwMDAwMDAwMCxzMTp6LHAieiI7c3YyPTE6ejtzdm51bGw9LTtzdm51bT0tO24yPXQ4LGkxLGQzZmYwMDAwMDAwMDAwMDAwLHMtLHAxO3NuMj0zZmYwMDAwMDAwMDAwMDAwO2RvYz17fQ==",
+      "stdin_preview": "3ff0000000000000\tabcdefghij\tz\n{}",
+      "stdout_preview": "tgt=-;sv=-;sn=-;s2=t16,i0,d0000000000000000,s1:z,p\"z\";sv2=1:z;svnull=-;svnum=-;n\u2026"
+    },
+    {
+      "id": "set-newstr-equal-length",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "M2ZmMDAwMDAwMDAwMDAwMAlhYmMJeHl6Cnt9",
+      "note": "exactly equal lengths -- `<=` makes this the in-place side, so the boundary is pinned",
+      "rc": 0,
+      "stdout_b64": "dGd0PS07c3Y9LTtzbj0tO3MyPXQxNixpMCxkMDAwMDAwMDAwMDAwMDAwMCxzMzp4eXoscCJ4eXoiO3N2Mj0zOnh5ejtzdm51bGw9LTtzdm51bT0tO24yPXQ4LGkxLGQzZmYwMDAwMDAwMDAwMDAwLHMtLHAxO3NuMj0zZmYwMDAwMDAwMDAwMDAwO2RvYz17fQ==",
+      "stdin_preview": "3ff0000000000000\tabc\txyz\n{}",
+      "stdout_preview": "tgt=-;sv=-;sn=-;s2=t16,i0,d0000000000000000,s3:xyz,p\"xyz\";sv2=3:xyz;svnull=-;svn\u2026"
+    },
+    {
+      "id": "set-newstr-escapes",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "M2ZmMDAwMDAwMDAwMDAwMAlrCWEiYlxcYwp7fQ==",
+      "note": "a replacement needing JSON escaping: the descriptor carries the RAW bytes (length-prefixed) and the printed form separately",
+      "rc": 0,
+      "stdout_b64": "dGd0PS07c3Y9LTtzbj0tO3MyPXQxNixpMCxkMDAwMDAwMDAwMDAwMDAwMCxzNjphImJcXGMscCJhXCJiXFxcXGMiO3N2Mj02OmEiYlxcYztzdm51bGw9LTtzdm51bT0tO24yPXQ4LGkxLGQzZmYwMDAwMDAwMDAwMDAwLHMtLHAxO3NuMj0zZmYwMDAwMDAwMDAwMDAwO2RvYz17fQ==",
+      "stdin_preview": "3ff0000000000000\tk\ta\"b\\\\c\n{}",
+      "stdout_preview": "tgt=-;sv=-;sn=-;s2=t16,i0,d0000000000000000,s6:a\"b\\\\c,p\"a\\\"b\\\\\\\\c\";sv2=6:a\"b\\\\c;\u2026"
+    },
+    {
+      "id": "set-newstr-interior-nul",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "M2ZmMDAwMDAwMDAwMDAwMAlrCWFiAGNkCnt9",
+      "note": "an interior NUL in the replacement: cJSON_SetValuestring takes a `const char *`, so it copies \"ab\" and the rest is gone (LESSONS #29). Needs stdin_b64 -- a JSON string cannot spell it (LESSONS #36)",
+      "rc": 0,
+      "stdout_b64": "dGd0PS07c3Y9LTtzbj0tO3MyPXQxNixpMCxkMDAwMDAwMDAwMDAwMDAwMCxzMjphYixwImFiIjtzdjI9MjphYjtzdm51bGw9LTtzdm51bT0tO24yPXQ4LGkxLGQzZmYwMDAwMDAwMDAwMDAwLHMtLHAxO3NuMj0zZmYwMDAwMDAwMDAwMDAwO2RvYz17fQ==",
+      "stdin_preview": "3ff0000000000000\tk\tab\u0000cd\n{}",
+      "stdout_preview": "tgt=-;sv=-;sn=-;s2=t16,i0,d0000000000000000,s2:ab,p\"ab\";sv2=2:ab;svnull=-;svnum=\u2026"
+    },
+    {
+      "id": "set-key-interior-nul",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "M2ZmMDAwMDAwMDAwMDAwMAlrAGV4dHJhCXgKeyJrIjoxfQ==",
+      "note": "an interior NUL in the KEY: the driver hands cJSON a C string, so the lookup is for `k` and it FINDS the target",
+      "rc": 0,
+      "stdout_b64": "dGd0PXQ4LGkxLGQzZmYwMDAwMDAwMDAwMDAwLHMtLHAxO3N2PS07c249M2ZmMDAwMDAwMDAwMDAwMDtzMj10MTYsaTAsZDAwMDAwMDAwMDAwMDAwMDAsczE6eCxwIngiO3N2Mj0xOng7c3ZudWxsPS07c3ZudW09LTtuMj10OCxpMSxkM2ZmMDAwMDAwMDAwMDAwMCxzLSxwMTtzbjI9M2ZmMDAwMDAwMDAwMDAwMDtkb2M9eyJrIjoxfQ==",
+      "stdin_preview": "3ff0000000000000\tk\u0000extra\tx\n{\"k\":1}",
+      "stdout_preview": "tgt=t8,i1,d3ff0000000000000,s-,p1;sv=-;sn=3ff0000000000000;s2=t16,i0,d0000000000\u2026"
+    },
+    {
+      "id": "set-newstr-high-bytes",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "M2ZmMDAwMDAwMDAwMDAwMAlrCf/+gAp7fQ==",
+      "note": "bytes 0x80-0xFF in the replacement: cJSON copies string content verbatim with no UTF-8 validation, and the printer emits them raw",
+      "rc": 0,
+      "stdout_b64": "dGd0PS07c3Y9LTtzbj0tO3MyPXQxNixpMCxkMDAwMDAwMDAwMDAwMDAwMCxzMzr//oAscCL//oAiO3N2Mj0zOv/+gDtzdm51bGw9LTtzdm51bT0tO24yPXQ4LGkxLGQzZmYwMDAwMDAwMDAwMDAwLHMtLHAxO3NuMj0zZmYwMDAwMDAwMDAwMDAwO2RvYz17fQ==",
+      "stdin_preview": "3ff0000000000000\tk\t\\xff\\xfe\\x80\n{}",
+      "stdout_preview": "tgt=-;sv=-;sn=-;s2=t16,i0,d0000000000000000,s3:\\xff\\xfe\\x80,p\"\\xff\\xfe\\x80\";sv2=\u2026"
+    },
+    {
+      "id": "set-newstr-control-byte",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "M2ZmMDAwMDAwMDAwMDAwMAlrCWEBYgp7fQ==",
+      "note": "a control byte: printed as \\u0001, so the raw bytes and the printed form differ",
+      "rc": 0,
+      "stdout_b64": "dGd0PS07c3Y9LTtzbj0tO3MyPXQxNixpMCxkMDAwMDAwMDAwMDAwMDAwMCxzMzphAWIscCJhXHUwMDAxYiI7c3YyPTM6YQFiO3N2bnVsbD0tO3N2bnVtPS07bjI9dDgsaTEsZDNmZjAwMDAwMDAwMDAwMDAscy0scDE7c24yPTNmZjAwMDAwMDAwMDAwMDA7ZG9jPXt9",
+      "stdin_preview": "3ff0000000000000\tk\ta\u0001b\n{}",
+      "stdout_preview": "tgt=-;sv=-;sn=-;s2=t16,i0,d0000000000000000,s3:a\u0001b,p\"a\\u0001b\";sv2=3:a\u0001b;svnull=\u2026"
+    },
+    {
+      "id": "set-target-string-with-interior-nul-no-write",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "M2ZmMDAwMDAwMDAwMDAwMAl6egl4CnsiayI6ImFcdTAwMDBiY2RlZiJ9",
+      "note": "a PARSED string carrying an interior NUL, but NOT targeted: pins that the descriptor's byte fields are C-string fields (the `set` target here is absent)",
+      "rc": 0,
+      "stdout_b64": "dGd0PS07c3Y9LTtzbj0tO3MyPXQxNixpMCxkMDAwMDAwMDAwMDAwMDAwMCxzMTp4LHAieCI7c3YyPTE6eDtzdm51bGw9LTtzdm51bT0tO24yPXQ4LGkxLGQzZmYwMDAwMDAwMDAwMDAwLHMtLHAxO3NuMj0zZmYwMDAwMDAwMDAwMDAwO2RvYz17ImsiOiJhIn0=",
+      "stdin_preview": "3ff0000000000000\tzz\tx\n{\"k\":\"a\\u0000bcdef\"}",
+      "stdout_preview": "tgt=-;sv=-;sn=-;s2=t16,i0,d0000000000000000,s1:x,p\"x\";sv2=1:x;svnull=-;svnum=-;n\u2026"
+    },
+    {
+      "id": "set-bits-junk",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "enoJbgl4CnsibiI6MX0=",
+      "note": "a non-hex bits field reads as 0 on both sides before any double exists",
+      "rc": 0,
+      "stdout_b64": "dGd0PXQ4LGkwLGQwMDAwMDAwMDAwMDAwMDAwLHMtLHAwO3N2PS07c249MDAwMDAwMDAwMDAwMDAwMDtzMj10MTYsaTAsZDAwMDAwMDAwMDAwMDAwMDAsczE6eCxwIngiO3N2Mj0xOng7c3ZudWxsPS07c3ZudW09LTtuMj10OCxpMCxkMDAwMDAwMDAwMDAwMDAwMCxzLSxwMDtzbjI9MDAwMDAwMDAwMDAwMDAwMDtkb2M9eyJuIjowfQ==",
+      "stdin_preview": "zz\tn\tx\n{\"n\":1}",
+      "stdout_preview": "tgt=t8,i0,d0000000000000000,s-,p0;sv=-;sn=0000000000000000;s2=t16,i0,d0000000000\u2026"
+    },
+    {
+      "id": "set-bits-empty",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "CW4JeAp7Im4iOjF9",
+      "note": "an empty bits field is also 0 -- the field is optional in effect, never an error",
+      "rc": 0,
+      "stdout_b64": "dGd0PXQ4LGkwLGQwMDAwMDAwMDAwMDAwMDAwLHMtLHAwO3N2PS07c249MDAwMDAwMDAwMDAwMDAwMDtzMj10MTYsaTAsZDAwMDAwMDAwMDAwMDAwMDAsczE6eCxwIngiO3N2Mj0xOng7c3ZudWxsPS07c3ZudW09LTtuMj10OCxpMCxkMDAwMDAwMDAwMDAwMDAwMCxzLSxwMDtzbjI9MDAwMDAwMDAwMDAwMDAwMDtkb2M9eyJuIjowfQ==",
+      "stdin_preview": "\tn\tx\n{\"n\":1}",
+      "stdout_preview": "tgt=t8,i0,d0000000000000000,s-,p0;sv=-;sn=0000000000000000;s2=t16,i0,d0000000000\u2026"
+    },
+    {
+      "id": "set-bits-uppercase",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "N0ZGMDAwMDAwMDAwMDAwMAluCXgKeyJuIjoxfQ==",
+      "note": "uppercase hex digits are accepted, giving +inf",
+      "rc": 0,
+      "stdout_b64": "dGd0PXQ4LGkyMTQ3NDgzNjQ3LGQ3ZmYwMDAwMDAwMDAwMDAwLHMtLHBudWxsO3N2PS07c249N2ZmMDAwMDAwMDAwMDAwMDtzMj10MTYsaTAsZDAwMDAwMDAwMDAwMDAwMDAsczE6eCxwIngiO3N2Mj0xOng7c3ZudWxsPS07c3ZudW09LTtuMj10OCxpMjE0NzQ4MzY0NyxkN2ZmMDAwMDAwMDAwMDAwMCxzLSxwbnVsbDtzbjI9N2ZmMDAwMDAwMDAwMDAwMDtkb2M9eyJuIjpudWxsfQ==",
+      "stdin_preview": "7FF0000000000000\tn\tx\n{\"n\":1}",
+      "stdout_preview": "tgt=t8,i2147483647,d7ff0000000000000,s-,pnull;sv=-;sn=7ff0000000000000;s2=t16,i0\u2026"
+    },
+    {
+      "id": "set-bits-seventeen-digits",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "M2ZmMDAwMDAwMDAwMDAwMGYJbgl4CnsibiI6MX0=",
+      "note": "17 hex digits: only the first 16 are read, so the trailing nibble is ignored rather than shifting the value",
+      "rc": 0,
+      "stdout_b64": "dGd0PXQ4LGkxLGQzZmYwMDAwMDAwMDAwMDAwLHMtLHAxO3N2PS07c249M2ZmMDAwMDAwMDAwMDAwMDtzMj10MTYsaTAsZDAwMDAwMDAwMDAwMDAwMDAsczE6eCxwIngiO3N2Mj0xOng7c3ZudWxsPS07c3ZudW09LTtuMj10OCxpMSxkM2ZmMDAwMDAwMDAwMDAwMCxzLSxwMTtzbjI9M2ZmMDAwMDAwMDAwMDAwMDtkb2M9eyJuIjoxfQ==",
+      "stdin_preview": "3ff0000000000000f\tn\tx\n{\"n\":1}",
+      "stdout_preview": "tgt=t8,i1,d3ff0000000000000,s-,p1;sv=-;sn=3ff0000000000000;s2=t16,i0,d0000000000\u2026"
+    },
+    {
+      "id": "set-bits-trailing-junk",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "M2ZmMHp6enoJbgl4CnsibiI6MX0=",
+      "note": "the scan stops at the first non-hex character, so this is 0x3ff0 -- a tiny subnormal, not 1.0",
+      "rc": 0,
+      "stdout_b64": "dGd0PXQ4LGkwLGQwMDAwMDAwMDAwMDAzZmYwLHMtLHA4LjA4Njg2NjQ5MTEyOTUyZS0zMjA7c3Y9LTtzbj0wMDAwMDAwMDAwMDAzZmYwO3MyPXQxNixpMCxkMDAwMDAwMDAwMDAwMDAwMCxzMTp4LHAieCI7c3YyPTE6eDtzdm51bGw9LTtzdm51bT0tO24yPXQ4LGkwLGQwMDAwMDAwMDAwMDAzZmYwLHMtLHA4LjA4Njg2NjQ5MTEyOTUyZS0zMjA7c24yPTAwMDAwMDAwMDAwMDNmZjA7ZG9jPXsibiI6OC4wODY4NjY0OTExMjk1MmUtMzIwfQ==",
+      "stdin_preview": "3ff0zzzz\tn\tx\n{\"n\":1}",
+      "stdout_preview": "tgt=t8,i0,d0000000000003ff0,s-,p8.08686649112952e-320;sv=-;sn=0000000000003ff0;s\u2026"
+    },
+    {
+      "id": "set-bits-short",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "OAluCXgKeyJuIjoxfQ==",
+      "note": "a single digit: 0x8, the eighth subnormal",
+      "rc": 0,
+      "stdout_b64": "dGd0PXQ4LGkwLGQwMDAwMDAwMDAwMDAwMDA4LHMtLHAzLjk1MjUyNTE2NjcyOTk3ZS0zMjM7c3Y9LTtzbj0wMDAwMDAwMDAwMDAwMDA4O3MyPXQxNixpMCxkMDAwMDAwMDAwMDAwMDAwMCxzMTp4LHAieCI7c3YyPTE6eDtzdm51bGw9LTtzdm51bT0tO24yPXQ4LGkwLGQwMDAwMDAwMDAwMDAwMDA4LHMtLHAzLjk1MjUyNTE2NjcyOTk3ZS0zMjM7c24yPTAwMDAwMDAwMDAwMDAwMDg7ZG9jPXsibiI6My45NTI1MjUxNjY3Mjk5N2UtMzIzfQ==",
+      "stdin_preview": "8\tn\tx\n{\"n\":1}",
+      "stdout_preview": "tgt=t8,i0,d0000000000000008,s-,p3.95252516672997e-323;sv=-;sn=0000000000000008;s\u2026"
+    },
+    {
+      "id": "set-nested-number-target",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "NDAwODAwMDAwMDAwMDAwMAluCXgKeyJhIjp7ImIiOjF9LCJuIjo3fQ==",
+      "note": "a nested document, target at top level: the rest of the tree must come back unchanged in doc=",
+      "rc": 0,
+      "stdout_b64": "dGd0PXQ4LGkzLGQ0MDA4MDAwMDAwMDAwMDAwLHMtLHAzO3N2PS07c249NDAwODAwMDAwMDAwMDAwMDtzMj10MTYsaTAsZDAwMDAwMDAwMDAwMDAwMDAsczE6eCxwIngiO3N2Mj0xOng7c3ZudWxsPS07c3ZudW09LTtuMj10OCxpMyxkNDAwODAwMDAwMDAwMDAwMCxzLSxwMztzbjI9NDAwODAwMDAwMDAwMDAwMDtkb2M9eyJhIjp7ImIiOjF9LCJuIjozfQ==",
+      "stdin_preview": "4008000000000000\tn\tx\n{\"a\":{\"b\":1},\"n\":7}",
+      "stdout_preview": "tgt=t8,i3,d4008000000000000,s-,p3;sv=-;sn=4008000000000000;s2=t16,i0,d0000000000\u2026"
+    },
+    {
+      "id": "set-usage-no-newline",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "M2ZmMDAwMDAwMDAwMDAwMAlrCXg=",
+      "note": "no newline: usage error, rc 2 with nothing on stdout",
+      "rc": 2,
+      "stdout_b64": "",
+      "stdin_preview": "3ff0000000000000\tk\tx",
+      "stdout_preview": ""
+    },
+    {
+      "id": "set-usage-one-tab",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "M2ZmMDAwMDAwMDAwMDAwMAlrCnt9",
+      "note": "only one tab: usage error",
+      "rc": 2,
+      "stdout_b64": "",
+      "stdin_preview": "3ff0000000000000\tk\n{}",
+      "stdout_preview": ""
+    },
+    {
+      "id": "set-usage-no-tabs",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "YWJjCnt9",
+      "note": "no tabs at all: usage error",
+      "rc": 2,
+      "stdout_b64": "",
+      "stdin_preview": "abc\n{}",
+      "stdout_preview": ""
+    },
+    {
+      "id": "set-usage-tab-after-newline",
+      "args": [
+        "set"
+      ],
+      "stdin_b64": "M2ZmMDAwMDAwMDAwMDAwMAp7fQlrCXg=",
+      "note": "the tabs must be in the HEAD line; one after the newline does not count",
+      "rc": 2,
+      "stdout_b64": "",
+      "stdin_preview": "3ff0000000000000\n{}\tk\tx",
+      "stdout_preview": ""
+    }
+  ],
+  "fingerprint": "15d898933c006e9447f3057afcf9dde977c99cbf50df54dbe63da42bf49498ea"
+}

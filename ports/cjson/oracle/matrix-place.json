@@ -1,0 +1,508 @@
+[
+ {
+  "name": "place-ins-at-front",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEwLDIwXQppbnMJCTA=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-ins-middle",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEwLDIwLDMwXQppbnMJCTE=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-ins-at-end-index",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEwLDIwXQppbnMJCTI=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-ins-past-end",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEsMl0KaW5zCQk5OQ==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-ins-into-empty",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "W10KaW5zCQkw",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-ins-negative",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEsMl0KaW5zCQktMQ==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-ins-then-append",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEwLDIwXQppbnMJCTAKYXBwCQk5OQ==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-ins-end-then-append",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEwLDIwXQppbnMJCTIKYXBwCQk5OQ==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-ins-empty-then-append",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "W10KaW5zCQkwCmFwcAkJOTk=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-ins-object-refused",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyJhIjoxLCJiIjoyfQppbnMJCTE=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-ins-scalar-refused",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyJhIjo3fQppbnMJYQkw",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-ins-missing-target",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEsMl0KaW5zCXp6CTA=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-ins-index-junk",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEsMl0KaW5zCQl6eg==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-ins-index-overflow",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEsMl0KaW5zCQk5OTk5OTk5OTk5OTk5OTk5OTk5OQ==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-ins-nested-array",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyJhIjpbMSwyXSwiYiI6OX0KaW5zCWEJMQphcHAJYQk3",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-rep-first",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEwLDIwLDMwXQpyZXAJCTAKYXBwCQk5OQ==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-rep-middle",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEwLDIwLDMwXQpyZXAJCTEKYXBwCQk5OQ==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-rep-last",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEwLDIwLDMwXQpyZXAJCTIKYXBwCQk5OQ==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-rep-only-element",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzQyXQpyZXAJCTAKYXBwCQk5OQ==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-rep-out-of-range",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzFdCnJlcAkJOQ==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-rep-negative",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEsMl0KcmVwCQktMQ==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-rep-empty",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "W10KcmVwCQkw",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-rep-object-refused",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyJhIjoxfQpyZXAJCTA=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-rep-nested",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyJhIjpbMSwyLDNdfQpyZXAJYQkx",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-ro-keeps-position",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyJhIjoxLCJiIjoyLCJjIjozfQpybwkJYg==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-ro-renames-key-case",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyJBIjoxfQpybwkJYQ==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-ros-is-case-sensitive",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyJBIjoxfQpyb3MJCWE=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-ro-duplicate-first-wins",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyJrIjoxLCJrIjoyfQpybwkJaw==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-ro-missing-key",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyJhIjoxfQpybwkJeno=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-ro-array-parent",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEsMl0Kcm8JCWs=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-ro-empty-object",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "e30Kcm8JCWs=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-ro-scalar-parent",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyJhIjo3fQpybwlhCWs=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-ro-empty-key",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyIiOjF9CnJvcwkJ",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-ro-nested",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyJvIjp7IngiOjEsInkiOjJ9fQpyb3MJbwl4",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-ro-then-detach",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyJhIjoxLCJiIjoyfQpybwkJYQpkb3MJCWE=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-ins-rep-app-mix",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEwLDIwLDMwXQppbnMJCTAKcmVwCQkyCmFwcAkJNwpkYQkJMQphcHAJCTg=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-rep-detach-append",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEsMiwzXQpyZXAJCTIKZGEJCTAKYXBwCQk5CmRhCQkyCmFwcAkJOA==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-ins-then-rep-same-index",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzVdCmlucwkJMApyZXAJCTAKYXBwCQk5",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-object-mix",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyJhIjoxLCJiIjoyfQpybwkJYQp4bwkJYgpyb3MJCWEKZG8JCUE=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-max-ops-truncates",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEsMiwzLDQsNSw2LDcsOCw5XQphcHAJCTEKYXBwCQkxCmFwcAkJMQphcHAJCTEKYXBwCQkxCmFwcAkJMQphcHAJCTEKYXBwCQkxCmFwcAkJMQphcHAJCTEKYXBwCQkxCmFwcAkJMQ==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-unknown-op",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEsMl0KPz8JCTAKYXBwCQk5",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-no-ops",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEsMiwzXQ==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-unparseable",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "e29vcHMKYXBwCQkx",
+  "expect_rc": 1,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-key-interior-nul",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyJhIjoxLCJiIjoyfQpybwkJYQB6egphcHAJCTE=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-arg-high-bytes",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "eyL//iI6MX0Kcm9zCQn//g==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ },
+ {
+  "name": "place-ops-after-nul",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzEsMl0KYXBwCQkxAAppbnMJCTA=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-place"
+  ]
+ }
+]

@@ -1,0 +1,264 @@
+{
+  "module": "entry-opts",
+  "modules": [
+    "entry-opts"
+  ],
+  "probes": [
+    {
+      "id": "opts-clean-rnt0",
+      "args": [
+        "opts"
+      ],
+      "stdin": "0\t16\t32\n{\"a\":[1,2],\"b\":\"xy\"}",
+      "note": "baseline: both parsers accept, both report the parse end at the last byte"
+    },
+    {
+      "id": "opts-rnt1-no-terminator",
+      "args": [
+        "opts"
+      ],
+      "stdin": "1\t16\t0\n{\"a\":[1,2],\"b\":\"xy\"}",
+      "note": "THE distinguishing case. require_null_terminated needs a NUL INSIDE the buffer: the length form has none and fails, the string form re-derives strlen+1 and therefore always has one"
+    },
+    {
+      "id": "opts-rnt1-with-terminator",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MQkxNgkwCnsiYSI6WzEsMl0sImIiOiJ4eSJ9AA==",
+      "note": "same bytes plus one NUL: now the length form accepts too"
+    },
+    {
+      "id": "opts-rnt1-trailing-whitespace",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MQkxNgkwCnsiYSI6MX0gICAA",
+      "note": "the option skips whitespace FIRST, and the reported end is after the skip (probed: 10, not 7) -- the back-up quirk in buffer_skip_whitespace is what lands the offset on the terminator"
+    },
+    {
+      "id": "opts-rnt1-trailing-garbage",
+      "args": [
+        "opts"
+      ],
+      "stdin": "1\t16\t0\n{\"a\":1}xyz",
+      "note": "trailing garbage: rejected by both parsers, error position at the garbage"
+    },
+    {
+      "id": "opts-rnt0-trailing-garbage",
+      "args": [
+        "opts"
+      ],
+      "stdin": "0\t16\t0\n{\"a\":1}xyz",
+      "note": "the same bytes without the option: accepted, end at 7 -- the laxness that require_null_terminated exists to turn off"
+    },
+    {
+      "id": "opts-embedded-nul",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MQkxNgkwCnsiYSI6MX0AZ2FyYmFnZQ==",
+      "note": "an embedded NUL splits the two entry points: the length form sees past it and rejects the garbage, the string form's strlen stops at it and accepts"
+    },
+    {
+      "id": "opts-err-object-key",
+      "args": [
+        "opts"
+      ],
+      "stdin": "0\t16\t0\n{bad",
+      "note": "cJSON's parse_string rewinds to a pointer initialized BEFORE it validates anything, so a non-quote object key reports the offset PAST it (2, not 1). This probe is the regression for a real port divergence"
+    },
+    {
+      "id": "opts-err-object-comma",
+      "args": [
+        "opts"
+      ],
+      "stdin": "0\t16\t0\n{,}",
+      "note": "same class, reached by a comma where a key belongs"
+    },
+    {
+      "id": "opts-err-trailing-comma",
+      "args": [
+        "opts"
+      ],
+      "stdin": "0\t16\t0\n{\"a\":1,}",
+      "note": "same class after a complete member: the C reports 8 for 8 bytes"
+    },
+    {
+      "id": "opts-err-array-element",
+      "args": [
+        "opts"
+      ],
+      "stdin": "0\t16\t0\n[1,bad",
+      "note": "parse_array's failure does NOT rewind -- the offset is where parse_value gave up (3), which is why the key case above is worth its own probe"
+    },
+    {
+      "id": "opts-err-unterminated-object",
+      "args": [
+        "opts"
+      ],
+      "stdin": "0\t16\t0\n{\"a\":1",
+      "note": "runs off the end: the position clamps to the last valid index"
+    },
+    {
+      "id": "opts-err-top-level",
+      "args": [
+        "opts"
+      ],
+      "stdin": "0\t16\t0\nxyzzy",
+      "note": "no value at all: position 0"
+    },
+    {
+      "id": "opts-err-whitespace-only",
+      "args": [
+        "opts"
+      ],
+      "stdin": "0\t16\t0\n   ",
+      "note": "whitespace only -- the skip walks onto the terminator and backs up, so the position is the last index, not 0"
+    },
+    {
+      "id": "opts-empty-input",
+      "args": [
+        "opts"
+      ],
+      "stdin": "0\t16\t8\n",
+      "note": "an empty document: the length form takes cJSON's `0 == buffer_length` refusal, the string form gets a 1-byte buffer holding only the NUL and fails in the parser instead"
+    },
+    {
+      "id": "opts-prebuffer-negative",
+      "args": [
+        "opts"
+      ],
+      "stdin": "0\t-1\t32\n{\"a\":[1,2],\"b\":\"xy\"}",
+      "note": "prebuffer < 0 is cJSON_PrintBuffered's ONLY guard (cJSON.c:1278) and the only behavior the prebuffer size has"
+    },
+    {
+      "id": "opts-prebuffer-zero",
+      "args": [
+        "opts"
+      ],
+      "stdin": "0\t0\t32\n{\"a\":[1,2],\"b\":\"xy\"}",
+      "note": "prebuffer 0 still grows: the buffer is not noalloc, so the bytes match an unbuffered print. (The C's answer here depends on malloc(0) being non-NULL; the port's does not -- DIVERGENCES.md, structural eliminations)"
+    },
+    {
+      "id": "opts-prebuffer-one",
+      "args": [
+        "opts"
+      ],
+      "stdin": "0\t1\t32\n{\"a\":[1,2],\"b\":\"xy\"}",
+      "note": "a prebuffer far smaller than the output: every ensure reallocs and the result is unchanged"
+    },
+    {
+      "id": "opts-prealloc-boundary-exact",
+      "args": [
+        "opts"
+      ],
+      "stdin": "0\t16\t22\n{\"a\":[1,2],\"b\":\"xy\"}",
+      "note": "strlen + 2, the smallest buffer that fits: the extra byte over strlen+1 is ensure's reserved NUL slot"
+    },
+    {
+      "id": "opts-prealloc-zero",
+      "args": [
+        "opts"
+      ],
+      "stdin": "0\t16\t0\n{\"a\":[1,2],\"b\":\"xy\"}",
+      "note": "a zero-length buffer: refused before anything is written"
+    },
+    {
+      "id": "opts-prealloc-negative",
+      "args": [
+        "opts"
+      ],
+      "stdin": "0\t16\t-5\n{\"a\":[1,2],\"b\":\"xy\"}",
+      "note": "length < 0 is refused by the MODE on both sides -- the port's &mut [u8] cannot spell a negative length, so the guard has no core to live in"
+    },
+    {
+      "id": "opts-prealloc-clamped",
+      "args": [
+        "opts"
+      ],
+      "stdin": "0\t16\t99999\n{\"a\":[1,2],\"b\":\"xy\"}",
+      "note": "a fuzz-sized request, clamped to CJSON_OPTS_MAX_BUF by both sides"
+    },
+    {
+      "id": "opts-formatted",
+      "args": [
+        "opts"
+      ],
+      "stdin": "2\t16\t40\n{\"a\":[1,2],\"b\":\"xy\"}",
+      "note": "format=1 exercises the separator, indent and close sites with their formatted lengths"
+    },
+    {
+      "id": "opts-formatted-nested",
+      "args": [
+        "opts"
+      ],
+      "stdin": "2\t16\t80\n{\"k\":{\"deep\":{\"x\":[1,{\"y\":2}]}}}",
+      "note": "nesting deep enough that print_object's close asks for depth+1, not 2"
+    },
+    {
+      "id": "opts-formatted-boundary",
+      "args": [
+        "opts"
+      ],
+      "stdin": "2\t16\t30\n{\"a\":[1,2],\"b\":\"xy\"}",
+      "note": "the formatted boundary is strlen+2 of the FORMATTED bytes, which is a different number from the unformatted one"
+    },
+    {
+      "id": "opts-formatted-rnt",
+      "args": [
+        "opts"
+      ],
+      "stdin_b64": "MwkxNgkwCnsiYSI6WzEsMl0sImIiOiJ4eSJ9AA==",
+      "note": "both bits set at once"
+    },
+    {
+      "id": "opts-scalar-null",
+      "args": [
+        "opts"
+      ],
+      "stdin": "0\t16\t6\nnull",
+      "note": "a bare literal: ensure(5) at offset 0, so 6 bytes is the boundary"
+    },
+    {
+      "id": "opts-scalar-false",
+      "args": [
+        "opts"
+      ],
+      "stdin": "0\t16\t7\nfalse",
+      "note": "the widest literal: ensure(6)"
+    },
+    {
+      "id": "opts-escaped-string",
+      "args": [
+        "opts"
+      ],
+      "stdin": "0\t16\t0\n[\"a\\\"b\\\\c\\nd\"]",
+      "note": "escapes make print_string's output_length exceed the input length, which is what its ensure is computed from"
+    },
+    {
+      "id": "opts-control-escape",
+      "args": [
+        "opts"
+      ],
+      "stdin": "0\t16\t0\n[\"\\u0001\"]",
+      "note": "a <32 byte costs 5 extra output bytes (\\u00xx), the other escape width"
+    },
+    {
+      "id": "opts-empty-containers",
+      "args": [
+        "opts"
+      ],
+      "stdin": "0\t16\t0\n{\"a\":[],\"b\":{}}",
+      "note": "empty array and object: the loops never run, so the open and close sites are adjacent"
+    },
+    {
+      "id": "opts-unparseable-doc",
+      "args": [
+        "opts"
+      ],
+      "stdin": "0\t16\t8\nnot json at all",
+      "note": "nothing parses: the printers still run their guards and report `-`"
+    }
+  ]
+}

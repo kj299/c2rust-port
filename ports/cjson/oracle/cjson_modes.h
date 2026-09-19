@@ -54,4 +54,181 @@ char *cjson_modes_access(const char *key, int index,
 char *cjson_modes_construct(long count, const char *name, const char *raw,
                             const unsigned char *payload, size_t payload_len);
 
+/* The two in-place SETTERS (LESSONS #26): cJSON_SetValuestring and
+ * cJSON_SetNumberHelper. `num` is the double to set, `key` selects a target
+ * inside `json` (case-sensitively), and `newstr` is the replacement string.
+ *
+ * Both setters run against the looked-up document item AND against freshly
+ * built nodes, so every guard each one has is reachable from one input: a
+ * missing target (the C's `object == NULL` check), a non-string target, a NULL
+ * replacement, and both sides of cJSON_SetValuestring's
+ * `strlen(new) <= strlen(old)` branch.
+ *
+ * Three of the C's behaviors here are deliberately NOT reachable from this
+ * mode, and each is recorded rather than quietly avoided:
+ *
+ *   - `cJSON_SetNumberHelper(NULL, d)` dereferences without a NULL check
+ *     (cJSON.c:385; only the cJSON_SetNumberValue MACRO guards it). That is a
+ *     NULL-deref in the ORACLE, which has no defined answer to compare
+ *     against, so the call is made only for a non-NULL target. The port has no
+ *     null item at all — see DIVERGENCES.md, "Structural eliminations".
+ *   - `cJSON_SetValuestring(item, item->valuestring + k)` is an OVERLAPPING
+ *     strcpy (cJSON.c:418) — undefined behavior, and ASan reports it as
+ *     `memcpy-param-overlap` (spikes/setvaluestring_alias.c). Same reason: UB
+ *     in the oracle is not a contract to compare. The port's signature takes
+ *     `&mut Value` plus a byte slice, so the aliasing cannot be spelled.
+ *   - the `cJSON_IsReference` guard needs a node built by
+ *     cJSON_CreateStringReference, which API-COVERAGE.md lists as
+ *     out-of-scope: the port never builds a borrowed-pointer node, so the
+ *     branch is unreachable rather than untested. A hardcoded `-` on the Rust
+ *     side would be a control nothing invokes (LESSONS #31).
+ *
+ * Returns NULL only on allocation failure; an unparseable `json` is reported
+ * in the descriptor (`doc=-`), not as an error, so the setters still run. */
+char *cjson_modes_set(double num, const char *key, const char *newstr,
+                      const char *json, size_t json_len);
+
+/* The REMOVAL and PLACEMENT surfaces -- cJSON_DetachItemFrom{Array,Object,
+ * ObjectCaseSensitive}, cJSON_DeleteItemFrom{Array,Object,ObjectCaseSensitive},
+ * cJSON_InsertItemInArray and cJSON_ReplaceItemIn{Array,Object,
+ * ObjectCaseSensitive} -- driven as a PROGRAM rather than a single shot.
+ *
+ * `ops` is a newline-separated list of `<opcode>\t<selector>\t<arg>` lines, at
+ * most CJSON_SEQ_MAX_OPS of them; the rest are ignored so the descriptor stays
+ * bounded whatever the fuzzer sends. The descriptor is emitted after EVERY step,
+ * not only at the end, which is the whole reason this mode exists: cJSON's
+ * detach rewires a doubly-linked child list whose `child->prev` doubles as the
+ * last-item cache, and a corruption there is invisible until some LATER,
+ * unrelated operation uses it (MUTATION-API-SPIKE.md H1b). A mode that compared
+ * only the final state would report MATCH on exactly the bug it exists to find.
+ *
+ *   opcode  entry point
+ *   ------  ---------------------------------------------------
+ *   da      cJSON_DetachItemFromArray(target, <arg as index>)
+ *   xa      cJSON_DeleteItemFromArray(target, <arg as index>)
+ *   do      cJSON_DetachItemFromObject(target, <arg>)             case-INsensitive
+ *   dos     cJSON_DetachItemFromObjectCaseSensitive(target, <arg>)
+ *   xo      cJSON_DeleteItemFromObject(target, <arg>)             case-INsensitive
+ *   xos     cJSON_DeleteItemFromObjectCaseSensitive(target, <arg>)
+ *   app     cJSON_AddItemToArray(target, cJSON_CreateNumber(<arg>))
+ *   ins     cJSON_InsertItemInArray(target, <arg as index>, Number(<arg>))
+ *   rep     cJSON_ReplaceItemInArray(target, <arg as index>, Number(<arg>))
+ *   ro      cJSON_ReplaceItemInObject(target, <arg>, Number(strlen(<arg>)))   case-INsensitive
+ *   ros     cJSON_ReplaceItemInObjectCaseSensitive(target, <arg>, ...)
+ *
+ * `app` is the WITNESS op, not a ported entry point -- it is how a corrupted
+ * last-item cache becomes visible, since an append is what CONSUMES it
+ * (LESSONS #39: a value-comparing differential never touches state no output
+ * depends on, so the mode has to contain the operation that reads it). Probed:
+ * detaching the first, middle, last or only element all leave a list whose next
+ * append still lands at the end.
+ *
+ * `selector` is empty for the root, else a case-sensitive key of the root
+ * object, so ops can reach one level down. Deliberate limits, both stated rather
+ * than left to be discovered:
+ *   - deeper nesting is not directly addressable. Adding a path grammar would
+ *     put the port's own tree walk on trial instead of the C's list surgery,
+ *     which is what this module is for.
+ *   - `app`, `ins` and `rep` run only when the target is an ARRAY. The C has no
+ *     such check on any of them and will happily hang a child off a scalar or
+ *     give an object a member with a NULL key; the port can represent neither.
+ *     The NULL-keyed member is worth spelling out, because an empty key is NOT
+ *     the same thing: the C's get_object_item stops its walk at a NULL string,
+ *     so a NULL-keyed member is UNFINDABLE, while a member keyed "" is found by
+ *     a lookup for "". A `Value::Object` entry has a key either way, so the port
+ *     cannot express "present but unfindable". That is the `scalar-parent-child`
+ *     class, it belongs to cJSON_AddItemTo*, and it is tracked as its own
+ *     increment -- see DIVERGENCES.md. Refusing it HERE is a scope decision, and
+ *     it is written down because an unstated one is indistinguishable from an
+ *     oversight.
+ *   - `ro`/`ros` are NOT restricted, because every way they can fail is
+ *     representable: a missing key, a non-object parent and an empty container
+ *     all just answer false on both sides.
+ *
+ * OWNERSHIP, in both directions, because the C splits it across the return
+ * value and every path has to be handled by hand:
+ *   - the detach entry points hand the caller ownership of the REMOVED node, so
+ *     every one printed here is cJSON_Delete'd immediately afterwards;
+ *   - insert and replace take ownership of the new node only when they SUCCEED.
+ *     On any failure path -- a negative index, a NULL item, a missing key, a
+ *     non-container parent -- the caller still owns it and must free it. Probed
+ *     the hard way: the first draft of this mode's probe leaked exactly there,
+ *     under `cJSON_InsertItemInArray(arr, -1, ...)`, and LeakSanitizer named it.
+ *
+ * Two placement behaviors worth knowing before reading the descriptor, both
+ * executed rather than inferred (spikes/place_relink.c):
+ *   - cJSON_InsertItemInArray with an index PAST THE END does not fail. It falls
+ *     through to add_item_to_array and APPENDS, so `ins 99` on a 2-element array
+ *     succeeds and grows it to 3.
+ *   - cJSON_ReplaceItemInObject RENAMES the replacement to the lookup string
+ *     before it looks anything up. A case-insensitive replace of `a` in
+ *     {"A":1} therefore leaves {"a":"..."} -- the key's spelling changes -- and
+ *     even a FAILED replace has already overwritten the caller's node->string.
+ *     The port consumes the replacement by value, so there is no caller-visible
+ *     node left to have been renamed; recorded in DIVERGENCES.md under
+ *     "Structural eliminations" rather than compared.
+ *
+ * Returns NULL when `json` does not parse (there is nothing to mutate) or on
+ * allocation failure. */
+#define CJSON_SEQ_MAX_OPS 8
+char *cjson_modes_seq(const char *json, size_t json_len,
+                      const char *ops, size_t ops_len);
+
+/* The four OPTIONS entry points in one shot (LESSONS #26): cJSON_ParseWithOpts,
+ * cJSON_ParseWithLengthOpts, cJSON_PrintBuffered and cJSON_PrintPreallocated.
+ *
+ * `flags` is a bit set: bit 0 = require_null_terminated (both parsers),
+ * bit 1 = format (both printers). `prebuffer` is cJSON_PrintBuffered's, passed
+ * through INCLUDING negatives -- that is the one behavior the prebuffer size
+ * has (cJSON.c:1278) -- but clamped above at CJSON_OPTS_MAX_BUF so a fuzzer
+ * cannot ask for a gigabyte. `prealloc` is cJSON_PrintPreallocated's buffer
+ * length, same treatment.
+ *
+ * `json` must be NUL-terminated at `json_len` (the driver's stdin buffer is):
+ * cJSON_ParseWithLengthOpts is given the explicit length and cJSON_ParseWithOpts
+ * the pointer, so the two entry points' differing views of the SAME bytes are
+ * both on the contract. That difference is the point -- `{"a":1}` with no
+ * terminator inside the length is rejected by the length form under
+ * require_null_terminated and accepted by the string form, which appends one.
+ *
+ * What the descriptor carries, and why each field is there rather than implied:
+ *
+ *   pwl/pwo      the two parses' results, printed, or `-`.
+ *   pwlend/pwoend  `*return_parse_end` as an OFFSET from `json`. This is the
+ *                whole distinct behavior of the *WithOpts pair and the reason
+ *                the mode exists; it is also deliberately NOT the error text,
+ *                which stays a documented divergence. Putting it on the
+ *                contract immediately found a real port divergence (cJSON's
+ *                parse_string rewinds to a pointer set before it validates
+ *                anything, so `{bad` reports 2, not 1).
+ *   pb           cJSON_PrintBuffered's bytes, length-prefixed.
+ *   ppa          cJSON_PrintPreallocated's cJSON_bool at `prealloc`.
+ *   ppabuf       the preallocated buffer AFTER the call, hex, having been
+ *                memset to 0 before it. Without this the intentional
+ *                divergence below is unmeasured, and a control nothing
+ *                observes is not a control (LESSONS #31/#40).
+ *   ppamin       the SMALLEST buffer length that succeeds, found by scanning.
+ *                One number that pins the entire `ensure` predicate, instead
+ *                of one sample of it per case. Probed to be `strlen + 2`: the
+ *                extra byte over `strlen + 1` is ensure's reserved NUL slot,
+ *                and a caller who sizes a buffer the obvious way gets `false`.
+ *
+ * Each scan step allocates EXACTLY the length it passes, rather than reusing
+ * one large buffer, so a write past the stated length is a heap overflow the
+ * oracle-sanitize gate will catch instead of silently landing in slack.
+ *
+ * Two of cJSON_PrintPreallocated's three refusals are not exercised here and
+ * both are recorded rather than quietly skipped: `buffer == NULL` and
+ * `length < 0` cannot be spelled against the port's `&mut [u8]`, so a Rust-side
+ * answer would be a hardcoded constant no code path reaches (LESSONS #31).
+ * The negative length IS handled -- by the mode on both sides, which answers
+ * false without calling the core -- and that is stated in DIVERGENCES.md under
+ * "Structural eliminations" alongside the NULL buffer.
+ *
+ * Returns NULL only on allocation failure; an unparseable document is reported
+ * in the descriptor, not as an error, so the printers' guards still run. */
+#define CJSON_OPTS_MAX_BUF 4096
+char *cjson_modes_opts(int flags, int prebuffer, int prealloc,
+                       const char *json, size_t json_len);
+
 #endif /* CJSON_MODES_H */

@@ -127,6 +127,24 @@ MUTATIONS = [
      "why": "a matrix case's raw bytes silently become empty stdin: the case still MATCHes",
      "cmd": ["harnesses/differential/diff_run.py", "--self-test"]},
 
+    # LESSONS #40: the oracle is code the PORT wrote, and a memory error in it
+    # changes no stdout — so both of these verdict predicates have to bite.
+    {"gate": "oracle-sanitize", "file": "harnesses/oracle-sanitize/sanitize_oracle.py",
+     "old": "    if any(m in err for m in REPORT_MARKERS):\n"
+            "        return \"\\n\".join(err.strip().splitlines()[:12])\n"
+            "    return None",
+     "new": "    return None",
+     "why": "the sanitized oracle's every complaint is discarded: a leaking or "
+            "out-of-bounds C driver reports clean",
+     "cmd": ["harnesses/oracle-sanitize/sanitize_oracle.py", "--self-test"]},
+
+    {"gate": "oracle-sanitize-instrumented", "file": "harnesses/oracle-sanitize/sanitize_oracle.py",
+     "old": "    if require_instrumented and not is_instrumented(oracle):",
+     "new": "    if False and not is_instrumented(oracle):",
+     "why": "an UNINSTRUMENTED binary is accepted, so the gate measures a "
+            "sanitizer that was never linked in",
+     "cmd": ["harnesses/oracle-sanitize/sanitize_oracle.py", "--self-test"]},
+
     {"gate": "control-coverage", "file": "harnesses/control-coverage/check_controls.py",
      "old": "    base = os.path.basename(control)\n"
             "    return any((control in text) or (base in text) for text in gate_texts)",

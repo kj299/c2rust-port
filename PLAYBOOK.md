@@ -101,6 +101,15 @@ winlsof's phase order was sound; its one miss was not spiking the hang first.
 - Lock the C binary at a known commit. Capture golden outputs across a
   **documented input matrix** (`harnesses/differential/input-matrix.example.toml`)
   with `harnesses/golden/golden.py capture`.
+- **Sanitize the DRIVER you wrote around the C** (LESSONS #40). A library needs a
+  CLI wrapper before a differential can execute it, and that wrapper is your C —
+  hand-sized buffers, hand-transferred ownership — compiled plain so it behaves
+  like the shipped library. A leak or an overread in it changes no stdout, so the
+  differential and the fuzzer both stay green over it, and the Rust-side
+  sanitizer gate never looks at C. Build a sanitized twin from the same sources
+  and run the matrix through it:
+  `harnesses/oracle-sanitize/sanitize_oracle.py --oracle <sanitized> --matrix <m>`.
+  cJSON's driver went fourteen modules unchecked this way.
 - **Detect oracle nondeterminism up front** — `golden.py` runs each input N times
   and flags fields that vary (PIDs, timestamps, addresses, ordering). Those feed
   the normalization rules (`harnesses/differential/normalize.py`), so a real
@@ -210,6 +219,15 @@ experiment on the one scary syscall/idiom to learn its behavior (does it block?
 need privilege? vary by version?) *before* committing to a design. Record the
 result. This is the single highest-ROI habit in the retrospective.
 
+Write the record from `skeleton/SPIKE.md`, and **label every hazard `ran:` or
+`read`** (LESSONS #38). Mixing the two silently lends the executed claims'
+credibility to the reasoned ones; the cJSON mutation spike ran its headline
+hazard, read its small ones, and the read one that called a line "memory-safe as
+written" was the only claim in the document that was wrong. A `read` row you are
+about to call benign must name the case you did not try — and naming it is
+usually enough to run it. Commit the reproducers under the port's `spikes/`
+(LESSONS #32).
+
 **For a *research-grade* capability — one that might be impossible, not merely
 hard** (winlsof: socket-FD correlation, byte-range locks, AF_UNIX/raw) — run the
 **spike-and-gate ritual** instead of an open-ended attempt (LESSONS #1). It was
@@ -227,6 +245,19 @@ Then the loop — each step is a CI-enforced gate:
    the "call-twice-for-size" buffer dance → a growing `Vec` with length checks;
    pointer arithmetic over structs → slices + `repr(C)` with bounds; unions/FAMs →
    audited casts with a `// SAFETY:` proof; integer math → checked/`saturating`.
+
+   **When you drop C machinery as "subsumed by a safer construct", name the
+   entry points that make it redundant** (LESSONS #41). That claim is quantified
+   over the surface you have ported, not over the code: cJSON's port dropped the
+   printbuffer's `ensure` bookkeeping because `Vec` growth subsumes it — true for
+   every printer then on the contract, and false eleven modules later when
+   `cJSON_PrintPreallocated` turned the same bookkeeping into its success
+   predicate. The reasoning was correct and re-reading it would not have caught
+   anything; what changed was the API surface. So write the list down where you
+   dropped it, and read `API-COVERAGE.md`'s `unported` rows as **assumptions
+   still outstanding**, not merely work still to do. This is the design-side dual
+   of LESSONS #26 (a gate judges only the surface the driver exposes) and it
+   fails the same way: silently, and only when the surface grows.
 2. **Differential-test** against the oracle (`harnesses/differential/diff_run.py`).
    A divergence is a *triage*, not an auto-fail: {Rust bug → fix} vs {C bug →
    log in `DIVERGENCES.md`, keep the safe behavior}. The verdict is **stdout AND
@@ -238,6 +269,14 @@ Then the loop — each step is a CI-enforced gate:
    `<<TIMEOUT>>` and fails it. Treat a timeout as a design smell (an unbounded
    blocking call on the hot path) — the winlsof fix was to *avoid* the blocking
    call, not wrap it.
+
+   **Before writing the mode, ask what state the C keeps that no output depends
+   on** (LESSONS #39) — a last-item cache, a length beside a pointer, a memoized
+   count, a free list, a dirty flag. A value-comparing differential never reads
+   any of it, so the mode must contain the operation that *consumes* it, or the
+   gate goes green over a field nothing touched. If the mode is multi-step, emit
+   the descriptor after every step: a corruption at step 2 that step 5 masks is
+   invisible to a final-state comparison.
 3. **Fuzz** the module's parse/input surface (`harnesses/fuzz/gen_fuzz_target.sh`
    scaffolds a `cargo-fuzz` target). Any crash/panic on untrusted input is a
    release blocker. Where a C oracle exists, also run **differential fuzzing**
@@ -246,6 +285,18 @@ Then the loop — each step is a CI-enforced gate:
    the fixed matrix never had. Each divergence is minimized to a committable
    reproducer and triaged like any other (fix the Rust, or ledger-pin the
    intentional fix-of-C-defect by fingerprint).
+
+   A *predicate-defined* divergence — one that fires for a whole class of inputs
+   rather than a nameable few — has no finite fingerprint set, so it needs a
+   **corrected reference oracle**: a patched copy of the C that shares the
+   port's decision, with the class asserted finitely against the PRISTINE oracle
+   in the matrix (LESSONS #28). **Then measure how wide that patch is**
+   (LESSONS #42): it is code you wrote against the subject under test, and if it
+   suppresses more than the ledgered class it suppresses real findings
+   invisibly — a clean report is this control's failure mode. So fuzz the same
+   mode against the pristine oracle too and classify every finding
+   **mechanically**, not by reading the first few hunks (which are the common
+   case by construction). Record both runs side by side.
 4. **Sanitize** (`harnesses/sanitizers/run_sanitizers.sh`): Miri over the pure
    logic and, for the `sys` layer, ASan/UBSan (and TSan if threaded). winlsof's
    worker-thread hang fix is exactly the class TSan/Miri reasoning catches.

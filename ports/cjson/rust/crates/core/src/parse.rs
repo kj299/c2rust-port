@@ -227,8 +227,37 @@ fn parse_object(buf: &mut ParseBuffer) -> Result<Value, ()> {
 /// bytes are the caller's laxness decision, exactly like C's
 /// `require_null_terminated=false` default.
 pub fn parse_with_length(bytes: &[u8]) -> Result<(Value, usize), ParseError> {
+    parse_with_length_opts(bytes, false)
+}
+
+/// cJSON.c:1104 `cJSON_ParseWithLengthOpts` in full, including the option the
+/// default entry points hard-code to false.
+///
+/// `require_null_terminated` is NOT "reject trailing garbage" — it is literally
+/// "the next byte after the whitespace must be a NUL that is INSIDE the
+/// buffer" (cJSON.c:1136). The distinction is the whole of the option's
+/// behavior and it only works because of `buffer_skip_whitespace`'s back-up
+/// quirk: NUL is `<= 32`, so the skip walks ONTO the terminator, hits
+/// `offset == length`, and steps back one — landing exactly on the NUL it then
+/// tests. Probed: a buffer of `strlen` bytes (no terminator) is REJECTED with
+/// `require_null_terminated`, and the same bytes plus one NUL are accepted.
+///
+/// The returned offset is the C's `*return_parse_end`, measured AFTER that
+/// whitespace skip — so `{"a":1}   \0` with the option set reports 10, not 7.
+///
+/// Two of the C's failure modes are unrepresentable here rather than handled:
+/// a NULL `value`, and a `buffer_length` that overstates the allocation (which
+/// is an out-of-bounds read in the C, with no defined answer to compare
+/// against — the port takes a slice, so the pair cannot disagree). Both are in
+/// DIVERGENCES.md under "Structural eliminations".
+pub fn parse_with_length_opts(
+    bytes: &[u8],
+    require_null_terminated: bool,
+) -> Result<(Value, usize), ParseError> {
     if bytes.is_empty() {
-        return Err(ParseError { position: 0 }); // C: 0 == buffer_length → fail
+        // C: `0 == buffer_length` → fail with a zeroed buffer, so the error
+        // position arithmetic below yields 0.
+        return Err(ParseError { position: 0 });
     }
     let mut buf = ParseBuffer {
         content: bytes,
@@ -237,19 +266,60 @@ pub fn parse_with_length(bytes: &[u8]) -> Result<(Value, usize), ParseError> {
     };
     skip_utf8_bom(&mut buf);
     skip_whitespace(&mut buf);
-    match parse_value(&mut buf) {
-        Ok(v) => Ok((v, buf.offset)),
-        Err(()) => {
-            // cJSON.c:1160: position = offset if still in-bounds, else the
-            // last valid index.
-            let position = if buf.offset < bytes.len() {
-                buf.offset
-            } else {
-                bytes.len().saturating_sub(1)
-            };
-            Err(ParseError { position })
+    // cJSON.c:1160: position = offset if still in-bounds, else the last valid
+    // index. Computed from wherever the buffer stopped, which for the
+    // require_null_terminated failure is AFTER its whitespace skip.
+    let fail = |buf: &ParseBuffer| ParseError {
+        position: if buf.offset < bytes.len() {
+            buf.offset
+        } else {
+            bytes.len().saturating_sub(1)
+        },
+    };
+    let value = match parse_value(&mut buf) {
+        Ok(v) => v,
+        Err(()) => return Err(fail(&buf)),
+    };
+    if require_null_terminated {
+        skip_whitespace(&mut buf);
+        // cJSON.c:1136 — `(buffer.offset >= buffer.length) ||
+        // buffer_at_offset(&buffer)[0] != '\0'`. A checked `get` collapses the
+        // two disjuncts into one total expression: out of range IS the first
+        // one, and it is the half that rejects a buffer with no terminator
+        // (the second rejects trailing garbage).
+        if bytes.get(buf.offset).copied() != Some(0) {
+            return Err(fail(&buf));
         }
     }
+    Ok((value, buf.offset))
+}
+
+/// cJSON.c:1088 `cJSON_ParseWithOpts` — the same parse over a buffer the C
+/// derives from the argument itself: `strlen(value) + 1`.
+///
+/// That derivation is the entry point's only distinct behavior, and it has two
+/// consequences worth naming rather than inheriting silently:
+///
+/// * an embedded NUL truncates the document — the C never sees the bytes past
+///   it, so `{"a":1}\0garbage` parses as `{"a":1}` under either option value;
+/// * `buffer_length` is never 0, so `cJSON_ParseWithLengthOpts`' empty-buffer
+///   refusal is unreachable from here. An empty string gives a 1-byte buffer
+///   holding just the NUL, which fails in the parser instead.
+///
+/// `c_string` is what the C caller's `const char *` points at; the terminator
+/// is reconstructed here rather than required of the caller.
+pub fn parse_with_opts(
+    c_string: &[u8],
+    require_null_terminated: bool,
+) -> Result<(Value, usize), ParseError> {
+    let n = c_string
+        .iter()
+        .position(|&b| b == 0)
+        .unwrap_or(c_string.len());
+    let mut buf = Vec::with_capacity(n.saturating_add(1));
+    buf.extend_from_slice(&c_string[..n]);
+    buf.push(0);
+    parse_with_length_opts(&buf, require_null_terminated)
 }
 
 #[cfg(test)]
@@ -287,6 +357,58 @@ mod tests {
         let (v, consumed) = parse(b"123 456").unwrap();
         assert!(matches!(v, Value::Number(n) if n.d == 123.0));
         assert_eq!(consumed, 3);
+    }
+
+    /// Every assertion here is a PROBED oracle answer, not a reading of the
+    /// source (LESSONS #38).
+    #[test]
+    fn require_null_terminated_matches_probed_c() {
+        // The terminator must be INSIDE the buffer: identical bytes, one extra
+        // NUL, opposite answers. This is the option's actual contract and the
+        // thing "reject trailing garbage" gets wrong.
+        assert!(parse_with_length_opts(b"{\"a\":1}", true).is_err());
+        assert!(parse_with_length_opts(b"{\"a\":1}\0", true).is_ok());
+
+        // Trailing whitespace is skipped first, and the reported end is AFTER
+        // the skip: probed end_off = 10 for these 11 bytes.
+        let (_, end) = parse_with_length_opts(b"{\"a\":1}   \0", true).unwrap();
+        assert_eq!(end, 10);
+        // Without the option, the end is where the value stopped.
+        let (_, end) = parse_with_length_opts(b"{\"a\":1}   \0", false).unwrap();
+        assert_eq!(end, 7);
+
+        // Trailing garbage: rejected with the option, accepted without it, and
+        // the error position is where the garbage starts (probed err=7).
+        assert_eq!(
+            parse_with_length_opts(b"{\"a\":1}trailing\0", true),
+            Err(ParseError { position: 7 })
+        );
+        assert!(parse_with_length_opts(b"{\"a\":1}trailing\0", false).is_ok());
+
+        // A parse failure reports the parser's position regardless of the
+        // option (probed: `{bad` → end=2, err=2).
+        assert_eq!(
+            parse_with_length_opts(b"{bad\0", true),
+            Err(ParseError { position: 2 })
+        );
+    }
+
+    #[test]
+    fn parse_with_opts_derives_the_buffer_like_c() {
+        // strlen + 1, so the terminator is always present and
+        // require_null_terminated succeeds on a clean document.
+        assert!(parse_with_opts(b"{\"a\":1}", true).is_ok());
+        assert!(parse_with_opts(b"{\"a\":1}trailing", true).is_err());
+
+        // An embedded NUL truncates: the C's strlen never sees past it.
+        let (v, end) = parse_with_opts(b"{\"a\":1}\0garbage", true).unwrap();
+        assert!(matches!(v, Value::Object(_)));
+        assert_eq!(end, 7);
+
+        // An empty string gives a 1-byte buffer (just the NUL), so the
+        // empty-buffer refusal is unreachable and the parser rejects instead.
+        assert!(parse_with_opts(b"", false).is_err());
+        assert!(parse_with_opts(b"   ", false).is_err());
     }
 
     #[test]

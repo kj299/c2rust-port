@@ -25,6 +25,15 @@ directive "the C may be buggy — don't re-port a CVE" (RETROSPECTIVE §9).
    (b) surfaced (never silently patched — the most dangerous UB option), and (c)
    shipped as a release note. This is the "decide in writing what you do with UB"
    policy, mechanized.
+
+   **A hit you triage as benign by READING is a hypothesis, not a verdict**
+   (LESSONS #38). cJSON's `cJSON_SetValuestring` `strcpy` was hit #4 of 17; the
+   triage checked the destination buffer was always long enough, wrote "correct
+   in C given the NULL checks above it", and was right about buffer sizing and
+   wrong about the flaw — nothing stops the *source* pointing into the
+   destination, and ASan says `strcpy-param-overlap` the first time you run it.
+   Before calling a sink benign, write the ten-line program that would show it
+   isn't. If you can't think of one, record that sentence instead of "safe".
 4. Feed confirmed flaws into `THREAT-MODEL.md` §6 and into the module's test vectors
    (add a boundary/hostile-input case that exercises the fix).
 5. **Write the record from `skeleton/FLAW-SCAN.md`, keeping both of its

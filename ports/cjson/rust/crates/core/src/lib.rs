@@ -22,6 +22,11 @@
 //!   6. dom — ✅ (core) `dom`: constructors, accessors, Add builders,
 //!      Compare, Duplicate (= clone). Custom-allocator parity DROPPED (a
 //!      thread-safety hazard, ledgered).
+//!  15. entry-opts — ✅ the four *WithOpts*/buffered entry points:
+//!      `parse_with_length_opts` (`require_null_terminated` and the parse-end
+//!      offset), `parse_with_opts` (the C's `strlen + 1` buffer),
+//!      `print_buffered` and `print_preallocated` — the last of which put the
+//!      C's `ensure` accounting back on the compared contract (see `print`).
 //!
 //! The C-ABI FFI cdylib (`crates/ffi`, `libcjson_rs.so`) wraps this core and is
 //! ABI-differentially verified drop-in against the pristine C `.so` (lib_diff,
@@ -43,6 +48,6 @@ pub mod utils;
 pub mod value;
 
 pub use minify::minify;
-pub use parse::{parse_with_length, ParseError};
-pub use print::print_value;
+pub use parse::{parse_with_length, parse_with_length_opts, parse_with_opts, ParseError};
+pub use print::{print_buffered, print_preallocated, print_value};
 pub use value::{Number, Value};

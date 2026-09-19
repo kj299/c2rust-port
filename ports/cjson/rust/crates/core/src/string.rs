@@ -118,6 +118,16 @@ pub fn parse_string(buf: &mut ParseBuffer) -> Result<Vec<u8>, ()> {
     let content = buf.content;
     let start = buf.offset;
     if content.get(start) != Some(&b'"') {
+        // cJSON.c:783-784 initialize `input_pointer`/`input_end` to
+        // `buffer_at_offset(input_buffer) + 1` BEFORE this check, and the
+        // `fail:` label at cJSON.c:893 rewinds to `input_pointer`
+        // unconditionally — so even "the first byte is not a quote" reports a
+        // position one PAST the offending byte. Missing this was a real port
+        // divergence, latent from module 3 until `opts` put the parse end
+        // offset on the compared contract: `{bad` reports 2 in the C and
+        // reported 1 here. Pinned in `not_a_quote_reports_the_c_offset` below
+        // and asserted against the oracle by matrix-opts.json.
+        buf.offset = start.saturating_add(1);
         return Err(());
     }
 
@@ -227,6 +237,28 @@ mod tests {
             depth: 0,
         };
         parse_string(&mut buf)
+    }
+
+    /// Regression for the offset divergence `opts` surfaced: cJSON.c's
+    /// `fail:` label rewinds to `input_pointer`, which is initialized to
+    /// `offset + 1` before anything is validated — so a byte that is not even
+    /// a quote reports a position PAST it. Probed against the oracle:
+    /// `cJSON_ParseWithOpts("{bad", &end, 0)` reports end offset 2.
+    #[test]
+    fn not_a_quote_reports_the_c_offset() {
+        for (input, at, want) in [
+            (&b"{bad"[..], 1, 2), // object key that is not a string
+            (&b"{,}"[..], 1, 2),  // ditto, comma
+            (&b"bad"[..], 0, 1),  // at the very start
+        ] {
+            let mut buf = ParseBuffer {
+                content: input,
+                offset: at,
+                depth: 0,
+            };
+            assert!(parse_string(&mut buf).is_err());
+            assert_eq!(buf.offset, want, "input {input:?} at {at}");
+        }
     }
 
     // Expectations below are OBSERVED oracle behavior (probed 2026-07-25).

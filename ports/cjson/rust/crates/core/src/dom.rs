@@ -236,6 +236,36 @@ pub fn get_object_item<'a>(v: &'a Value, name: &[u8], case_sensitive: bool) -> O
         .map(|(_, val)| val)
 }
 
+/// [`get_object_item`], but handing back a mutable borrow so the in-place
+/// setters can be applied to a member of a parsed document.
+///
+/// In C this distinction does not exist: `cJSON_GetObjectItem` returns a plain
+/// `cJSON *` and the caller may write through it whenever it likes, including
+/// after the document has been freed. Here the returned borrow keeps the
+/// document alive and exclusive for exactly as long as it is held, which is what
+/// makes `cJSON_SetValuestring`'s aliasing hazard unspellable (see
+/// [`set_valuestring`]).
+#[must_use]
+pub fn get_object_item_mut<'a>(
+    v: &'a mut Value,
+    name: &[u8],
+    case_sensitive: bool,
+) -> Option<&'a mut Value> {
+    let Value::Object(entries) = v else {
+        return None;
+    };
+    entries
+        .iter_mut()
+        .find(|(k, _)| {
+            if case_sensitive {
+                strcmp_eq(k, name)
+            } else {
+                eq_ci(k, name)
+            }
+        })
+        .map(|(_, val)| val)
+}
+
 /// cJSON.c `cJSON_GetArraySize` — counts the node's CHILDREN, whatever the node
 /// is: the C walks `array->child` and follows `next`, so an *object* reports its
 /// member count, not 0.
@@ -296,6 +326,23 @@ pub fn value_string(v: &Value) -> Option<&[u8]> {
     }
 }
 
+/// C `valuedouble`. Every node the C builds comes from `cJSON_New_Item`, which
+/// `memset`s the struct to zero, and only `parse_number` / `cJSON_CreateNumber`
+/// / `cJSON_SetNumberHelper` ever write the field — so a non-number reads 0.0.
+///
+/// The port's enum reproduces that for every node it can build. The one place it
+/// cannot is `cJSON_SetNumberHelper`, which writes `valuedouble` (and
+/// `valueint`) with **no type check at all**, leaving a `cJSON_String` node
+/// carrying a number. See [`set_number`] — that is a ledgered divergence, and
+/// this accessor is how the `set` driver mode makes it visible.
+#[must_use]
+pub fn value_double(v: &Value) -> f64 {
+    match v {
+        Value::Number(n) => n.d,
+        _ => 0.0,
+    }
+}
+
 // ---- type predicates (cJSON_Is*) -------------------------------------------
 
 /// `cJSON_IsBool` answers true for BOTH `True` and `False`, so a `true` value
@@ -336,6 +383,335 @@ is_variant!(/// `cJSON_IsObject`
 #[must_use]
 pub fn is_invalid(_v: &Value) -> bool {
     false
+}
+
+// ---- in-place setters (cJSON_Set*) -----------------------------------------
+
+/// cJSON.c:403 `cJSON_SetValuestring` — replace a string node's text in place.
+/// `None` for a non-string target or a `None` replacement, matching the C's two
+/// NULL-returning guards; otherwise the new (NUL-truncated) bytes.
+///
+/// **Three of the C's behaviors are designed out rather than reproduced**, and
+/// the differential cannot see any of them, which is why they are written here:
+///
+/// 1. **The overlapping `strcpy` (cJSON.c:418) — a live UB defect.** The C's
+///    "new is no longer than old" fast path is
+///    `strcpy(object->valuestring, valuestring)`, and nothing stops the caller
+///    passing a pointer *into that same buffer* — `cJSON_SetValuestring(item,
+///    item->valuestring + 2)` is a plausible "strip a prefix" call and is an
+///    overlapping copy, undefined per C17 7.24.2.3. Not theoretical: ASan
+///    reports `memcpy-param-overlap` at cJSON.c:418 (`spikes/setvaluestring_alias.c`,
+///    FLAW-SCAN.md L4). Here the target is `&mut Value` and the replacement is a
+///    separate slice, so a caller cannot name both at once — the borrow checker
+///    rejects it at compile time.
+/// 2. **The `object->valuestring == NULL` guard** is unreachable for the port:
+///    `Value::String` always owns its bytes, and the only C nodes that can carry
+///    a NULL `valuestring` while claiming to be strings come from
+///    `cJSON_CreateStringReference`, which API-COVERAGE.md refuses as
+///    out-of-scope.
+/// 3. **The `cJSON_IsReference` guard**, for the same reason — the port never
+///    builds a borrowed-pointer node.
+///
+/// What the differential DOES compare is the observable result: which calls
+/// answer NULL, and what the node's text is afterwards. The C's length branch is
+/// crossed in both directions by the `set` driver mode but is not
+/// *distinguishable* from outside — both paths leave `valuestring` equal to the
+/// new C string and return it (DIVERGENCES.md, "Structural eliminations").
+pub fn set_valuestring<'a>(v: &'a mut Value, s: Option<&[u8]>) -> Option<&'a [u8]> {
+    let s = s?;
+    match v {
+        Value::String(cur) => {
+            // `cstr`, not the whole slice: the C copies with `strcpy`, so an
+            // interior NUL ends the value here exactly as it does in every
+            // other constructor (LESSONS #29).
+            //
+            // Unlike the other boundaries, this one is a CANONICALIZATION the
+            // differential cannot see, and saying so beats implying otherwise.
+            // Deleting the `cstr` was injected deliberately and the `set` matrix
+            // stayed green: the C physically cannot store an interior NUL here
+            // (it arrives through a `const char *`), and every reader on both
+            // sides — the printer, `strcmp_eq`, the descriptor's `sb_bytes`
+            // counterpart — truncates, so the extra bytes are unreachable. It is
+            // still right to drop them: `Value` equality and any future
+            // full-bytes consumer would otherwise see a state parsing can
+            // produce but this setter should not. Pinned by
+            // `set_valuestring_truncates_at_a_nul`, which is the only thing
+            // holding it.
+            *cur = cstr(s).to_vec();
+            Some(cur.as_slice())
+        }
+        _ => None,
+    }
+}
+
+/// cJSON.c:384 `cJSON_SetNumberHelper` — the function behind the
+/// `cJSON_SetNumberValue` macro. Returns the number it was given, as the C does
+/// (`return object->valuedouble = number;`).
+///
+/// **INTENTIONAL DIVERGENCE: the C performs NO TYPE CHECK.** It writes
+/// `valueint` and `valuedouble` into whatever node it is handed, so
+/// `cJSON_SetNumberValue(a_string_node, 5)` leaves a node whose `type` says
+/// `cJSON_String` and whose `valuedouble` says 5 — a type-confused state no
+/// accessor will ever report (`cJSON_GetNumberValue` checks `cJSON_IsNumber`
+/// first) but that any caller reading the public struct fields will see. The
+/// port cannot represent it: `Value::String` has no number to write. So the
+/// operation is a no-op on a non-number, which is also the safer answer — the
+/// inconsistent state is unrepresentable rather than merely undocumented.
+/// Ledgered as `set-*-type-confusion` (6 rows) and pinned by the `set` matrix,
+/// which shows the target's `type`/`valueint`/`valuedouble` precisely so the
+/// divergence is measured rather than asserted (LESSONS #31).
+///
+/// Nobody found this by reading. The mutation spike read this same function
+/// twice — H4 for its missing NULL check, H5 for the NaN cast below — and
+/// neither pass noticed the missing type check; the `set` driver mode's first
+/// non-number target did (LESSONS #38).
+///
+/// **INTENTIONAL DIVERGENCE for NaN**, identical to [`number`]'s: a NaN falls
+/// past both of the C's saturation guards into `(int)number`, which is UB
+/// (C17 6.3.1.4p1) and answers INT_MIN on x86-64 and 0 on AArch64. Sharing
+/// [`number`] is what gives the port the defined answer here for free —
+/// DIVERGENCES.md `set-number-nan-valueint`.
+///
+/// **STRUCTURAL ELIMINATION: the missing NULL check.** The exported symbol
+/// dereferences `object` immediately; only the macro guards it, so a caller who
+/// links against `cJSON_SetNumberHelper` (it is `CJSON_PUBLIC`) gets a
+/// NULL-deref. `&mut Value` has no null state, so the hazard does not exist
+/// here — and it cannot be differentially tested either, because the C's answer
+/// to it is a segfault, not a value.
+pub fn set_number(v: &mut Value, d: f64) -> f64 {
+    if matches!(v, Value::Number(_)) {
+        *v = number(d);
+    }
+    d
+}
+
+// ---- removal (cJSON_Detach* / cJSON_DeleteItemFrom*) -----------------------
+//
+// **`cJSON_DetachItemViaPointer` is not here, and that is a refusal, not a gap**
+// (API-COVERAGE.md lists it `out-of-scope`). Its signature is
+// `(cJSON *parent, cJSON *item)` and it never checks that `item` is a child of
+// `parent`; MUTATION-API-SPIKE.md H1 reproduces a NULL-pointer WRITE and a
+// silent cross-document corruption from two valid public-API pointers. The port
+// cannot express that contract at all: `Value` is an owned tree with no parent
+// pointers and no sibling list, so you cannot hold a child while separately
+// naming its parent. The borrow checker refusing to let the H1 state exist IS
+// the port's answer.
+//
+// This family is also where the C's REDUNDANT state lives: `parent->child->prev`
+// is a last-item cache, nothing printable depends on it, and a detach is exactly
+// what rewrites it. That is why the `seq` driver mode carries an append op
+// (LESSONS #39) — without one, the differential compares the normalized tree
+// very thoroughly and never reads the cache at all.
+//
+// The four entry points below are the ones the C reaches THROUGH that function,
+// and they are safe in the C for a reason worth stating: each looks the item up
+// inside the parent first (`get_array_item` / `get_object_item`), so the missing
+// membership check is satisfied by construction. Probed, not assumed — detaching
+// the first, middle, last and only element each leave a list whose next append
+// still lands at the end (`spikes/detach_relink.c`).
+
+/// What the C's detach entry points hand back: the removed node, plus the key it
+/// still carries.
+///
+/// cJSON leaves `item->string` set on a detached object member — the node
+/// remembers the key it used to be filed under, and a caller that re-adds it
+/// elsewhere carries that key along. Modelling it explicitly is what lets the
+/// `seq` driver mode show it; a bare `Value` would have silently dropped it and
+/// no gate would have noticed.
+///
+/// `key` is `None` when the parent was an array (its children have no key), and
+/// `Some` when it was an object — including for [`detach_from_array`], because
+/// the C's index walk has no type check and will happily take the *n*-th member
+/// of an object.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Detached {
+    /// C `item->string`, retained on the detached node.
+    pub key: Option<Vec<u8>>,
+    /// The node itself. Owning it here is the difference from the C, where the
+    /// caller gets a pointer it must remember to `cJSON_Delete`.
+    pub value: Value,
+}
+
+/// First index whose key matches, by the same rule the C's `get_object_item`
+/// uses — `strcmp` or `tolower`-insensitive, both C-string compares.
+fn find_object_index(
+    entries: &[(Vec<u8>, Value)],
+    name: &[u8],
+    case_sensitive: bool,
+) -> Option<usize> {
+    entries.iter().position(|(k, _)| {
+        if case_sensitive {
+            strcmp_eq(k, name)
+        } else {
+            eq_ci(k, name)
+        }
+    })
+}
+
+/// cJSON.c:2246 `cJSON_DetachItemFromArray`. `None` for a negative index (the
+/// C's own guard, applied at the driver boundary where a signed index still
+/// exists), an out-of-range one, or a parent with no children.
+///
+/// **Not array-only**, exactly like [`get_array_item`]: the C walks
+/// `parent->child` `index` times with no type check, so index 0 of an OBJECT
+/// detaches its first member — and the returned node keeps that member's key.
+/// Probed against v1.7.18 (`{"a":1,"b":2}` index 0 → the node `1` with
+/// `string == "a"`, leaving `{"b":2}`), because this file has shipped the
+/// array-only reading wrong three times before by asserting it in a doc comment
+/// nothing exercised.
+pub fn detach_from_array(container: &mut Value, index: usize) -> Option<Detached> {
+    match container {
+        Value::Array(items) if index < items.len() => Some(Detached {
+            key: None,
+            value: items.remove(index),
+        }),
+        Value::Object(entries) if index < entries.len() => {
+            let (key, value) = entries.remove(index);
+            Some(Detached {
+                key: Some(key),
+                value,
+            })
+        }
+        _ => None,
+    }
+}
+
+/// cJSON.c:2251 `cJSON_DeleteItemFromArray` — detach, then free. Here the free
+/// is the drop, so the "detached but never deleted" leak the C invites is not
+/// expressible: the value is either bound or gone.
+pub fn delete_from_array(container: &mut Value, index: usize) {
+    drop(detach_from_array(container, index));
+}
+
+/// cJSON.c:2256 `cJSON_DetachItemFromObject` (`case_sensitive == false`) and
+/// :2262 `cJSON_DetachItemFromObjectCaseSensitive` (`true`).
+///
+/// Duplicate keys resolve to the FIRST match, like the C's list walk, so
+/// detaching twice removes both in order (probed). A non-object parent answers
+/// `None`: the C's `get_object_item` compares `->string`, and an array's
+/// children have none.
+pub fn detach_from_object(
+    container: &mut Value,
+    name: &[u8],
+    case_sensitive: bool,
+) -> Option<Detached> {
+    let Value::Object(entries) = container else {
+        return None;
+    };
+    let at = find_object_index(entries, name, case_sensitive)?;
+    let (key, value) = entries.remove(at);
+    Some(Detached {
+        key: Some(key),
+        value,
+    })
+}
+
+/// cJSON.c:2268 `cJSON_DeleteItemFromObject` (`case_sensitive == false`) and
+/// :2273 `cJSON_DeleteItemFromObjectCaseSensitive` (`true`). The C's version is
+/// `cJSON_Delete(cJSON_DetachItemFromObject(...))`, and `cJSON_Delete(NULL)` is
+/// a no-op — so deleting a missing key is silently fine on both sides (probed).
+pub fn delete_from_object(container: &mut Value, name: &[u8], case_sensitive: bool) {
+    drop(detach_from_object(container, name, case_sensitive));
+}
+
+// ---- placement (cJSON_InsertItemInArray / cJSON_ReplaceItemIn*) ------------
+//
+// `cJSON_ReplaceItemViaPointer` is **out-of-scope**, for the same reason as
+// `cJSON_DetachItemViaPointer` and then some: it takes `(parent, item)` without
+// checking that `item` belongs to `parent`, and it *frees* `item` after
+// relinking — so calling it with a node from another tree leaves that tree
+// holding freed memory (MUTATION-API-SPIKE.md H2, a use-after-free primitive
+// rather than merely a wrong answer). `Value` has no parent pointers, so the
+// aliasing that makes it dangerous cannot be spelled here at all.
+//
+// All three functions below take the new value BY VALUE. That is the C's
+// ownership rule made structural: `cJSON_InsertItemInArray` and
+// `cJSON_ReplaceItemIn*` adopt the node only when they succeed, and on every
+// failure path the caller is still responsible for freeing it. In the C that is
+// a rule you have to remember — the first draft of this module's own probe
+// forgot it and LeakSanitizer caught the `which < 0` case, which is what put
+// the C oracle itself under a sanitizer (LESSONS #40). Here the value is simply
+// dropped when the call fails.
+
+/// cJSON.c:2280 `cJSON_InsertItemInArray`.
+///
+/// **An index past the end is not an error.** The C looks the position up with
+/// `get_array_item`, and when that answers NULL it falls through to
+/// `add_item_to_array` — so `insert(arr, 99, v)` on a 2-element array APPENDS
+/// and returns true (probed; `spikes/place_relink.c`). Only a negative index or
+/// a NULL item make it fail, and neither is representable in this signature, so
+/// both guards live at the driver boundary.
+///
+/// Array parents only. The C has no type check and would insert into an object
+/// — producing a member with a NULL key, which is *not* the same as a member
+/// keyed `""`: the C's `get_object_item` stops its walk at a NULL string, so
+/// such a member can never be found again, while `""` can. A `Value::Object`
+/// entry always has a key, so "present but unfindable" is unrepresentable.
+/// DIVERGENCES.md `scalar-parent-child`.
+pub fn insert_in_array(array: &mut Value, index: usize, item: Value) -> bool {
+    let Value::Array(items) = array else {
+        return false;
+    };
+    // `min`, not a bounds check: past-the-end is the append path, not a failure.
+    items.insert(index.min(items.len()), item);
+    true
+}
+
+/// cJSON.c:2320 `cJSON_ReplaceItemInArray`.
+///
+/// Unlike insert, an out-of-range index here IS a failure: `get_array_item`
+/// answers NULL and `cJSON_ReplaceItemViaPointer` rejects a NULL item. An empty
+/// container fails too, via that function's `parent->child == NULL` guard.
+/// Array parents only, for the same reason as [`insert_in_array`].
+pub fn replace_in_array(array: &mut Value, index: usize, item: Value) -> bool {
+    let Value::Array(items) = array else {
+        return false;
+    };
+    match items.get_mut(index) {
+        Some(slot) => {
+            *slot = item;
+            true
+        }
+        None => false,
+    }
+}
+
+/// cJSON.c:2331 `cJSON_ReplaceItemInObject` (`case_sensitive == false`) and
+/// :2336 `cJSON_ReplaceItemInObjectCaseSensitive` (`true`).
+///
+/// **The key is rewritten to the LOOKUP string, not kept.** `replace_item_in_object`
+/// frees the replacement's `->string` and strdups the `string` argument into it
+/// before looking anything up, so a case-INsensitive replace of `a` in
+/// `{"A":1}` leaves `{"a":…}` — the member's spelling changes to whatever the
+/// caller asked for. Probed, because it is the opposite of what "replace the
+/// item at this key" suggests.
+///
+/// The position is preserved and duplicate keys resolve to the first match.
+/// A non-object parent, a missing key and an empty container all answer false.
+///
+/// One C behavior is deliberately absent: the rename happens *before* the
+/// lookup, so a FAILED replace has already overwritten the caller's node. Here
+/// the replacement is consumed by value, so there is no caller-visible node left
+/// to have been mutated — DIVERGENCES.md, "Structural eliminations".
+pub fn replace_in_object(
+    object: &mut Value,
+    name: &[u8],
+    item: Value,
+    case_sensitive: bool,
+) -> bool {
+    let Value::Object(entries) = object else {
+        return false;
+    };
+    let Some(at) = find_object_index(entries, name, case_sensitive) else {
+        return false;
+    };
+    let Some(slot) = entries.get_mut(at) else {
+        return false;
+    };
+    // `cstr`: the C strdups the name with `cJSON_strdup`, which is strlen-based.
+    slot.0 = cstr(name).to_vec();
+    slot.1 = item;
+    true
 }
 
 // ---- builders (Add*) -------------------------------------------------------
@@ -726,5 +1102,377 @@ mod tests {
             print_value(&root, false).unwrap(),
             br#"{"k":{"unescaped":"quotes"}}"#.to_vec()
         );
+    }
+
+    /// DIVERGENCES.md `set-*-type-confusion`. The C writes `valueint` and
+    /// `valuedouble` into whatever node it is handed; the port refuses, so the
+    /// node stays exactly what it was. The RETURN value still matches the C's
+    /// (`return object->valuedouble = number` gives back `number` either way),
+    /// which is why only the struct-field view of the target diverges.
+    #[test]
+    fn set_number_on_a_non_number_leaves_the_node_alone_but_returns_the_number() {
+        for mut v in [
+            Value::String(b"text".to_vec()),
+            Value::True,
+            Value::Null,
+            Value::Array(vec![Value::Null]),
+            Value::Object(Vec::new()),
+            Value::Raw(b"1".to_vec()),
+        ] {
+            let before = v.clone();
+            assert_eq!(set_number(&mut v, 3.0), 3.0);
+            assert_eq!(v, before, "set_number must not touch a non-number");
+            assert_eq!(value_double(&v), 0.0);
+        }
+        // ...and on a real number it does the whole job.
+        let mut n = number(1.0);
+        assert_eq!(set_number(&mut n, -7.5), -7.5);
+        assert_eq!(value_int(&n), -7);
+        assert_eq!(value_double(&n), -7.5);
+    }
+
+    /// DIVERGENCES.md `set-nan-*`: the second site of the `(int)NaN` cast. The
+    /// port answers the DEFINED 0 rather than x86-64's INT_MIN, and it does so
+    /// by sharing one helper with `cJSON_CreateNumber` rather than by having a
+    /// second copy of the rule that could drift.
+    #[test]
+    fn set_number_nan_valueint_is_zero_at_this_site_too() {
+        for nan in [f64::NAN, -f64::NAN, f64::from_bits(0x7ff0_0000_0000_0001)] {
+            let mut n = number(1.0);
+            set_number(&mut n, nan);
+            assert_eq!(value_int(&n), 0);
+            assert!(value_double(&n).is_nan());
+        }
+    }
+
+    /// The saturation guards are `>=` and `<=`, so both boundaries land on the
+    /// guard rather than on the cast (cJSON.c:386-395).
+    #[test]
+    fn set_number_saturation_boundaries_are_inclusive() {
+        let mut n = number(0.0);
+        set_number(&mut n, f64::from(i32::MAX));
+        assert_eq!(value_int(&n), i32::MAX);
+        set_number(&mut n, f64::from(i32::MIN));
+        assert_eq!(value_int(&n), i32::MIN);
+        set_number(&mut n, f64::INFINITY);
+        assert_eq!(value_int(&n), i32::MAX);
+        set_number(&mut n, f64::NEG_INFINITY);
+        assert_eq!(value_int(&n), i32::MIN);
+    }
+
+    /// Both of the C's NULL-returning guards, and the fact that a refused call
+    /// changes nothing.
+    #[test]
+    fn set_valuestring_refuses_a_non_string_or_a_missing_replacement() {
+        let mut n = number(1.0);
+        assert!(set_valuestring(&mut n, Some(b"x")).is_none());
+        assert_eq!(n, number(1.0));
+
+        let mut s = Value::String(b"keep".to_vec());
+        assert!(set_valuestring(&mut s, None).is_none());
+        assert_eq!(s, Value::String(b"keep".to_vec()));
+    }
+
+    /// LESSONS #29 at this boundary too: the C copies with `strcpy`, so an
+    /// interior NUL ends the value however many bytes the caller passed.
+    ///
+    /// **This test is the only thing pinning it.** Removing the `cstr` call was
+    /// injected into the port deliberately and the `set` differential stayed
+    /// green over all 52 matrix rows — the C cannot represent the difference and
+    /// every reader truncates, so it is a canonicalization rather than an
+    /// observable behavior. Which is exactly why it needs a unit test: the gate
+    /// that would normally catch a regression here cannot.
+    #[test]
+    fn set_valuestring_truncates_at_a_nul() {
+        let mut s = Value::String(b"original".to_vec());
+        assert_eq!(set_valuestring(&mut s, Some(b"ab\0cd")), Some(&b"ab"[..]));
+        assert_eq!(s, Value::String(b"ab".to_vec()));
+    }
+
+    /// The C picks between an in-place `strcpy` and a fresh allocation on
+    /// `strlen(new) <= strlen(old)`. Both sides must leave the same value, which
+    /// is the whole reason the branch is invisible to the differential — pinned
+    /// here so a future port that grows two paths has to keep them agreeing.
+    ///
+    /// The C's in-place path is also where its overlapping-`strcpy` UB lives
+    /// (FLAW-SCAN.md L4). There is no test for that here because there is
+    /// nothing to test: `set_valuestring(&mut v, Some(<bytes borrowed from v>))`
+    /// does not compile, which is the entire fix.
+    #[test]
+    fn set_valuestring_gives_the_same_answer_on_both_sides_of_the_length_branch() {
+        // shorter than the old value: the C reuses the buffer
+        let mut short = Value::String(b"0123456789".to_vec());
+        assert_eq!(set_valuestring(&mut short, Some(b"ab")), Some(&b"ab"[..]));
+        // longer: the C allocates a new one and frees the old
+        let mut long = Value::String(b"a".to_vec());
+        assert_eq!(set_valuestring(&mut long, Some(b"ab")), Some(&b"ab"[..]));
+        assert_eq!(short, long);
+        // exactly equal: `<=` puts this on the in-place side
+        let mut eq = Value::String(b"xy".to_vec());
+        assert_eq!(set_valuestring(&mut eq, Some(b"ab")), Some(&b"ab"[..]));
+        assert_eq!(eq, long);
+    }
+
+    /// The C's index walk has NO type check, so `cJSON_DetachItemFromArray` on
+    /// an object takes its *n*-th member — and the detached node keeps that
+    /// member's key. Probed against v1.7.18 (`spikes/detach_relink.c` Q1); this
+    /// file has asserted the array-only reading in a doc comment and shipped it
+    /// wrong three times, so it is pinned rather than described.
+    #[test]
+    fn detach_from_array_is_not_array_only_and_keeps_the_key() {
+        let mut obj = Value::Object(vec![
+            (b"a".to_vec(), number(1.0)),
+            (b"b".to_vec(), number(2.0)),
+        ]);
+        let got = detach_from_array(&mut obj, 0).unwrap();
+        assert_eq!(got.key.as_deref(), Some(&b"a"[..]));
+        assert_eq!(got.value, number(1.0));
+        assert_eq!(print_value(&obj, false).unwrap(), br#"{"b":2}"#.to_vec());
+
+        // an array element has no key to keep
+        let mut arr = Value::Array(vec![number(1.0), number(2.0)]);
+        assert_eq!(detach_from_array(&mut arr, 1).unwrap().key, None);
+    }
+
+    /// Every guard `cJSON_DetachItemFromArray` has, and the fact that a refused
+    /// call leaves the container alone.
+    #[test]
+    fn detach_from_array_guards() {
+        let before = Value::Array(vec![number(1.0), number(2.0)]);
+        let mut v = before.clone();
+        assert!(detach_from_array(&mut v, 2).is_none()); // past the end
+        assert!(detach_from_array(&mut v, usize::MAX).is_none());
+        assert_eq!(v, before);
+        // no children at all: a scalar, and an empty container
+        assert!(detach_from_array(&mut number(7.0), 0).is_none());
+        assert!(detach_from_array(&mut Value::Array(Vec::new()), 0).is_none());
+        assert!(detach_from_array(&mut Value::Object(Vec::new()), 0).is_none());
+    }
+
+    /// The case flag is the *only* difference between the two exported detach
+    /// entry points, so it is pinned in both directions.
+    #[test]
+    fn detach_from_object_case_flag_is_the_whole_difference() {
+        let mut v = Value::Object(vec![(b"K".to_vec(), number(1.0))]);
+        assert!(detach_from_object(&mut v, b"k", true).is_none());
+        let got = detach_from_object(&mut v, b"k", false).unwrap();
+        assert_eq!(got.key.as_deref(), Some(&b"K"[..]));
+        assert_eq!(v, Value::Object(Vec::new()));
+    }
+
+    /// Duplicate keys resolve to the first match, so detaching twice removes
+    /// both in order — the C walks a list and stops at the first hit.
+    #[test]
+    fn detach_from_object_takes_duplicates_in_order() {
+        let mut v = Value::Object(vec![
+            (b"k".to_vec(), number(1.0)),
+            (b"k".to_vec(), number(2.0)),
+        ]);
+        assert_eq!(
+            detach_from_object(&mut v, b"k", true).unwrap().value,
+            number(1.0)
+        );
+        assert_eq!(
+            detach_from_object(&mut v, b"k", true).unwrap().value,
+            number(2.0)
+        );
+        assert!(detach_from_object(&mut v, b"k", true).is_none());
+    }
+
+    /// A non-object parent answers None: the C compares `->string`, and an
+    /// array's children have none. An EMPTY key, by contrast, is a real key the
+    /// lookup can find — the distinction the C draws between "" and NULL.
+    #[test]
+    fn detach_from_object_on_an_array_and_on_an_empty_key() {
+        let mut arr = Value::Array(vec![number(1.0)]);
+        assert!(detach_from_object(&mut arr, b"k", true).is_none());
+        assert!(detach_from_object(&mut arr, b"", true).is_none());
+
+        let mut v = Value::Object(vec![(b"".to_vec(), number(9.0))]);
+        assert_eq!(
+            detach_from_object(&mut v, b"", true).unwrap().value,
+            number(9.0)
+        );
+    }
+
+    /// Delete is detach-then-drop, and deleting something absent is a silent
+    /// no-op on both sides (the C's `cJSON_Delete(NULL)`).
+    #[test]
+    fn delete_is_detach_then_drop_and_tolerates_absence() {
+        let mut v = Value::Array(vec![number(1.0), number(2.0), number(3.0)]);
+        delete_from_array(&mut v, 1);
+        assert_eq!(print_value(&v, false).unwrap(), b"[1,3]".to_vec());
+        delete_from_array(&mut v, 99); // out of range: nothing happens
+        assert_eq!(print_value(&v, false).unwrap(), b"[1,3]".to_vec());
+
+        let mut o = Value::Object(vec![(b"a".to_vec(), number(1.0))]);
+        delete_from_object(&mut o, b"zz", true);
+        assert_eq!(get_array_size(&o), 1);
+        delete_from_object(&mut o, b"a", true);
+        assert_eq!(get_array_size(&o), 0);
+    }
+
+    /// The invariant the whole `seq` mode exists to watch: after a detach from
+    /// any position, the container still appends at the END. In the C that is
+    /// `child->prev` — a last-item cache a bad relink corrupts silently, with
+    /// the damage only visible on the next append (MUTATION-API-SPIKE.md H1b).
+    /// A `Vec` has no such cache, which is why the port cannot have the bug;
+    /// pinned anyway, because "cannot have it" is a claim about a
+    /// representation someone may later change.
+    #[test]
+    fn detaching_from_any_position_leaves_a_container_that_still_appends_last() {
+        for (at, want) in [
+            (0usize, &b"[20,30,99]"[..]),
+            (1, &b"[10,30,99]"[..]),
+            (2, &b"[10,20,99]"[..]),
+        ] {
+            let mut v = Value::Array(vec![number(10.0), number(20.0), number(30.0)]);
+            detach_from_array(&mut v, at);
+            add_item_to_array(&mut v, number(99.0));
+            assert_eq!(print_value(&v, false).unwrap(), want.to_vec(), "at {at}");
+        }
+        // and the single-element case, where the C's list goes empty entirely
+        let mut v = Value::Array(vec![number(42.0)]);
+        detach_from_array(&mut v, 0);
+        add_item_to_array(&mut v, number(99.0));
+        assert_eq!(print_value(&v, false).unwrap(), b"[99]".to_vec());
+    }
+
+    /// `get_object_item_mut` must resolve duplicate keys the way the C's list
+    /// walk does — first match wins — or a setter would land on the wrong node.
+    #[test]
+    fn get_object_item_mut_takes_the_first_duplicate_key() {
+        let mut root = Value::Object(vec![
+            (b"k".to_vec(), number(1.0)),
+            (b"k".to_vec(), number(2.0)),
+        ]);
+        let target = get_object_item_mut(&mut root, b"k", true).unwrap();
+        set_number(target, 9.0);
+        assert_eq!(
+            print_value(&root, false).unwrap(),
+            br#"{"k":9,"k":2}"#.to_vec()
+        );
+        // ...and it is case-sensitive when asked to be, like its shared-name
+        // read-only twin.
+        assert!(get_object_item_mut(&mut root, b"K", true).is_none());
+        assert!(get_object_item_mut(&mut root, b"K", false).is_some());
+    }
+
+    /// The behavior of `cJSON_InsertItemInArray` most likely to surprise a
+    /// reader of its name: an index past the end is not rejected, it appends.
+    /// Probed against v1.7.18 (`spikes/place_relink.c`).
+    #[test]
+    fn insert_past_the_end_appends_rather_than_failing() {
+        let mut arr = Value::Array(vec![number(1.0), number(2.0)]);
+        assert!(insert_in_array(&mut arr, 99, number(7.0)));
+        assert_eq!(print_value(&arr, false).unwrap(), b"[1,2,7]".to_vec());
+        // exactly `len` is the same path
+        let mut arr = Value::Array(vec![number(1.0)]);
+        assert!(insert_in_array(&mut arr, 1, number(7.0)));
+        assert_eq!(print_value(&arr, false).unwrap(), b"[1,7]".to_vec());
+        // and an empty array accepts index 0
+        let mut arr = Value::Array(Vec::new());
+        assert!(insert_in_array(&mut arr, 0, number(7.0)));
+        assert_eq!(print_value(&arr, false).unwrap(), b"[7]".to_vec());
+    }
+
+    /// Insert shifts, replace overwrites — and replace is the one where an
+    /// out-of-range index IS a failure.
+    #[test]
+    fn insert_shifts_and_replace_overwrites_at_every_position() {
+        for (at, want) in [(0, "[7,10,20]"), (1, "[10,7,20]"), (2, "[10,20,7]")] {
+            let mut arr = Value::Array(vec![number(10.0), number(20.0)]);
+            assert!(insert_in_array(&mut arr, at, number(7.0)));
+            assert_eq!(print_value(&arr, false).unwrap(), want.as_bytes());
+        }
+        for (at, want) in [(0, "[7,20,30]"), (1, "[10,7,30]"), (2, "[10,20,7]")] {
+            let mut arr = Value::Array(vec![number(10.0), number(20.0), number(30.0)]);
+            assert!(replace_in_array(&mut arr, at, number(7.0)));
+            assert_eq!(print_value(&arr, false).unwrap(), want.as_bytes());
+        }
+        let mut arr = Value::Array(vec![number(1.0)]);
+        assert!(!replace_in_array(&mut arr, 9, number(7.0)));
+        assert_eq!(print_value(&arr, false).unwrap(), b"[1]".to_vec());
+        let mut empty = Value::Array(Vec::new());
+        assert!(!replace_in_array(&mut empty, 0, number(7.0)));
+    }
+
+    /// Both refuse a non-array parent. The C does not, and the trees it builds
+    /// instead — a child hung off a scalar, an object member with a NULL key —
+    /// are unrepresentable here. DIVERGENCES.md `scalar-parent-child`; the `seq`
+    /// mode declines to compare the case rather than pretending it is tested.
+    #[test]
+    fn placement_refuses_a_non_array_parent() {
+        for mut v in [
+            Value::Object(vec![(b"a".to_vec(), number(1.0))]),
+            Value::String(b"s".to_vec()),
+            number(7.0),
+            Value::Null,
+        ] {
+            let before = v.clone();
+            assert!(!insert_in_array(&mut v, 0, number(5.0)));
+            assert!(!replace_in_array(&mut v, 0, number(5.0)));
+            assert_eq!(v, before);
+        }
+    }
+
+    /// DIVERGENCES.md and `spikes/place_relink.c`: the C strdups the LOOKUP
+    /// string into the replacement's key before it looks anything up, so a
+    /// case-insensitive replace rewrites the member's spelling.
+    #[test]
+    fn replace_in_object_rewrites_the_key_to_the_lookup_string() {
+        let mut obj = Value::Object(vec![(b"A".to_vec(), number(1.0))]);
+        assert!(replace_in_object(&mut obj, b"a", number(9.0), false));
+        assert_eq!(print_value(&obj, false).unwrap(), br#"{"a":9}"#.to_vec());
+
+        // the case-SENSITIVE twin finds nothing and changes nothing
+        let mut obj = Value::Object(vec![(b"A".to_vec(), number(1.0))]);
+        assert!(!replace_in_object(&mut obj, b"a", number(9.0), true));
+        assert_eq!(print_value(&obj, false).unwrap(), br#"{"A":1}"#.to_vec());
+    }
+
+    /// Position is preserved, duplicates resolve to the first match, and every
+    /// unusable parent answers false rather than doing something creative.
+    #[test]
+    fn replace_in_object_keeps_the_slot_and_guards_the_rest() {
+        let mut obj = Value::Object(vec![
+            (b"a".to_vec(), number(1.0)),
+            (b"b".to_vec(), number(2.0)),
+            (b"c".to_vec(), number(3.0)),
+        ]);
+        assert!(replace_in_object(&mut obj, b"b", number(9.0), true));
+        assert_eq!(
+            print_value(&obj, false).unwrap(),
+            br#"{"a":1,"b":9,"c":3}"#.to_vec()
+        );
+
+        let mut dup = Value::Object(vec![
+            (b"k".to_vec(), number(1.0)),
+            (b"k".to_vec(), number(2.0)),
+        ]);
+        assert!(replace_in_object(&mut dup, b"k", number(9.0), true));
+        assert_eq!(
+            print_value(&dup, false).unwrap(),
+            br#"{"k":9,"k":2}"#.to_vec()
+        );
+
+        assert!(!replace_in_object(
+            &mut Value::Object(Vec::new()),
+            b"k",
+            number(1.0),
+            true
+        ));
+        assert!(!replace_in_object(
+            &mut Value::Array(vec![number(1.0)]),
+            b"k",
+            number(1.0),
+            true
+        ));
+        assert!(!replace_in_object(
+            &mut number(7.0),
+            b"k",
+            number(1.0),
+            true
+        ));
     }
 }

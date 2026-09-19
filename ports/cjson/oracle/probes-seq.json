@@ -1,0 +1,392 @@
+{
+  "module": "dom-mutate-remove",
+  "modules": [
+    "dom-mutate-remove"
+  ],
+  "probes": [
+    {
+      "id": "seq-detach-first-then-append",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[10,20,30]\nda\t\t0\napp\t\t99\n",
+      "note": "detach the FIRST element, then append: the C's child->prev is its last-item cache, and this is where a corrupted one would surface. Single-shot modes report MATCH on the detach itself"
+    },
+    {
+      "id": "seq-detach-middle-then-append",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[10,20,30]\nda\t\t1\napp\t\t99\n",
+      "note": "same for the middle element -- the relink touches prev->next and next->prev"
+    },
+    {
+      "id": "seq-detach-last-then-append",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[10,20,30]\nda\t\t2\napp\t\t99\n",
+      "note": "same for the last: this is the branch that writes through parent->child->prev, the exact line MUTATION-API-SPIKE.md H1a reproduces a NULL write on"
+    },
+    {
+      "id": "seq-detach-only-then-append",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[42]\nda\t\t0\napp\t\t99\n",
+      "note": "the single-element list: parent->child becomes NULL and the next append must start a fresh one"
+    },
+    {
+      "id": "seq-detach-all-then-append",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[1,2]\nda\t\t0\nda\t\t0\napp\t\t7\n",
+      "note": "empty the list entirely, then append -- the cache must not survive as a dangling pointer"
+    },
+    {
+      "id": "seq-detach-array-empty",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[]\nda\t\t0\n",
+      "note": "an empty array: get_array_item answers NULL, so DetachItemViaPointer's item==NULL guard returns NULL"
+    },
+    {
+      "id": "seq-detach-index-negative",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[1,2]\nda\t\t-1\n",
+      "note": "which < 0 is DetachItemFromArray's OWN guard (cJSON.c:2248), returning before the lookup"
+    },
+    {
+      "id": "seq-detach-index-out-of-range",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[1,2]\nda\t\t99\n",
+      "note": "past the end: the child walk runs out and answers NULL"
+    },
+    {
+      "id": "seq-detach-index-junk",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[1,2]\nda\t\tzz\n",
+      "note": "a non-numeric index reads as 0 on both sides before cJSON sees an int"
+    },
+    {
+      "id": "seq-detach-index-overflow-high",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[1,2]\nda\t\t2147483648\n",
+      "note": "an index past INT_MAX saturates rather than wrapping -- a wraparound would turn it into a valid index"
+    },
+    {
+      "id": "seq-detach-index-overflow-low",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[1,2]\nda\t\t-2147483649\n",
+      "note": "and past INT_MIN, which then hits the negative guard"
+    },
+    {
+      "id": "seq-detach-index-leading-space",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[1,2,3]\nda\t\t  2\n",
+      "note": "strtol skips leading whitespace; both sides must"
+    },
+    {
+      "id": "seq-detach-index-plus",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[1,2,3]\nda\t\t+1\n",
+      "note": "an explicit + sign"
+    },
+    {
+      "id": "seq-detach-object-by-index",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"a\":1,\"b\":2}\nda\t\t0\n",
+      "note": "DetachItemFromArray on an OBJECT: get_array_item has NO type check, so index 0 takes the first MEMBER -- and the detached node keeps its key (key=1:a). This file has shipped the array-only reading wrong three times"
+    },
+    {
+      "id": "seq-detach-object-by-index-then-append",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"a\":1,\"b\":2}\nda\t\t0\napp\t\t5\n",
+      "note": "and the object's list relinks the same way; the append is refused because the target is not an array"
+    },
+    {
+      "id": "seq-detach-scalar-root",
+      "args": [
+        "seq"
+      ],
+      "stdin": "7\nda\t\t0\nxa\t\t0\n",
+      "note": "a scalar has no child, so both the detach and the delete are no-ops -- size stays 0"
+    },
+    {
+      "id": "seq-detach-object-ci-hit",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"K\":1}\ndo\t\tk\n",
+      "note": "cJSON_DetachItemFromObject is CASE-INSENSITIVE, so `k` finds `K`"
+    },
+    {
+      "id": "seq-detach-object-cs-miss",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"K\":1}\ndos\t\tk\n",
+      "note": "cJSON_DetachItemFromObjectCaseSensitive is not -- the same input answers NULL. The pair only differs here"
+    },
+    {
+      "id": "seq-detach-object-cs-hit",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"k\":1,\"K\":2}\ndos\t\tk\ndos\t\tk\n",
+      "note": "case-sensitive against both spellings present: the first detach takes `k`, the second finds nothing"
+    },
+    {
+      "id": "seq-detach-dupkey-twice",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"k\":1,\"k\":2}\ndo\t\tk\ndo\t\tk\ndo\t\tk\n",
+      "note": "duplicate keys resolve to the FIRST match, so detaching twice removes both in order and the third finds nothing"
+    },
+    {
+      "id": "seq-detach-object-on-array",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[1,2]\ndo\t\tk\ndos\t\tk\n",
+      "note": "get_object_item compares ->string and an array's children have none, so both spellings answer NULL on an array"
+    },
+    {
+      "id": "seq-detach-empty-key",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"\":1,\"a\":2}\ndos\t\t\ndo\t\t\n",
+      "note": "an EMPTY key is a real key (distinct from the NULL key an array child carries): the case-sensitive lookup finds it"
+    },
+    {
+      "id": "seq-delete-array-past-empty",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[1,2,3]\nxa\t\t0\nxa\t\t0\nxa\t\t0\nxa\t\t0\n",
+      "note": "DeleteItemFromArray returns void, so the descriptor reads r=- and the effect shows in sz/doc. The fourth call is on an empty array"
+    },
+    {
+      "id": "seq-delete-object-ci",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"K\":1,\"b\":2}\nxo\t\tk\n",
+      "note": "DeleteItemFromObject is case-INsensitive, matching its Detach twin"
+    },
+    {
+      "id": "seq-delete-object-cs",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"K\":1,\"k\":2}\nxos\t\tk\n",
+      "note": "DeleteItemFromObjectCaseSensitive removes only the exact spelling"
+    },
+    {
+      "id": "seq-delete-missing-key",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"a\":1}\nxo\t\tzz\nxos\t\tzz\n",
+      "note": "a missing key means cJSON_Delete(NULL), which is a documented no-op -- probed, because a crash here would be the obvious failure mode"
+    },
+    {
+      "id": "seq-delete-then-detach-same",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[1,2,3]\nxa\t\t1\nda\t\t1\n",
+      "note": "delete shifts the indices, so the following detach at the same index takes a different element"
+    },
+    {
+      "id": "seq-nested-object-detach",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"o\":{\"x\":1,\"y\":2}}\ndos\to\tx\n",
+      "note": "the selector reaches a direct child of the root, so the removal surface is exercised on a NON-root container"
+    },
+    {
+      "id": "seq-nested-array-detach-then-append",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"arr\":[1,2,3]}\nda\tarr\t1\napp\tarr\t9\n",
+      "note": "the witness op on a nested array -- the relink and the cache are per container, not per document"
+    },
+    {
+      "id": "seq-selector-missing",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"a\":1}\nda\tzz\t0\ndo\tzz\ta\n",
+      "note": "an unresolvable selector leaves no target: every op is a no-op and sz reads -1, distinct from a target of size 0"
+    },
+    {
+      "id": "seq-selector-on-array-root",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[1,2]\nda\ta\t0\n",
+      "note": "a selector against an ARRAY root: GetObjectItemCaseSensitive answers NULL, so no target"
+    },
+    {
+      "id": "seq-selector-is-case-sensitive",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"A\":[1,2]}\nda\ta\t0\nda\tA\t0\n",
+      "note": "the selector uses the case-SENSITIVE lookup, so `a` misses `A` -- deliberately fixed so the op's own case flag is the only thing varying"
+    },
+    {
+      "id": "seq-app-scalar-refused",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"a\":7}\napp\ta\t5\n",
+      "note": "the C would hang a child off the scalar 7 (scalar-parent-child); the driver refuses on BOTH sides so this module's ledger stays on the removal surface. r=0, sz unchanged"
+    },
+    {
+      "id": "seq-app-object-refused",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"a\":1}\napp\t\t5\n",
+      "note": "the C would give the object a NULL-keyed member printing as \"\"; same refusal, same reason"
+    },
+    {
+      "id": "seq-app-array-ok",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[1]\napp\t\t5\napp\t\t-3\n",
+      "note": "the only accepted target: an array. The appended value is CreateNumber of the index field, so it also crosses the negative branch"
+    },
+    {
+      "id": "seq-no-ops",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[10,20,30]\n",
+      "note": "a document with no program: `init=` alone, and the document must come back untouched"
+    },
+    {
+      "id": "seq-unknown-opcode",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[10,20,30]\nnope\t\t0\nda\t\t0\n",
+      "note": "an unrecognized opcode records a `?` step and changes nothing; the next op still runs"
+    },
+    {
+      "id": "seq-opcode-case",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[10,20,30]\nDA\t\t0\n",
+      "note": "opcodes are compared with strcmp, so `DA` is not `da`"
+    },
+    {
+      "id": "seq-op-cap",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[1,2,3,4,5,6,7,8,9,0]\nda\t\t0\nda\t\t0\nda\t\t0\nda\t\t0\nda\t\t0\nda\t\t0\nda\t\t0\nda\t\t0\nda\t\t0\nda\t\t0\n",
+      "note": "ten ops, eight executed: the cap bounds the descriptor whatever the fuzzer sends, and both sides must stop at the same step"
+    },
+    {
+      "id": "seq-missing-fields",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[1,2,3]\nda\nda\t\nda\t\t\n",
+      "note": "a line with no tabs, one tab, two tabs: every missing field reads as empty, so the index is 0 three times"
+    },
+    {
+      "id": "seq-blank-op-lines",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[1,2,3]\n\n\nda\t\t0\n",
+      "note": "a blank line is a `?` step, not a terminator -- it consumes one of the eight slots"
+    },
+    {
+      "id": "seq-trailing-no-newline",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[1,2,3]\nda\t\t0",
+      "note": "the last op line need not end in a newline"
+    },
+    {
+      "id": "seq-nul-truncates-ops",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "WzEsMiwzXQpkYQkJMAoAeGEJCTAKeGEJCTAK",
+      "note": "the C copies the op region into a NUL-terminated buffer, so everything past an interior NUL is invisible to it -- one step runs, not three (LESSONS #29). Needs stdin_b64"
+    },
+    {
+      "id": "seq-high-bytes-in-key",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"\u00ff\":1}\ndos\t\t\u00ff\n",
+      "note": "a non-ASCII key: cJSON compares bytes with strcmp and does no UTF-8 validation, so the raw bytes must match end to end"
+    },
+    {
+      "id": "seq-lone-high-byte-key",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "eyJhIjoxfQpkb3MJCYD/Cg==",
+      "note": "a key that is not valid UTF-8 at all: it cannot match, but both sides must fail to match it identically rather than one of them replacing bytes"
+    },
+    {
+      "id": "seq-doc-unparseable",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{oops\nda\t\t0\n",
+      "note": "an unparseable document is rc 1 with nothing on stdout: unlike `set`, every op here needs a document to act on"
+    },
+    {
+      "id": "seq-doc-empty",
+      "args": [
+        "seq"
+      ],
+      "stdin": "\nda\t\t0\n",
+      "note": "an empty document line is also a parse failure"
+    },
+    {
+      "id": "seq-interleaved",
+      "args": [
+        "seq"
+      ],
+      "stdin": "{\"a\":1,\"b\":2,\"arr\":[10,20,30],\"o\":{\"x\":1}}\nda\t\t0\napp\tarr\t99\nxo\t\tb\ndos\to\tx\nda\tarr\t0\napp\tarr\t1\n",
+      "note": "six steps mixing every family across three containers; the descriptor after EVERY step is what makes a corruption that surfaces late visible at all"
+    }
+  ]
+}
