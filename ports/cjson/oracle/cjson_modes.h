@@ -231,4 +231,70 @@ char *cjson_modes_seq(const char *json, size_t json_len,
 char *cjson_modes_opts(int flags, int prebuffer, int prealloc,
                        const char *json, size_t json_len);
 
+/* The NON-CONTAINER PARENT -- cJSON's add_item_to_array / add_item_to_object
+ * applied to a parent that is not the container the function name implies.
+ *
+ * `add_item_to_array` (cJSON.c:1973) guards exactly three things: a NULL item,
+ * a NULL parent, and self-reference. It never asks whether the parent is a
+ * container, and `add_item_to_object` only adds a NULL-key guard before
+ * delegating to it. So every public Add* entry point will hang a child off a
+ * number, a string, a bool or a null, and will give an OBJECT a member whose
+ * key is NULL. SCALAR-PARENT-SPIKE.md is the executed evidence.
+ *
+ * `kind` selects the target: num / str / true / false / null / raw / arr / obj,
+ * or `doc` for the parsed document's root -- which is how a FUZZER gets to pick
+ * the target's type. `arr` and `obj` are the controls: there the C and the port
+ * agree, and a run where they diverge is a port bug rather than this class.
+ *
+ *   op    entry point                                   (item is Number(99))
+ *   ----  --------------------------------------------------------------
+ *   a     cJSON_AddItemToArray(target, item)
+ *   o     cJSON_AddItemToObject(target, <key>, item)
+ *   ocs   cJSON_AddItemToObjectCS(target, <key>, item)   key NOT copied
+ *   t     cJSON_AddTrueToObject(target, <key>)
+ *   f     cJSON_AddFalseToObject(target, <key>)
+ *   z     cJSON_AddNullToObject(target, <key>)
+ *   m     cJSON_AddNumberToObject(target, <key>, 5)
+ *   s     cJSON_AddStringToObject(target, <key>, "v")
+ *
+ * The mode brackets the operation with two ORDINARY members, `pre` before and
+ * `post` after, added only when the target is already an object (adding one to
+ * a number would itself be the malformed operation and would muddle the
+ * experiment). `post` is the load-bearing one: see the descriptor below.
+ *
+ * WHY THE DESCRIPTOR LOOKS LIKE THIS. The spike established that the port's
+ * three existing comparison surfaces are all BLIND to this class:
+ *
+ *   - print ignores a child hung off a non-container (a number still prints
+ *     `7`), and print_array silently drops a key stored on an array element;
+ *   - cJSON_Compare reports a malformed node EQUAL to a clean one, because it
+ *     never examines a non-container's children;
+ *   - cJSON_Duplicate copies the hung child, so a dup round-trip matches too.
+ *
+ * A descriptor built on printed bytes would therefore report MATCH on every
+ * case this mode exists to test (LESSONS #39: name the operation that CONSUMES
+ * the state no output depends on). So it reports the container view --
+ * cJSON_GetArraySize and cJSON_GetArrayItem -- and it reports the two object
+ * lookups SEPARATELY, because they disagree:
+ *
+ *   cJSON_GetObjectItemCaseSensitive stops its walk at a NULL key
+ *   (cJSON.c:1910 tests `current_element->string != NULL` in the loop
+ *   condition), so a NULL-keyed member makes every member AFTER it unfindable
+ *   -- `post` is what detects that. cJSON_GetObjectItem does not stop, because
+ *   case_insensitive_strcmp returns 1 for a NULL argument (cJSON.c:135), so it
+ *   walks past and still finds `post`. Two functions documented to differ only
+ *   in case sensitivity differ in REACHABILITY, and only a descriptor carrying
+ *   both can say so.
+ *
+ * `empty` looks up "" to separate the two states the printed form conflates: a
+ * NULL-keyed member PRINTS as `""` but is not findable by "", while a member
+ * genuinely keyed "" is. `cmp` and `dupsz` are carried to pin the blindness
+ * itself -- they are expected to MATCH, and a ledger that did not show them
+ * would be claiming the divergence is wider than it is.
+ *
+ * Returns NULL only on allocation failure; an unparseable document is reported
+ * in the descriptor (`doc=-`), not as an error, so the add still runs. */
+char *cjson_modes_parent(const char *kind, const char *op, const char *key,
+                         const char *json, size_t json_len);
+
 #endif /* CJSON_MODES_H */

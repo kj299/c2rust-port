@@ -62,7 +62,7 @@ static char *read_all_stdin(size_t *out_len) {
 
 int main(int argc, char **argv) {
     if (argc < 2) {
-        fprintf(stderr, "usage: driver <print|...|build|query|access|construct|set|seq|opts|ptr|patch|merge|genmerge|genpatch|findptr|addpatch|sort (+ -cs)>\n");
+        fprintf(stderr, "usage: driver <print|...|build|query|access|construct|set|seq|opts|parent|ptr|patch|merge|genmerge|genpatch|findptr|addpatch|sort (+ -cs)>\n");
         return 2;
     }
     const char *mode = argv[1];
@@ -201,6 +201,36 @@ int main(int argc, char **argv) {
         char *out = cjson_modes_set(num, t1 + 1, t2 + 1, json, json_len);
         free(input);
         if (out == NULL) { fprintf(stderr, "set failed\n"); return 1; }
+        fputs(out, stdout);
+        free(out);
+        return 0;
+    }
+
+    if (strcmp(mode, "parent") == 0) {
+        /* stdin is "<kind>\t<op>\t<key>\n<json>". Self-contained early return
+         * like `set` above (LESSONS #27): it splits its OWN view of `input`
+         * and never falls through.
+         *
+         * `key` points into this buffer and the `ocs` op makes cJSON BORROW it
+         * rather than copy it, so the buffer must outlive the node that holds
+         * it -- it does: cjson_modes_parent deletes every node it built before
+         * returning, and only then is `input` freed. */
+        char *nl = memchr(input, '\n', len);
+        char *t1 = nl ? memchr(input, '\t', (size_t)(nl - input)) : NULL;
+        char *t2 = t1 ? memchr(t1 + 1, '\t', (size_t)(nl - t1 - 1)) : NULL;
+        if (nl == NULL || t1 == NULL || t2 == NULL) {
+            fprintf(stderr, "parent needs <kind>\\t<op>\\t<key>\\n<json>\n");
+            free(input);
+            return 2;
+        }
+        *nl = '\0';
+        *t1 = '\0';
+        *t2 = '\0';
+        const char *json = nl + 1;
+        size_t json_len = len - (size_t)(json - input);
+        char *out = cjson_modes_parent(input, t1 + 1, t2 + 1, json, json_len);
+        free(input);
+        if (out == NULL) { fprintf(stderr, "parent failed\n"); return 1; }
         fputs(out, stdout);
         free(out);
         return 0;

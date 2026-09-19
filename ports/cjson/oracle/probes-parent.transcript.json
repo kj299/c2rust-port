@@ -1,0 +1,201 @@
+{
+  "probe_transcript": 1,
+  "module": "dom-add-parent",
+  "oracle_sha256": "592d60eec01b042c7a74bd108ac15b93c10d3816b010924bf53f6a8a2866e47b",
+  "generated_by": "harnesses/probe/probe.py run",
+  "entries": [
+    {
+      "id": "parent-arr-add-item",
+      "args": [
+        "parent"
+      ],
+      "stdin_b64": "YXJyCWEJawp7fQ==",
+      "note": "the well-formed case for AddItemToArray: an actual array. A run where this diverges is a port bug, not this class",
+      "rc": 0,
+      "stdout_b64": "cmM9MTtwcmludD00Ols5OV07c2l6ZT0xO2l0ZW0wPTk5O3ByZT0wLzA7cG9zdD0wLzA7a2V5PTAvMDtlbXB0eT0wLzA7ZHVwc3o9MTtjbXA9MTtkb2M9e30=",
+      "stdin_preview": "arr\ta\tk\n{}",
+      "stdout_preview": "rc=1;print=4:[99];size=1;item0=99;pre=0/0;post=0/0;key=0/0;empty=0/0;dupsz=1;cmp\u2026"
+    },
+    {
+      "id": "parent-arr-add-into-nonempty",
+      "args": [
+        "parent"
+      ],
+      "stdin_b64": "YXJyCWEJawpbXQ==",
+      "note": "same, with the op appending rather than starting the list",
+      "rc": 0,
+      "stdout_b64": "cmM9MTtwcmludD00Ols5OV07c2l6ZT0xO2l0ZW0wPTk5O3ByZT0wLzA7cG9zdD0wLzA7a2V5PTAvMDtlbXB0eT0wLzA7ZHVwc3o9MTtjbXA9MTtkb2M9W10=",
+      "stdin_preview": "arr\ta\tk\n[]",
+      "stdout_preview": "rc=1;print=4:[99];size=1;item0=99;pre=0/0;post=0/0;key=0/0;empty=0/0;dupsz=1;cmp\u2026"
+    },
+    {
+      "id": "parent-obj-add-object",
+      "args": [
+        "parent"
+      ],
+      "stdin_b64": "b2JqCW8Jawp7fQ==",
+      "note": "AddItemToObject onto an actual object",
+      "rc": 0,
+      "stdout_b64": "cmM9MTtwcmludD0yNTp7InByZSI6MSwiayI6OTksInBvc3QiOjJ9O3NpemU9MztpdGVtMD0xO3ByZT0xLzE7cG9zdD0xLzE7a2V5PTEvMTtlbXB0eT0wLzA7ZHVwc3o9MztjbXA9MTtkb2M9e30=",
+      "stdin_preview": "obj\to\tk\n{}",
+      "stdout_preview": "rc=1;print=25:{\"pre\":1,\"k\":99,\"post\":2};size=3;item0=1;pre=1/1;post=1/1;key=1/1;\u2026"
+    },
+    {
+      "id": "parent-obj-add-cs",
+      "args": [
+        "parent"
+      ],
+      "stdin_b64": "b2JqCW9jcwlrCnt9",
+      "note": "AddItemToObjectCS onto an actual object: the C BORROWS the key instead of copying it, which the port cannot express (it owns every key) -- but the borrow is invisible through this descriptor, so the two still agree",
+      "rc": 0,
+      "stdout_b64": "cmM9MTtwcmludD0yNTp7InByZSI6MSwiayI6OTksInBvc3QiOjJ9O3NpemU9MztpdGVtMD0xO3ByZT0xLzE7cG9zdD0xLzE7a2V5PTEvMTtlbXB0eT0wLzA7ZHVwc3o9MztjbXA9MTtkb2M9e30=",
+      "stdin_preview": "obj\tocs\tk\n{}",
+      "stdout_preview": "rc=1;print=25:{\"pre\":1,\"k\":99,\"post\":2};size=3;item0=1;pre=1/1;post=1/1;key=1/1;\u2026"
+    },
+    {
+      "id": "parent-obj-add-true",
+      "args": [
+        "parent"
+      ],
+      "stdin_b64": "b2JqCXQJawp7fQ==",
+      "note": "the cJSON_Add*ToObject family, onto an object",
+      "rc": 0,
+      "stdout_b64": "cmM9MTtwcmludD0yNzp7InByZSI6MSwiayI6dHJ1ZSwicG9zdCI6Mn07c2l6ZT0zO2l0ZW0wPTE7cHJlPTEvMTtwb3N0PTEvMTtrZXk9MS8xO2VtcHR5PTAvMDtkdXBzej0zO2NtcD0xO2RvYz17fQ==",
+      "stdin_preview": "obj\tt\tk\n{}",
+      "stdout_preview": "rc=1;print=27:{\"pre\":1,\"k\":true,\"post\":2};size=3;item0=1;pre=1/1;post=1/1;key=1/\u2026"
+    },
+    {
+      "id": "parent-obj-add-false",
+      "args": [
+        "parent"
+      ],
+      "stdin_b64": "b2JqCWYJawp7fQ==",
+      "note": "same, false",
+      "rc": 0,
+      "stdout_b64": "cmM9MTtwcmludD0yODp7InByZSI6MSwiayI6ZmFsc2UsInBvc3QiOjJ9O3NpemU9MztpdGVtMD0xO3ByZT0xLzE7cG9zdD0xLzE7a2V5PTEvMTtlbXB0eT0wLzA7ZHVwc3o9MztjbXA9MTtkb2M9e30=",
+      "stdin_preview": "obj\tf\tk\n{}",
+      "stdout_preview": "rc=1;print=28:{\"pre\":1,\"k\":false,\"post\":2};size=3;item0=1;pre=1/1;post=1/1;key=1\u2026"
+    },
+    {
+      "id": "parent-obj-add-null",
+      "args": [
+        "parent"
+      ],
+      "stdin_b64": "b2JqCXoJawp7fQ==",
+      "note": "same, null",
+      "rc": 0,
+      "stdout_b64": "cmM9MTtwcmludD0yNzp7InByZSI6MSwiayI6bnVsbCwicG9zdCI6Mn07c2l6ZT0zO2l0ZW0wPTE7cHJlPTEvMTtwb3N0PTEvMTtrZXk9MS8xO2VtcHR5PTAvMDtkdXBzej0zO2NtcD0xO2RvYz17fQ==",
+      "stdin_preview": "obj\tz\tk\n{}",
+      "stdout_preview": "rc=1;print=27:{\"pre\":1,\"k\":null,\"post\":2};size=3;item0=1;pre=1/1;post=1/1;key=1/\u2026"
+    },
+    {
+      "id": "parent-obj-add-number",
+      "args": [
+        "parent"
+      ],
+      "stdin_b64": "b2JqCW0Jawp7fQ==",
+      "note": "same, number",
+      "rc": 0,
+      "stdout_b64": "cmM9MTtwcmludD0yNDp7InByZSI6MSwiayI6NSwicG9zdCI6Mn07c2l6ZT0zO2l0ZW0wPTE7cHJlPTEvMTtwb3N0PTEvMTtrZXk9MS8xO2VtcHR5PTAvMDtkdXBzej0zO2NtcD0xO2RvYz17fQ==",
+      "stdin_preview": "obj\tm\tk\n{}",
+      "stdout_preview": "rc=1;print=24:{\"pre\":1,\"k\":5,\"post\":2};size=3;item0=1;pre=1/1;post=1/1;key=1/1;e\u2026"
+    },
+    {
+      "id": "parent-obj-add-string",
+      "args": [
+        "parent"
+      ],
+      "stdin_b64": "b2JqCXMJawp7fQ==",
+      "note": "same, string",
+      "rc": 0,
+      "stdout_b64": "cmM9MTtwcmludD0yNjp7InByZSI6MSwiayI6InYiLCJwb3N0IjoyfTtzaXplPTM7aXRlbTA9MTtwcmU9MS8xO3Bvc3Q9MS8xO2tleT0xLzE7ZW1wdHk9MC8wO2R1cHN6PTM7Y21wPTE7ZG9jPXt9",
+      "stdin_preview": "obj\ts\tk\n{}",
+      "stdout_preview": "rc=1;print=26:{\"pre\":1,\"k\":\"v\",\"post\":2};size=3;item0=1;pre=1/1;post=1/1;key=1/1\u2026"
+    },
+    {
+      "id": "parent-obj-empty-key",
+      "args": [
+        "parent"
+      ],
+      "stdin_b64": "b2JqCW8JCnt9",
+      "note": "a member genuinely keyed \"\" IS findable by \"\" -- empty=1/1. The contrast with the NULL-keyed member (empty=0/0, matrix-only) is the whole reason the printed form cannot be trusted: both print as \"\"",
+      "rc": 0,
+      "stdout_b64": "cmM9MTtwcmludD0yNDp7InByZSI6MSwiIjo5OSwicG9zdCI6Mn07c2l6ZT0zO2l0ZW0wPTE7cHJlPTEvMTtwb3N0PTEvMTtrZXk9MS8xO2VtcHR5PTEvMTtkdXBzej0zO2NtcD0xO2RvYz17fQ==",
+      "stdin_preview": "obj\to\t\n{}",
+      "stdout_preview": "rc=1;print=24:{\"pre\":1,\"\":99,\"post\":2};size=3;item0=1;pre=1/1;post=1/1;key=1/1;e\u2026"
+    },
+    {
+      "id": "parent-obj-duplicate-key",
+      "args": [
+        "parent"
+      ],
+      "stdin_b64": "b2JqCW0JcHJlCnt9",
+      "note": "re-adding the key the mode already inserted: cJSON appends rather than replacing, so the object carries `pre` twice",
+      "rc": 0,
+      "stdout_b64": "cmM9MTtwcmludD0yNjp7InByZSI6MSwicHJlIjo1LCJwb3N0IjoyfTtzaXplPTM7aXRlbTA9MTtwcmU9MS8xO3Bvc3Q9MS8xO2tleT0xLzE7ZW1wdHk9MC8wO2R1cHN6PTM7Y21wPTA7ZG9jPXt9",
+      "stdin_preview": "obj\tm\tpre\n{}",
+      "stdout_preview": "rc=1;print=26:{\"pre\":1,\"pre\":5,\"post\":2};size=3;item0=1;pre=1/1;post=1/1;key=1/1\u2026"
+    },
+    {
+      "id": "parent-unknown-op",
+      "args": [
+        "parent"
+      ],
+      "stdin_b64": "YXJyCXp6eglrCnt9",
+      "note": "an unrecognised op is rc=-1 on both sides",
+      "rc": 0,
+      "stdout_b64": "cmM9LTE7cHJpbnQ9MjpbXTtzaXplPTA7aXRlbTA9LTtwcmU9MC8wO3Bvc3Q9MC8wO2tleT0wLzA7ZW1wdHk9MC8wO2R1cHN6PTA7Y21wPTE7ZG9jPXt9",
+      "stdin_preview": "arr\tzzz\tk\n{}",
+      "stdout_preview": "rc=-1;print=2:[];size=0;item0=-;pre=0/0;post=0/0;key=0/0;empty=0/0;dupsz=0;cmp=1\u2026"
+    },
+    {
+      "id": "parent-doc-unparseable",
+      "args": [
+        "parent"
+      ],
+      "stdin_b64": "ZG9jCWEJawpub3QganNvbiBhdCBhbGw=",
+      "note": "kind=doc with nothing to parse: no target at all, rc=-1, everything `-`",
+      "rc": 0,
+      "stdout_b64": "cmM9LTE7cHJpbnQ9LTtzaXplPS0xO2l0ZW0wPS07cHJlPTAvMDtwb3N0PTAvMDtrZXk9MC8wO2VtcHR5PTAvMDtkdXBzej0tMTtjbXA9MDtkb2M9LQ==",
+      "stdin_preview": "doc\ta\tk\nnot json at all",
+      "stdout_preview": "rc=-1;print=-;size=-1;item0=-;pre=0/0;post=0/0;key=0/0;empty=0/0;dupsz=-1;cmp=0;\u2026"
+    },
+    {
+      "id": "parent-doc-array",
+      "args": [
+        "parent"
+      ],
+      "stdin_b64": "ZG9jCWEJawpbMSwyXQ==",
+      "note": "kind=doc is how a FUZZER picks the target type; here it picks a container, so both sides agree",
+      "rc": 0,
+      "stdout_b64": "cmM9MTtwcmludD04OlsxLDIsOTldO3NpemU9MztpdGVtMD0xO3ByZT0wLzA7cG9zdD0wLzA7a2V5PTAvMDtlbXB0eT0wLzA7ZHVwc3o9MztjbXA9MTtkb2M9WzEsMiw5OV0=",
+      "stdin_preview": "doc\ta\tk\n[1,2]",
+      "stdout_preview": "rc=1;print=8:[1,2,99];size=3;item0=1;pre=0/0;post=0/0;key=0/0;empty=0/0;dupsz=3;\u2026"
+    },
+    {
+      "id": "parent-doc-object",
+      "args": [
+        "parent"
+      ],
+      "stdin_b64": "ZG9jCW8Jawp7IngiOjF9",
+      "note": "same, an object document",
+      "rc": 0,
+      "stdout_b64": "cmM9MTtwcmludD0zMTp7IngiOjEsInByZSI6MSwiayI6OTksInBvc3QiOjJ9O3NpemU9NDtpdGVtMD0xO3ByZT0xLzE7cG9zdD0xLzE7a2V5PTEvMTtlbXB0eT0wLzA7ZHVwc3o9NDtjbXA9MTtkb2M9eyJ4IjoxLCJwcmUiOjEsImsiOjk5LCJwb3N0IjoyfQ==",
+      "stdin_preview": "doc\to\tk\n{\"x\":1}",
+      "stdout_preview": "rc=1;print=31:{\"x\":1,\"pre\":1,\"k\":99,\"post\":2};size=4;item0=1;pre=1/1;post=1/1;ke\u2026"
+    },
+    {
+      "id": "parent-doc-object-nested",
+      "args": [
+        "parent"
+      ],
+      "stdin_b64": "ZG9jCW0JZGVlcAp7ImEiOnsiYiI6MX19",
+      "note": "a document with structure, so the descriptor's doc= field carries something the add actually changed",
+      "rc": 0,
+      "stdout_b64": "cmM9MTtwcmludD0zOTp7ImEiOnsiYiI6MX0sInByZSI6MSwiZGVlcCI6NSwicG9zdCI6Mn07c2l6ZT00O2l0ZW0wPXsiYiI6MX07cHJlPTEvMTtwb3N0PTEvMTtrZXk9MS8xO2VtcHR5PTAvMDtkdXBzej00O2NtcD0xO2RvYz17ImEiOnsiYiI6MX0sInByZSI6MSwiZGVlcCI6NSwicG9zdCI6Mn0=",
+      "stdin_preview": "doc\tm\tdeep\n{\"a\":{\"b\":1}}",
+      "stdout_preview": "rc=1;print=39:{\"a\":{\"b\":1},\"pre\":1,\"deep\":5,\"post\":2};size=4;item0={\"b\":1};pre=1\u2026"
+    }
+  ],
+  "fingerprint": "aff1fa9724f40adfc6022ad6041549de1bdd00ec06131de93257726f34b40285"
+}
