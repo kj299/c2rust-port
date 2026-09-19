@@ -2,13 +2,15 @@
 """Emit `cJSON_fixed.c` — the vendored cJSON.c with the corrections the port
 makes deliberately, so differential FUZZING has a reference that shares them.
 
-Three sites, four corrections:
+Five sites, six corrections:
 
   1. `cJSON_CreateNumber`     — no longer converts a NaN to `int`.
   2. `cJSON_SetNumberHelper`  — same NaN fix, AND it no longer writes number
      fields into a node that is not a number.
   3. `cJSON_PrintPreallocated` — no longer leaves a partially written,
      NUL-terminated truncation in the caller's buffer when it fails.
+  4. `cJSON_AddItemToArray`    — no longer hangs a child off a non-array.
+  5. `add_item_to_object`      — no longer stores a key on a non-object.
 
 ## 1. The NaN -> int conversion (cJSON.c:2452-2476, and again at :384)
 
@@ -97,6 +99,35 @@ The correction is spelled "restore zeros" because this reference cannot know
 the caller's prior buffer contents. That is exact for the `opts` driver mode,
 which zeroes the buffer before every call on both sides — a coupling this patch
 depends on, and the reason the mode zeroes rather than leaving it uninitialized.
+
+## 4/5. The non-container parent (cJSON.c:1973, :2029)
+
+`add_item_to_array` guards a NULL item, a NULL parent and self-reference. It
+never asks whether the parent is a container, and `add_item_to_object` only adds
+a NULL-key guard before delegating to it. So every public `Add*` entry point
+will hang a child off a number, a string, a bool or a null, and will give an
+OBJECT a member whose key is NULL.
+
+Both are invisible to the printer — a number with a child still prints `7`, and
+a key stored on an array element is dropped by `print_array` — which is how the
+class survived fourteen modules. `cJSON_GetArraySize` counts the hung child, and
+a NULL-keyed member makes every member AFTER it unreachable through
+`cJSON_GetObjectItemCaseSensitive` (whose loop condition tests
+`current_element->string != NULL`, cJSON.c:1910) while
+`cJSON_GetObjectItem` walks past it.
+
+The port cannot represent either state: `Value::Array(Vec<Value>)` is the only
+variant with anywhere to put a child, and a `Value::Object` entry always has a
+key. Predicate-defined — EVERY non-container parent triggers it, and a fuzzer
+picking its target from a document hits one constantly — so the correction lives
+here and `matrix-parent.json` carries the finite assertions against the PRISTINE
+oracle (DIVERGENCES.md `scalar-parent-child`, 12 pinned rows).
+
+The patch goes at the two PUBLIC entry points rather than in the shared helper,
+because the helper is reached with an object parent from `add_item_to_object`:
+a check inside it could only ask "is a container", which would still permit
+`cJSON_AddItemToArray(object, item)` and its NULL key. See the comment above
+`ADD_ARRAY_PRISTINE`.
 
 ## How wide is a correction? Measure it (LESSONS #42)
 
@@ -269,6 +300,67 @@ PREALLOC_FIXED = """\
 }
 """
 
+# The two PUBLIC entry points, not the shared `add_item_to_array` helper they
+# both reach. The helper cannot carry this check: `add_item_to_object` delegates
+# to it with an OBJECT parent, so a check inside it could only ask "is a
+# container", which would still let cJSON_AddItemToArray(object, item) build the
+# NULL-keyed member. Patching the two entry points separately is what matches
+# the port, where `add_item_to_array` requires `Value::Array` and `add_named`
+# requires `Value::Object`.
+#
+# The `cJSON_AddItemReference*` variants also call the helper and are left
+# alone: API-COVERAGE.md lists them out-of-scope, so patching them would add an
+# unverified branch no module exercises (LESSONS #31).
+ADD_ARRAY_PRISTINE = """\
+/* Add item to array/object. */
+CJSON_PUBLIC(cJSON_bool) cJSON_AddItemToArray(cJSON *array, cJSON *item)
+{
+    return add_item_to_array(array, item);
+}
+"""
+
+ADD_ARRAY_FIXED = """\
+/* Add item to array/object. */
+CJSON_PUBLIC(cJSON_bool) cJSON_AddItemToArray(cJSON *array, cJSON *item)
+{
+    if (!cJSON_IsArray(array))
+    {
+        /* fixed: add_item_to_array guards only a NULL item, a NULL parent and
+         * self-reference -- never that the parent is a container. Without this
+         * the call hangs a child off a number, a string, a bool or a null
+         * (invisible to the printer, but cJSON_GetArraySize counts it), or
+         * gives an OBJECT a member with a NULL key, which makes every member
+         * after it unreachable through cJSON_GetObjectItemCaseSensitive. The
+         * port cannot represent either state at all. */
+        return false;
+    }
+    return add_item_to_array(array, item);
+}
+"""
+
+ADD_OBJECT_PRISTINE = """\
+    if ((object == NULL) || (string == NULL) || (item == NULL) || (object == item))
+    {
+        return false;
+    }
+"""
+
+ADD_OBJECT_FIXED = """\
+    if ((object == NULL) || (string == NULL) || (item == NULL) || (object == item))
+    {
+        return false;
+    }
+
+    if (!cJSON_IsObject(object))
+    {
+        /* fixed: the same missing type check on the object side. Without it
+         * cJSON_AddItemToObject (and every cJSON_Add*ToObject helper) will
+         * store a key on an ARRAY element, which print_array then silently
+         * drops -- so a print round-trip loses it. */
+        return false;
+    }
+"""
+
 # (what it fixes, pristine text, replacement). Each is asserted to occur EXACTLY
 # once — see main().
 PATCHES = [
@@ -282,6 +374,16 @@ PATCHES = [
         "cJSON_PrintPreallocated's partial write on failure",
         PREALLOC_PRISTINE,
         PREALLOC_FIXED,
+    ),
+    (
+        "cJSON_AddItemToArray's missing container check",
+        ADD_ARRAY_PRISTINE,
+        ADD_ARRAY_FIXED,
+    ),
+    (
+        "add_item_to_object's missing container check",
+        ADD_OBJECT_PRISTINE,
+        ADD_OBJECT_FIXED,
     ),
 ]
 

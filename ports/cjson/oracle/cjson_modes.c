@@ -891,3 +891,152 @@ char *cjson_modes_opts(int flags, int prebuffer, int prealloc,
     }
     return b.p;
 }
+
+/* ---- `parent` mode: the non-container parent ---- */
+
+/* Build the target node named by `kind`. `doc` hands back the parsed document
+ * root (NULL when it did not parse), which is how a fuzzer chooses the type;
+ * every other kind is a fresh node this function owns. `*owned` says which,
+ * because the document root is freed by the caller's cJSON_Delete(root) and
+ * must not be freed twice. */
+static cJSON *parent_target(const char *kind, cJSON *root, int *owned) {
+    *owned = 1;
+    if (strcmp(kind, "num") == 0)   return cJSON_CreateNumber(7);
+    if (strcmp(kind, "str") == 0)   return cJSON_CreateString("s");
+    if (strcmp(kind, "true") == 0)  return cJSON_CreateTrue();
+    if (strcmp(kind, "false") == 0) return cJSON_CreateFalse();
+    if (strcmp(kind, "null") == 0)  return cJSON_CreateNull();
+    if (strcmp(kind, "raw") == 0)   return cJSON_CreateRaw("RAW");
+    if (strcmp(kind, "arr") == 0)   return cJSON_CreateArray();
+    if (strcmp(kind, "obj") == 0)   return cJSON_CreateObject();
+    /* "doc", and anything unrecognised, is the document root */
+    *owned = 0;
+    return root;
+}
+
+/* One lookup pair: the case-INsensitive entry point, then the case-SENSITIVE
+ * one. They are reported separately because a NULL-keyed member makes them
+ * disagree -- that disagreement is the finding (see cjson_modes.h). */
+static void sb_lookup(struct sbuf *b, cJSON *target, const char *name) {
+    sb_str(b, cJSON_GetObjectItem(target, name) ? "1" : "0");
+    sb_str(b, "/");
+    sb_str(b, cJSON_GetObjectItemCaseSensitive(target, name) ? "1" : "0");
+}
+
+char *cjson_modes_parent(const char *kind, const char *op, const char *key,
+                         const char *json, size_t json_len) {
+    cJSON *root = cJSON_ParseWithLength(json, json_len);
+    int owned = 0;
+    cJSON *target = parent_target(kind, root, &owned);
+    int r = 0;
+
+    /* `pre` goes in only when the target is ALREADY an object: adding a keyed
+     * member to a number would itself be the malformed operation and would
+     * confuse the experiment with its own setup. Same rule on both sides. */
+    if (target != NULL && cJSON_IsObject(target)) {
+        cJSON_AddNumberToObject(target, "pre", 1);
+    }
+
+    if (target != NULL) {
+        if (strcmp(op, "a") == 0) {
+            cJSON *item = cJSON_CreateNumber(99);
+            r = cJSON_AddItemToArray(target, item) ? 1 : 0;
+            if (!r) cJSON_Delete(item);          /* refused -> still ours */
+        } else if (strcmp(op, "o") == 0) {
+            cJSON *item = cJSON_CreateNumber(99);
+            r = cJSON_AddItemToObject(target, key, item) ? 1 : 0;
+            if (!r) cJSON_Delete(item);
+        } else if (strcmp(op, "ocs") == 0) {
+            /* CS = the key is NOT copied; the node borrows this pointer, so it
+             * must outlive the node. `key` points into the driver's stdin
+             * buffer, which does -- it is freed after this function returns. */
+            cJSON *item = cJSON_CreateNumber(99);
+            r = cJSON_AddItemToObjectCS(target, key, item) ? 1 : 0;
+            if (!r) cJSON_Delete(item);
+        } else if (strcmp(op, "t") == 0) {
+            r = cJSON_AddTrueToObject(target, key) ? 1 : 0;
+        } else if (strcmp(op, "f") == 0) {
+            r = cJSON_AddFalseToObject(target, key) ? 1 : 0;
+        } else if (strcmp(op, "z") == 0) {
+            r = cJSON_AddNullToObject(target, key) ? 1 : 0;
+        } else if (strcmp(op, "m") == 0) {
+            r = cJSON_AddNumberToObject(target, key, 5) ? 1 : 0;
+        } else if (strcmp(op, "s") == 0) {
+            r = cJSON_AddStringToObject(target, key, "v") ? 1 : 0;
+        } else {
+            r = -1;                              /* unknown op */
+        }
+    } else {
+        r = -1;
+    }
+
+    /* `post` is the load-bearing member: an ORDINARY keyed member added AFTER
+     * whatever the op did. If the op left a NULL-keyed member behind, the
+     * case-SENSITIVE lookup can no longer reach `post` while the
+     * case-INsensitive one still can. */
+    if (target != NULL && cJSON_IsObject(target)) {
+        cJSON_AddNumberToObject(target, "post", 2);
+    }
+
+    char *ptarget = (target != NULL) ? cJSON_PrintUnformatted(target) : NULL;
+    cJSON *item0 = (target != NULL) ? cJSON_GetArrayItem(target, 0) : NULL;
+    char *pitem0 = (item0 != NULL) ? cJSON_PrintUnformatted(item0) : NULL;
+
+    /* Duplicate and Compare are carried to PIN their blindness, not because a
+     * divergence is expected in them: the spike showed Compare calls a
+     * malformed node equal to a clean one and Duplicate copies the hung child.
+     * A ledger that omitted them would imply the divergence is wider. */
+    cJSON *dup = (target != NULL) ? cJSON_Duplicate(target, 1) : NULL;
+    int cmp = (target != NULL && dup != NULL && cJSON_Compare(target, dup, 1)) ? 1 : 0;
+
+    size_t cap = 4096 + json_len * 2 + strlen(key) * 4
+               + (ptarget ? strlen(ptarget) : 0) * 2;
+    struct sbuf b;
+    b.p = (char *)malloc(cap);
+    b.cap = cap;
+    b.len = 0;
+    b.ok = (b.p != NULL);
+    if (b.p != NULL) b.p[0] = '\0';
+
+    sb_str(&b, "rc=");
+    sb_int(&b, r);
+    sb_str(&b, ";print=");
+    sb_bytes(&b, ptarget);
+    sb_str(&b, ";size=");
+    sb_int(&b, (target != NULL) ? cJSON_GetArraySize(target) : -1);
+    sb_str(&b, ";item0=");
+    sb_str(&b, pitem0 ? pitem0 : "-");
+    /* each lookup as <case-insensitive>/<case-sensitive> */
+    sb_str(&b, ";pre=");
+    sb_lookup(&b, target, "pre");
+    sb_str(&b, ";post=");
+    sb_lookup(&b, target, "post");
+    sb_str(&b, ";key=");
+    sb_lookup(&b, target, key);
+    sb_str(&b, ";empty=");
+    sb_lookup(&b, target, "");
+    sb_str(&b, ";dupsz=");
+    sb_int(&b, (dup != NULL) ? cJSON_GetArraySize(dup) : -1);
+    sb_str(&b, ";cmp=");
+    sb_int(&b, cmp);
+    sb_str(&b, ";doc=");
+    if (root != NULL) {
+        char *proot = cJSON_PrintUnformatted(root);
+        sb_str(&b, proot ? proot : "-");
+        cJSON_free(proot);
+    } else {
+        sb_str(&b, "-");
+    }
+
+    cJSON_Delete(dup);
+    cJSON_free(pitem0);
+    cJSON_free(ptarget);
+    if (owned) cJSON_Delete(target);
+    cJSON_Delete(root);
+
+    if (!b.ok) {
+        free(b.p);
+        return NULL;
+    }
+    return b.p;
+}

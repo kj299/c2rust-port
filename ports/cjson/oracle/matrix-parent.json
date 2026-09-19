@@ -1,0 +1,310 @@
+[
+ {
+  "name": "parent-arr-add-item",
+  "args": [
+   "parent"
+  ],
+  "stdin_b64": "YXJyCWEJawp7fQ==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-add-parent"
+  ]
+ },
+ {
+  "name": "parent-arr-add-into-nonempty",
+  "args": [
+   "parent"
+  ],
+  "stdin_b64": "YXJyCWEJawpbXQ==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-add-parent"
+  ]
+ },
+ {
+  "name": "parent-obj-add-object",
+  "args": [
+   "parent"
+  ],
+  "stdin_b64": "b2JqCW8Jawp7fQ==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-add-parent"
+  ]
+ },
+ {
+  "name": "parent-obj-add-cs",
+  "args": [
+   "parent"
+  ],
+  "stdin_b64": "b2JqCW9jcwlrCnt9",
+  "expect_rc": 0,
+  "mods": [
+   "dom-add-parent"
+  ]
+ },
+ {
+  "name": "parent-obj-add-true",
+  "args": [
+   "parent"
+  ],
+  "stdin_b64": "b2JqCXQJawp7fQ==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-add-parent"
+  ]
+ },
+ {
+  "name": "parent-obj-add-false",
+  "args": [
+   "parent"
+  ],
+  "stdin_b64": "b2JqCWYJawp7fQ==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-add-parent"
+  ]
+ },
+ {
+  "name": "parent-obj-add-null",
+  "args": [
+   "parent"
+  ],
+  "stdin_b64": "b2JqCXoJawp7fQ==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-add-parent"
+  ]
+ },
+ {
+  "name": "parent-obj-add-number",
+  "args": [
+   "parent"
+  ],
+  "stdin_b64": "b2JqCW0Jawp7fQ==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-add-parent"
+  ]
+ },
+ {
+  "name": "parent-obj-add-string",
+  "args": [
+   "parent"
+  ],
+  "stdin_b64": "b2JqCXMJawp7fQ==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-add-parent"
+  ]
+ },
+ {
+  "name": "parent-obj-empty-key",
+  "args": [
+   "parent"
+  ],
+  "stdin_b64": "b2JqCW8JCnt9",
+  "expect_rc": 0,
+  "mods": [
+   "dom-add-parent"
+  ]
+ },
+ {
+  "name": "parent-obj-duplicate-key",
+  "args": [
+   "parent"
+  ],
+  "stdin_b64": "b2JqCW0JcHJlCnt9",
+  "expect_rc": 0,
+  "mods": [
+   "dom-add-parent"
+  ]
+ },
+ {
+  "name": "parent-unknown-op",
+  "args": [
+   "parent"
+  ],
+  "stdin_b64": "YXJyCXp6eglrCnt9",
+  "expect_rc": 0,
+  "mods": [
+   "dom-add-parent"
+  ]
+ },
+ {
+  "name": "parent-doc-unparseable",
+  "args": [
+   "parent"
+  ],
+  "stdin_b64": "ZG9jCWEJawpub3QganNvbiBhdCBhbGw=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-add-parent"
+  ]
+ },
+ {
+  "name": "parent-doc-array",
+  "args": [
+   "parent"
+  ],
+  "stdin_b64": "ZG9jCWEJawpbMSwyXQ==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-add-parent"
+  ]
+ },
+ {
+  "name": "parent-doc-object",
+  "args": [
+   "parent"
+  ],
+  "stdin_b64": "ZG9jCW8Jawp7IngiOjF9",
+  "expect_rc": 0,
+  "mods": [
+   "dom-add-parent"
+  ]
+ },
+ {
+  "name": "parent-doc-object-nested",
+  "args": [
+   "parent"
+  ],
+  "stdin_b64": "ZG9jCW0JZGVlcAp7ImEiOnsiYiI6MX19",
+  "expect_rc": 0,
+  "mods": [
+   "dom-add-parent"
+  ]
+ },
+ {
+  "name": "parent-num-add",
+  "args": [
+   "parent"
+  ],
+  "stdin_b64": "bnVtCWEJawp7fQ==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-add-parent"
+  ]
+ },
+ {
+  "name": "parent-str-add",
+  "args": [
+   "parent"
+  ],
+  "stdin_b64": "c3RyCWEJawp7fQ==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-add-parent"
+  ]
+ },
+ {
+  "name": "parent-true-add",
+  "args": [
+   "parent"
+  ],
+  "stdin_b64": "dHJ1ZQlhCWsKe30=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-add-parent"
+  ]
+ },
+ {
+  "name": "parent-false-add",
+  "args": [
+   "parent"
+  ],
+  "stdin_b64": "ZmFsc2UJYQlrCnt9",
+  "expect_rc": 0,
+  "mods": [
+   "dom-add-parent"
+  ]
+ },
+ {
+  "name": "parent-null-add",
+  "args": [
+   "parent"
+  ],
+  "stdin_b64": "bnVsbAlhCWsKe30=",
+  "expect_rc": 0,
+  "mods": [
+   "dom-add-parent"
+  ]
+ },
+ {
+  "name": "parent-raw-add",
+  "args": [
+   "parent"
+  ],
+  "stdin_b64": "cmF3CWEJawp7fQ==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-add-parent"
+  ]
+ },
+ {
+  "name": "parent-obj-add-array-item",
+  "args": [
+   "parent"
+  ],
+  "stdin_b64": "b2JqCWEJawp7fQ==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-add-parent"
+  ]
+ },
+ {
+  "name": "parent-arr-add-keyed",
+  "args": [
+   "parent"
+  ],
+  "stdin_b64": "YXJyCW8Jawp7fQ==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-add-parent"
+  ]
+ },
+ {
+  "name": "parent-num-add-true",
+  "args": [
+   "parent"
+  ],
+  "stdin_b64": "bnVtCXQJawp7fQ==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-add-parent"
+  ]
+ },
+ {
+  "name": "parent-num-add-number",
+  "args": [
+   "parent"
+  ],
+  "stdin_b64": "bnVtCW0Jawp7fQ==",
+  "expect_rc": 0,
+  "mods": [
+   "dom-add-parent"
+  ]
+ },
+ {
+  "name": "parent-num-add-cs",
+  "args": [
+   "parent"
+  ],
+  "stdin_b64": "bnVtCW9jcwlrCnt9",
+  "expect_rc": 0,
+  "mods": [
+   "dom-add-parent"
+  ]
+ },
+ {
+  "name": "parent-doc-scalar",
+  "args": [
+   "parent"
+  ],
+  "stdin_b64": "ZG9jCWEJawo3",
+  "expect_rc": 0,
+  "mods": [
+   "dom-add-parent"
+  ]
+ }
+]

@@ -149,53 +149,97 @@ Format:
   bug. The ten rows above are the finite assertion against *shipped* cJSON and
   fail if either divergence ever stops happening (LESSONS #28).
 
-- [ ] `scalar-parent-child` — **NOT YET ON THE COMPARED CONTRACT.** `cJSON`'s
-  `add_item_to_array` / `add_item_to_object` never check that the parent is a
-  container: their only guards are NULL and self-reference. Probed against
-  v1.7.18: `cJSON_AddTrueToObject(node, "k")` succeeds on an array, a number, a
-  string, `true` and `null` alike, hanging a child off a scalar. The printer
-  ignores that child (a number still prints `7`), but `cJSON_GetArraySize` then
-  answers 1 and `cJSON_GetArrayItem(node, 0)` hands it back — so the malformed
-  tree is observable, not inert. The port cannot reproduce it: `Value::Number`
-  has nowhere to put a child, so the malformed state is unrepresentable rather
-  than merely rejected, and the Add helpers answer false.
+- [x] `scalar-parent-child` — **the non-container parent, now on the compared
+  contract.** cJSON's `add_item_to_array` (cJSON.c:1973) guards exactly three
+  things: a NULL item, a NULL parent, and self-reference. It never asks whether
+  the parent is a container, and `add_item_to_object` only adds a NULL-key
+  guard before delegating to it. So every public `Add*` entry point will hang a
+  child off a number, a string, a bool, a null or a raw node, and will give an
+  OBJECT a member whose key is NULL.
 
-  Deliberately left unledgered and ungated for now: no mode builds a
-  non-container parent, so nothing observes it, and pretending otherwise with a
-  ledger entry would assert a divergence no run measures (LESSONS #31 — a
-  control nothing invokes). It belongs to `add_item_to_*`, which the `dom` and
-  `ffi-builder` modules own, not to the twelve constructors this module gates.
-  Putting it on the contract is its own increment, tracked as such.
+  The port answers **false**. `Value::Array(Vec<Value>)` is the only variant
+  with anywhere to put a child and a `Value::Object` entry always has a key, so
+  the malformed tree is **unrepresentable**, not merely rejected. Reproducing
+  it would mean giving every variant a child list purely so the port could
+  build documents whose printed form misrepresents them — a Prime Directive
+  refusal. Executed evidence: `SCALAR-PARENT-SPIKE.md`, `spikes/scalar_parent.c`,
+  clean under ASan+UBSan+LSan (the class is behavioural, so sanitizers cannot
+  catch it; only a differential can).
 
-  **`dom-mutate-remove` came within one line of dragging it in, and declined
-  (2026-09-07).** The `seq` mode needs an *append* op — that is how a corrupted
-  last-item cache becomes visible at all — and an append whose target is
-  fuzzer-chosen will sooner or later name a scalar or an object. The C accepts
-  both and produces trees the port cannot represent: a child hung off a number,
-  and an object member whose key is NULL (which prints as `""` but which
-  `get_object_item` can never find, so it is not the same as an empty key). So
-  the `seq` mode's `app` op refuses any target that is not an ARRAY, on **both**
-  sides. That is a scope decision, not a correctness dodge, and the difference
-  matters: the C has a defined answer here, so declining to compare it is
-  declining, where `construct`'s clamped counts were avoiding undefined
-  behaviour. It is written into `cjson_modes.h`, into `modes::seq`, and here,
-  because an unstated refusal is indistinguishable from an oversight.
+  **Why it took four attempts to gate.** The port's behaviour has been correct
+  since module 6; what was missing was evidence. All three of the port's
+  existing comparison surfaces are blind to this class — `print` ignores a
+  child hung off a non-container (a number still prints `7`) and drops a key
+  stored on an array element; `cJSON_Compare` reports a malformed node EQUAL to
+  a clean one because it never examines a non-container's children; and
+  `cJSON_Duplicate` copies the hung child so a dup round-trip matches too. A
+  descriptor built on printed bytes returns MATCH on every case in the list
+  below. The `parent` mode therefore reports the **container view**
+  (`cJSON_GetArraySize`, `cJSON_GetArrayItem`) and the two object lookups
+  **separately** — LESSONS #39's rule applied to a whole module rather than one
+  op: name the operation that CONSUMES the state no output depends on.
 
-  **`dom-mutate-place` declined it twice more (2026-09-08).** `cJSON_InsertItemInArray`
-  and `cJSON_ReplaceItemInArray` have no type check either — the C reaches both
-  through `get_array_item`, which walks any node's child list — so the `seq`
-  mode's `ins` and `rep` ops carry the same array-only restriction as `app`, for
-  the same reason and stated in the same three places. `ro`/`ros`
-  (`cJSON_ReplaceItemInObject*`) are deliberately NOT restricted: every way they
-  can fail — a missing key, a non-object parent, an empty container — is
-  representable on both sides, so their guards are worth comparing rather than
-  refusing.
+  The 12 rows are chosen to pin each distinct reachable SHAPE, not to enumerate
+  the 6 kinds × 8 ops cross product: once one scalar kind is pinned the other
+  five assert the same fact, and forty more rows would make a real change
+  harder to read rather than better evidenced.
 
-  Three modules have now routed around this one class. That is the argument for
-  finally putting it on the contract as its own increment rather than a fourth
-  restriction: the refusal is costing coverage in every mutation mode, and each
-  restatement makes it easier to mistake for a settled decision instead of a
-  deferred one.
+- [x] `parent-num-add` [sha256:df146b678bcf]: a child hung off a **number**.
+  The C answers `rc=1`, `size=1`, `item0=99`; the port answers `rc=0`, `size=0`,
+  `item0=-`. Note `print` MATCHES on both sides (`7`), which is exactly why this
+  survived fourteen modules undetected.
+- [x] `parent-str-add` [sha256:d7af1c0f0c31]: same, onto a **string**.
+- [x] `parent-true-add` [sha256:e507832eb50d]: same, onto **true**.
+- [x] `parent-false-add` [sha256:8f6ef8a9ab4e]: same, onto **false**.
+- [x] `parent-null-add` [sha256:7dbfc0b37e82]: same, onto **null**.
+- [x] `parent-raw-add` [sha256:bd84259ce24e]: same, onto a **raw** node.
+- [x] `parent-obj-add-array-item` [sha256:cb6d4232b823]: **the NULL-keyed
+  member, and the lookup it breaks.** `cJSON_AddItemToArray` on an object
+  produces `{"pre":1,"":99,"post":2}` — which *prints* as an ordinary object
+  with an empty-string key, so parsing that text back gives a document where
+  `""` is findable while the original's is not. Worse, `post` is an ordinary
+  member added AFTER the malformed one and
+  `cJSON_GetObjectItemCaseSensitive("post")` can no longer find it: the
+  case-sensitive loop tests `current_element->string != NULL` in its condition
+  (cJSON.c:1910), so the walk STOPS at the NULL key and never reaches anything
+  behind it. One malformed member is a denial-of-lookup for the entire
+  remainder of the object. `cJSON_GetObjectItem` walks past it —
+  `case_insensitive_strcmp` returns 1 for NULL (cJSON.c:135) — so the two
+  functions differ in *reachability*, not just case handling. The descriptor
+  shows it as `post=1/0` against the port's `post=1/1`.
+- [x] `parent-arr-add-keyed` [sha256:2de1a847ceda]: `cJSON_AddItemToObject` on
+  an **array** stores a key `print_array` never emits, so a print round-trip
+  silently loses it.
+- [x] `parent-num-add-true` [sha256:2cf3b0278f18]: the same class reached
+  through the `cJSON_Add*ToObject` helper family rather than the two primitives
+  — pinned so the ledger does not imply only `AddItemTo*` is affected.
+- [x] `parent-num-add-number` [sha256:a3559170e3c9]: same, `cJSON_AddNumberToObject`.
+- [x] `parent-num-add-cs` [sha256:1bc1c40577a3]: same through
+  `cJSON_AddItemToObjectCS`, whose key is BORROWED rather than copied.
+- [x] `parent-doc-scalar` [sha256:a18acecaf683]: the same class reached with
+  the target chosen by the **document** rather than by the case — the shape a
+  fuzzer finds on its own.
+
+  **What deliberately still MATCHES**, and is in the matrix to prove the
+  divergence is no wider than claimed: every container-appropriate op
+  (`arr`+`a`, `obj`+`o`/`ocs`/`t`/`f`/`z`/`m`/`s`), the unknown-op and
+  unparseable-document refusals, and — the useful one — a member genuinely
+  keyed `""`, which IS findable by `""` (`empty=1/1`) where the NULL-keyed
+  member is not (`empty=0/0`). Both print as `""`. The `cmp` and `dupsz` fields
+  are carried for the same reason: `Compare` and `Duplicate` are blind here and
+  a ledger that hid that would be claiming more than the run shows.
+
+  **The history, kept because it is the argument for the module.**
+  `dom-construct` declined this class (no mode built a non-container parent).
+  `dom-mutate-remove` came within one line of dragging it in and declined: its
+  `seq` mode needs an *append* op, and an append whose target is fuzzer-chosen
+  will sooner or later name a scalar — so `app` refuses any non-array target on
+  both sides. `dom-mutate-place` declined it twice more, giving `ins` and `rep`
+  the same restriction, while deliberately NOT restricting `ro`/`ros`
+  (`cJSON_ReplaceItemInObject*`), every failure of which is representable on
+  both sides. Each refusal was written into `cjson_modes.h`, into `modes::seq`
+  and here, because an unstated refusal is indistinguishable from an oversight.
+  Three routings around one class is what scheduled this increment.
 
 - [x] `opts-prealloc-one-short` [sha256:9c6fa00bf415]: **a failed
   `cJSON_PrintPreallocated` leaves a silently truncated document in the

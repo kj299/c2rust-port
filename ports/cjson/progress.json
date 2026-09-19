@@ -4,6 +4,7 @@
     "buffer-plumbing": "unsafe_audited",
     "dom": "unsafe_audited",
     "dom-access": "unsafe_audited",
+    "dom-add-parent": "unsafe_audited",
     "dom-construct": "unsafe_audited",
     "dom-mutate-place": "unsafe_audited",
     "dom-mutate-remove": "unsafe_audited",

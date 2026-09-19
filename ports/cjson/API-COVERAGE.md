@@ -140,8 +140,8 @@ wired into the gate. Two notes on getting the *number* right first:
 | `cJSON_CreateString` | ported | `cjson_modes_build` — driver mode `build` |
 | `cJSON_CreateArray` | ported | `cjson_modes_build` — driver mode `build` |
 | `cJSON_CreateObject` | ported | `cjson_modes_build` — driver mode `build` |
-| `cJSON_AddItemToArray` | ported | `cjson_modes_build` — driver mode `build` |
-| `cJSON_AddItemToObject` | ported | `cjson_modes_build` — driver mode `build` |
+| `cJSON_AddItemToArray` | ported | `cjson_modes_build` — driver mode `build`; driver mode `parent` (non-container parent) |
+| `cJSON_AddItemToObject` | ported | `cjson_modes_build` — driver mode `build`; driver mode `parent` |
 | `cJSON_AddNullToObject` | ported | `cjson_modes_build` — driver mode `build` |
 | `cJSON_AddBoolToObject` | ported | `cjson_modes_build` — driver mode `build` |
 | `cJSON_AddNumberToObject` | ported | `cjson_modes_build` — driver mode `build` |
@@ -341,6 +341,27 @@ buffer all zeros. That is exactly the ledgered class and nothing else, so the
 corrected oracle is masking the decision and not a defect. Asserting that a
 correction is narrow is cheap; measuring it is what makes the other three rows
 mean anything.
+
+### High-budget sweep on the `parent` mode (LESSONS #33 + #42)
+
+| Mode | Oracle | Seed | Iterations | Findings |
+|---|---|---|---|---|
+| `parent` | corrected | 1 | 20 000 | 0 |
+| `parent` | corrected | 2 | 20 000 | 0 |
+| `parent` | corrected | 3 | 20 000 | 0 |
+| `parent` | **pristine** | 11 | 4 000 | 25, all one class |
+
+60 000 generated inputs against the corrected oracle, zero divergences
+(executed 2026-09-19). Three seeds: `parent` is single-shot, so unlike `seq` its
+operations do not compose and the reachable state space is the input space.
+
+The fourth row is the LESSONS #42 control, and this mode needs it more than most
+— the correction added here patches *two* public entry points rather than one
+expression, so "wider than the decision it encodes" is a live risk. The same
+mode was fuzzed against the **PRISTINE** oracle and every finding classified
+mechanically against the ledgered predicate — the C added (`rc=1`) and the port
+refused (`rc=0`). All 25 distinct findings satisfy it; **0** fall outside. The
+correction is exactly as wide as the class.
 
 ### What this table changed
 

@@ -61,7 +61,7 @@ echo "===== 1b. probe-then-port — transcripts pinned, tests generated ====="
 # fails closed on oracle drift, a tampered transcript, or a hand-edited/stale
 # generated test file. The generated tests themselves run under `cargo test`
 # in step 2.
-PROBE_SETS=(quirks plumbing builder utils access construct set seq place opts)
+PROBE_SETS=(quirks plumbing builder utils access construct set seq place opts parent)
 PROBE_FILES=()
 for set in "${PROBE_SETS[@]}"; do
   PROBE_FILES+=("$HERE/oracle/probes-$set.json")
@@ -241,6 +241,30 @@ echo "----- module 15 (entry-opts): the four *WithOpts / buffered entry points -
     --matrix "$HERE/oracle/matrix-opts.json" --ledger "$HERE/DIVERGENCES.md" \
     --json > "$HERE/reports/entry-opts.json"
 
+echo "----- module 16 (dom-add-parent): the non-container parent -----"
+# cJSON's add_item_to_array guards a NULL item, a NULL parent and
+# self-reference -- never that the parent is a CONTAINER. So every public Add*
+# entry point hangs a child off a number and gives an object a NULL-keyed
+# member. The port cannot represent either (Value::Array is the only variant
+# with room for a child; an Object entry always has a key), so it answers false.
+#
+# Three earlier modules declined this class and said so in writing. The reason
+# it took four attempts is that the port's three comparison surfaces are ALL
+# blind to it: print ignores a child hung off a non-container, cJSON_Compare
+# calls a malformed node equal to a clean one, and cJSON_Duplicate copies the
+# hung child. So the `parent` mode's descriptor reports the CONTAINER VIEW
+# (GetArraySize/GetArrayItem) and the two object lookups SEPARATELY -- the
+# case-sensitive one stops at a NULL key and the case-insensitive one does not,
+# which is how a NULL-keyed member hides every member after it (LESSONS #39).
+#
+# 12 ledgered rows assert the divergence still happens against shipped cJSON;
+# the 16 matching rows prove it is no wider than claimed. The fuzzer below uses
+# the corrected oracle.
+"$PY" "$KIT/harnesses/differential/diff_run.py" \
+    --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
+    --matrix "$HERE/oracle/matrix-parent.json" --ledger "$HERE/DIVERGENCES.md" \
+    --json > "$HERE/reports/dom-add-parent.json"
+
 echo "----- module 9 (cJSON_Utils): pointer / patch / merge / sort differentials -----"
 # JSON Pointer (RFC 6901), Patch (6902), Merge-Patch (7396), object sort. The 3
 # utils-tilde-* rows in the matrix ASSERT the ledgered decode fix still diverges
@@ -350,6 +374,17 @@ bash "$HERE/oracle/build_fixed.sh" > /dev/null
     --args opts --matrix "$HERE/oracle/matrix-opts.json" \
     --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
     --json > "$HERE/reports/fuzz/entry-opts.json"
+# parent mode: fuzz the non-container parent against the CORRECTED oracle --
+# the class is predicate-defined (EVERY non-container parent), and kind=doc lets
+# the fuzzer pick the target's TYPE from the mutated document, so the pristine
+# oracle would report a constant stream of known differences (LESSONS #28). Its
+# matrix seeds the corpus, so the "<kind>\t<op>\t<key>\n<json>" framing is
+# mutated alongside the document.
+"$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
+    --oracle "$HERE/oracle/cjson_oracle_fixed" --rust "$RUST_DRIVER" \
+    --args parent --matrix "$HERE/oracle/matrix-parent.json" \
+    --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
+    --json > "$HERE/reports/fuzz/dom-add-parent.json"
 for m in scalar-parse string-parse buffer-plumbing recursive-core; do
   cp "$HERE/reports/fuzz/alloc-node.json" "$HERE/reports/fuzz/$m.json"
 done

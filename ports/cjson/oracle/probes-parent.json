@@ -1,0 +1,136 @@
+{
+  "module": "dom-add-parent",
+  "modules": [
+    "dom-add-parent"
+  ],
+  "probes": [
+    {
+      "id": "parent-arr-add-item",
+      "args": [
+        "parent"
+      ],
+      "stdin": "arr\ta\tk\n{}",
+      "note": "the well-formed case for AddItemToArray: an actual array. A run where this diverges is a port bug, not this class"
+    },
+    {
+      "id": "parent-arr-add-into-nonempty",
+      "args": [
+        "parent"
+      ],
+      "stdin": "arr\ta\tk\n[]",
+      "note": "same, with the op appending rather than starting the list"
+    },
+    {
+      "id": "parent-obj-add-object",
+      "args": [
+        "parent"
+      ],
+      "stdin": "obj\to\tk\n{}",
+      "note": "AddItemToObject onto an actual object"
+    },
+    {
+      "id": "parent-obj-add-cs",
+      "args": [
+        "parent"
+      ],
+      "stdin": "obj\tocs\tk\n{}",
+      "note": "AddItemToObjectCS onto an actual object: the C BORROWS the key instead of copying it, which the port cannot express (it owns every key) -- but the borrow is invisible through this descriptor, so the two still agree"
+    },
+    {
+      "id": "parent-obj-add-true",
+      "args": [
+        "parent"
+      ],
+      "stdin": "obj\tt\tk\n{}",
+      "note": "the cJSON_Add*ToObject family, onto an object"
+    },
+    {
+      "id": "parent-obj-add-false",
+      "args": [
+        "parent"
+      ],
+      "stdin": "obj\tf\tk\n{}",
+      "note": "same, false"
+    },
+    {
+      "id": "parent-obj-add-null",
+      "args": [
+        "parent"
+      ],
+      "stdin": "obj\tz\tk\n{}",
+      "note": "same, null"
+    },
+    {
+      "id": "parent-obj-add-number",
+      "args": [
+        "parent"
+      ],
+      "stdin": "obj\tm\tk\n{}",
+      "note": "same, number"
+    },
+    {
+      "id": "parent-obj-add-string",
+      "args": [
+        "parent"
+      ],
+      "stdin": "obj\ts\tk\n{}",
+      "note": "same, string"
+    },
+    {
+      "id": "parent-obj-empty-key",
+      "args": [
+        "parent"
+      ],
+      "stdin": "obj\to\t\n{}",
+      "note": "a member genuinely keyed \"\" IS findable by \"\" -- empty=1/1. The contrast with the NULL-keyed member (empty=0/0, matrix-only) is the whole reason the printed form cannot be trusted: both print as \"\""
+    },
+    {
+      "id": "parent-obj-duplicate-key",
+      "args": [
+        "parent"
+      ],
+      "stdin": "obj\tm\tpre\n{}",
+      "note": "re-adding the key the mode already inserted: cJSON appends rather than replacing, so the object carries `pre` twice"
+    },
+    {
+      "id": "parent-unknown-op",
+      "args": [
+        "parent"
+      ],
+      "stdin": "arr\tzzz\tk\n{}",
+      "note": "an unrecognised op is rc=-1 on both sides"
+    },
+    {
+      "id": "parent-doc-unparseable",
+      "args": [
+        "parent"
+      ],
+      "stdin": "doc\ta\tk\nnot json at all",
+      "note": "kind=doc with nothing to parse: no target at all, rc=-1, everything `-`"
+    },
+    {
+      "id": "parent-doc-array",
+      "args": [
+        "parent"
+      ],
+      "stdin": "doc\ta\tk\n[1,2]",
+      "note": "kind=doc is how a FUZZER picks the target type; here it picks a container, so both sides agree"
+    },
+    {
+      "id": "parent-doc-object",
+      "args": [
+        "parent"
+      ],
+      "stdin": "doc\to\tk\n{\"x\":1}",
+      "note": "same, an object document"
+    },
+    {
+      "id": "parent-doc-object-nested",
+      "args": [
+        "parent"
+      ],
+      "stdin": "doc\tm\tdeep\n{\"a\":{\"b\":1}}",
+      "note": "a document with structure, so the descriptor's doc= field carries something the add actually changed"
+    }
+  ]
+}

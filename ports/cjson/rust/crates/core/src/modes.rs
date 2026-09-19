@@ -707,6 +707,156 @@ fn split_tab(s: &[u8]) -> (&[u8], &[u8]) {
 /// length from asking for a gigabyte. Driver contract, shared by both sides.
 const OPTS_MAX_BUF: i32 = 4096;
 
+/// `parent`: stdin is `<kind>\t<op>\t<key>\n<json>` — the NON-CONTAINER PARENT.
+/// See `oracle/cjson_modes.h` for the full contract and `SCALAR-PARENT-SPIKE.md`
+/// for the executed evidence.
+///
+/// cJSON's `add_item_to_array` never checks that the parent is a container, so
+/// every Add\* entry point will hang a child off a number and give an object a
+/// member with a NULL key. The port cannot represent either state —
+/// `Value::Array(Vec<Value>)` is the only variant with anywhere to put a child,
+/// and an `Object` entry always has a key — so it answers `false`. That is the
+/// ledgered divergence, and it is the reason this mode exists: the port's
+/// behaviour has been right since module 6 and *nothing has ever compared it*
+/// (LESSONS #26/#31).
+///
+/// The descriptor deliberately does NOT rest on printed bytes. The spike
+/// established that print, `Compare` and `dup` are each blind to this class, so
+/// a bytes-based descriptor would report MATCH on every case the mode exists to
+/// test (LESSONS #39). It reports the container view instead, and reports the
+/// two object lookups separately because a NULL key makes them disagree.
+fn parent(input: &[u8]) -> (i32, Vec<u8>) {
+    let Some(nl) = input.iter().position(|&b| b == b'\n') else {
+        return (RC_USAGE, Vec::new());
+    };
+    let (head, rest) = input.split_at(nl);
+    let json = rest.get(1..).unwrap_or(&[]);
+    let (f_kind, tail) = split_tab(head);
+    let (f_op, f_key) = split_tab(tail);
+    if !head.contains(&b'\t') || !tail.contains(&b'\t') {
+        return (RC_USAGE, Vec::new());
+    }
+    let kind = String::from_utf8_lossy(cstr_prefix(f_kind)).into_owned();
+    let op = String::from_utf8_lossy(cstr_prefix(f_op)).into_owned();
+    let key = cstr_prefix(f_key);
+
+    let root = crate::parse_with_length(json).ok().map(|(v, _)| v);
+    // `doc` (and any unrecognised kind) targets the parsed document root, which
+    // is how a fuzzer gets to choose the target's TYPE.
+    let mut owned: Option<Value> = match kind.as_str() {
+        "num" => Some(dom::number(7.0)),
+        "str" => Some(Value::String(b"s".to_vec())),
+        "true" => Some(Value::True),
+        "false" => Some(Value::False),
+        "null" => Some(Value::Null),
+        // create_raw mirrors the C's nullable signature (cJSON_CreateRaw
+        // returns NULL for a NULL argument), so it already yields an Option.
+        "raw" => dom::create_raw(Some(b"RAW")),
+        "arr" => Some(Value::Array(Vec::new())),
+        "obj" => Some(Value::Object(Vec::new())),
+        // "doc", and anything unrecognised, targets the parsed document root.
+        _ => None,
+    };
+    let mut doc = root;
+    let target: Option<&mut Value> = match owned.as_mut() {
+        Some(t) => Some(t),
+        None => doc.as_mut(),
+    };
+
+    let mut out = Vec::new();
+    let Some(target) = target else {
+        // No target at all: `doc` with an unparseable document.
+        out.extend_from_slice(b"rc=-1;print=-;size=-1;item0=-;pre=0/0;post=0/0;key=0/0;empty=0/0;dupsz=-1;cmp=0;doc=-");
+        return (0, out);
+    };
+
+    // `pre` goes in only when the target is ALREADY an object — the same rule
+    // the C mode applies, for the same reason: adding a keyed member to a
+    // number would itself be the malformed operation.
+    if matches!(target, Value::Object(_)) {
+        dom::add_number_to_object(target, b"pre", 1.0);
+    }
+
+    let rc: i32 = match op.as_str() {
+        "a" => i32::from(dom::add_item_to_array(target, dom::number(99.0))),
+        // `ocs` is cJSON_AddItemToObjectCS: the C borrows the key instead of
+        // copying it. The port owns every key it stores, so the two entry
+        // points are the same function here — the borrow is not observable
+        // through this descriptor, only through the C's free path.
+        "o" | "ocs" => i32::from(dom::add_item_to_object(target, key, dom::number(99.0))),
+        "t" => i32::from(dom::add_true_to_object(target, key).is_some()),
+        "f" => i32::from(dom::add_false_to_object(target, key).is_some()),
+        "z" => i32::from(dom::add_null_to_object(target, key)),
+        "m" => i32::from(dom::add_number_to_object(target, key, 5.0)),
+        "s" => i32::from(dom::add_string_to_object(target, key, b"v")),
+        _ => -1,
+    };
+
+    // `post` is the load-bearing member: an ORDINARY key added AFTER the op.
+    // In the C, a NULL-keyed member left by the op makes the case-SENSITIVE
+    // lookup unable to reach it while the case-insensitive one still can.
+    if matches!(target, Value::Object(_)) {
+        dom::add_number_to_object(target, b"post", 2.0);
+    }
+
+    let printed = crate::print_value(target, false);
+    out.extend_from_slice(b"rc=");
+    out.extend_from_slice(format!("{rc}").as_bytes());
+    out.extend_from_slice(b";print=");
+    push_bytes(&mut out, printed.as_deref());
+    out.extend_from_slice(b";size=");
+    out.extend_from_slice(format!("{}", dom::get_array_size(target)).as_bytes());
+    out.extend_from_slice(b";item0=");
+    push_printed(&mut out, dom::get_array_item(target, 0));
+    out.extend_from_slice(b";pre=");
+    push_lookup(&mut out, target, b"pre");
+    out.extend_from_slice(b";post=");
+    push_lookup(&mut out, target, b"post");
+    out.extend_from_slice(b";key=");
+    push_lookup(&mut out, target, key);
+    out.extend_from_slice(b";empty=");
+    push_lookup(&mut out, target, b"");
+
+    // Duplicate and Compare are carried to PIN their blindness, not because a
+    // divergence is expected in them (see the spike): they are expected to
+    // MATCH, and omitting them would imply the divergence is wider than it is.
+    let dup = dom::duplicate(target);
+    out.extend_from_slice(b";dupsz=");
+    out.extend_from_slice(format!("{}", dom::get_array_size(&dup)).as_bytes());
+    out.extend_from_slice(b";cmp=");
+    out.extend_from_slice(if dom::compare(target, &dup, true) {
+        b"1"
+    } else {
+        b"0"
+    });
+    out.extend_from_slice(b";doc=");
+    match doc.as_ref().and_then(|d| crate::print_value(d, false)) {
+        Some(b) => out.extend_from_slice(&b),
+        None => out.push(b'-'),
+    }
+    (0, out)
+}
+
+/// One lookup pair as the C's `sb_lookup` spells it:
+/// `<case-insensitive>/<case-sensitive>`. Reported separately because in the C
+/// a NULL-keyed member makes them disagree — the case-sensitive walk stops at
+/// it (cJSON.c:1910) while the case-insensitive one steps past (cJSON.c:135).
+/// The port can never build that state, so its two halves always agree; the
+/// field exists so that difference is *measured* rather than asserted.
+fn push_lookup(out: &mut Vec<u8>, target: &Value, name: &[u8]) {
+    out.extend_from_slice(if dom::get_object_item(target, name, false).is_some() {
+        b"1"
+    } else {
+        b"0"
+    });
+    out.push(b'/');
+    out.extend_from_slice(if dom::get_object_item(target, name, true).is_some() {
+        b"1"
+    } else {
+        b"0"
+    });
+}
+
 /// `opts`: stdin is `<flags>\t<prebuffer>\t<prealloc>\n<json>` — all four
 /// options entry points in one shot (`cJSON_ParseWithLengthOpts`,
 /// `cJSON_ParseWithOpts`, `cJSON_PrintBuffered`, `cJSON_PrintPreallocated`).
@@ -1017,6 +1167,9 @@ pub fn run(mode: &str, input: &[u8]) -> (i32, Vec<u8>) {
     }
     if mode == "opts" {
         return opts(input);
+    }
+    if mode == "parent" {
+        return parent(input);
     }
 
     // cJSON_Utils modes (JSON Pointer / Patch / Merge / Sort) — one dispatch,
