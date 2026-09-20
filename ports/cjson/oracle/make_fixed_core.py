@@ -2,7 +2,7 @@
 """Emit `cJSON_fixed.c` — the vendored cJSON.c with the corrections the port
 makes deliberately, so differential FUZZING has a reference that shares them.
 
-Five sites, six corrections:
+Seven sites, eight corrections:
 
   1. `cJSON_CreateNumber`     — no longer converts a NaN to `int`.
   2. `cJSON_SetNumberHelper`  — same NaN fix, AND it no longer writes number
@@ -11,6 +11,10 @@ Five sites, six corrections:
      NUL-terminated truncation in the caller's buffer when it fails.
   4. `cJSON_AddItemToArray`    — no longer hangs a child off a non-array.
   5. `add_item_to_object`      — no longer stores a key on a non-object.
+  6. `cJSON_InsertItemInArray` — no longer reaches the static append helper
+     past both of those checks.
+  7. `cJSON_ReplaceItemInArray` — no longer replaces an OBJECT member by
+     positional index, destroying its key.
 
 ## 1. The NaN -> int conversion (cJSON.c:2452-2476, and again at :384)
 
@@ -361,6 +365,93 @@ ADD_OBJECT_FIXED = """\
     }
 """
 
+# The THIRD route to the same malformed tree, and the one that shows a
+# correction's completeness is relative to the modes that exercise it. Patching
+# cJSON_AddItemToArray and add_item_to_object closed every route the `parent`
+# mode can reach, and the pristine-oracle width control passed — because that
+# mode never calls Insert. It does not go through either patched function:
+# `get_array_item` answers NULL on a childless non-array, and Insert then falls
+# through to the *static* add_item_to_array, which is deliberately unpatched
+# (add_item_to_object delegates to it with an object parent).
+#
+# Measured on the CORRECTED oracle before this patch existed:
+#     ins -> number  rc=1 size=1 print=7          <- child hung off a number
+#     ins -> object  rc=1 size=1 print={"":99}    <- NULL-keyed member
+# and `rep` then succeeds on both, because once Insert has hung a child
+# `get_array_item` finds it and ReplaceItemViaPointer has a real node to swap.
+# So cJSON_ReplaceItemInArray needs no patch of its own: on a tree this
+# reference can still build, it already answers false.
+INSERT_PRISTINE = """\
+    after_inserted = get_array_item(array, (size_t)which);
+    if (after_inserted == NULL)
+    {
+        return add_item_to_array(array, newitem);
+    }
+"""
+
+INSERT_FIXED = """\
+    if (!cJSON_IsArray(array))
+    {
+        /* fixed: the append fall-through below reaches the static
+         * add_item_to_array directly, bypassing the two entry points patched
+         * above -- so without this, Insert is a second route to a child hung
+         * off a scalar and to an object member with a NULL key. */
+        return false;
+    }
+
+    after_inserted = get_array_item(array, (size_t)which);
+    if (after_inserted == NULL)
+    {
+        return add_item_to_array(array, newitem);
+    }
+"""
+
+# The FOURTH route, and the one my own reasoning got wrong. The note here used
+# to say cJSON_ReplaceItemInArray needed no correction, because get_array_item
+# answers NULL on a non-array with no children and ReplaceItemViaPointer then
+# refuses. True for a SCALAR. False for an OBJECT, which legitimately has
+# children: index 0 finds its first MEMBER, the replace succeeds, and the
+# replacement node carries no `string` -- so {"x":1,"y":2} becomes {"":0,"y":2}
+# and the key `x` is gone. A key-destroying write through an array API, on a
+# perfectly ordinary document with no malformed tree involved.
+#
+# The gate's own diff-fuzz found it in 109 iterations, against the corrected
+# oracle, immediately after the seq restriction was lifted. Reasoning said the
+# patch was unnecessary; running it said otherwise (LESSONS #38, turned on the
+# correction rather than on the subject).
+REPLACE_ARRAY_PRISTINE = """\
+CJSON_PUBLIC(cJSON_bool) cJSON_ReplaceItemInArray(cJSON *array, int which, cJSON *newitem)
+{
+    if (which < 0)
+    {
+        return false;
+    }
+
+    return cJSON_ReplaceItemViaPointer(array, get_array_item(array, (size_t)which), newitem);
+}
+"""
+
+REPLACE_ARRAY_FIXED = """\
+CJSON_PUBLIC(cJSON_bool) cJSON_ReplaceItemInArray(cJSON *array, int which, cJSON *newitem)
+{
+    if (which < 0)
+    {
+        return false;
+    }
+
+    if (!cJSON_IsArray(array))
+    {
+        /* fixed: get_array_item walks ANY node's child list, so on an object
+         * index 0 finds the first member and the replacement -- which has no
+         * `string` -- silently destroys its key. The port replaces only inside
+         * a Value::Array. */
+        return false;
+    }
+
+    return cJSON_ReplaceItemViaPointer(array, get_array_item(array, (size_t)which), newitem);
+}
+"""
+
 # (what it fixes, pristine text, replacement). Each is asserted to occur EXACTLY
 # once — see main().
 PATCHES = [
@@ -384,6 +475,16 @@ PATCHES = [
         "add_item_to_object's missing container check",
         ADD_OBJECT_PRISTINE,
         ADD_OBJECT_FIXED,
+    ),
+    (
+        "cJSON_InsertItemInArray's append fall-through to the static helper",
+        INSERT_PRISTINE,
+        INSERT_FIXED,
+    ),
+    (
+        "cJSON_ReplaceItemInArray replacing an OBJECT member by index",
+        REPLACE_ARRAY_PRISTINE,
+        REPLACE_ARRAY_FIXED,
     ),
 ]
 

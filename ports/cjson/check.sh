@@ -344,20 +344,27 @@ bash "$HERE/oracle/build_fixed.sh" > /dev/null
     --args set --matrix "$HERE/oracle/matrix-set.json" \
     --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
     --json > "$HERE/reports/fuzz/dom-mutate-set.json"
-# seq mode: fuzz the removal surface against the PRISTINE oracle -- this module
-# has no intentional divergence, so every finding would be a real port bug. Its
-# own matrix seeds the corpus, so the fuzzer mutates the document, the op
-# grammar and the "<op>\t<sel>\t<arg>" framing independently.
+# seq mode: fuzz the removal surface against the CORRECTED oracle. It used the
+# PRISTINE one while `app`/`ins`/`rep` refused a non-array target and the mode
+# therefore had no intentional divergence. Lifting that restriction (module 16)
+# made the statement false: a fuzzer picking selectors from a mutated document
+# names a scalar or an object constantly, and every one of those is the
+# predicate-defined `scalar-parent-child` class, which has no finite fingerprint
+# set (LESSONS #28). Its own matrix seeds the corpus, so the fuzzer mutates the
+# document, the op grammar and the "<op>\t<sel>\t<arg>" framing independently.
 "$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
-    --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
+    --oracle "$HERE/oracle/cjson_oracle_fixed" --rust "$RUST_DRIVER" \
     --args seq --matrix "$HERE/oracle/matrix-seq.json" \
     --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
     --json > "$HERE/reports/fuzz/dom-mutate-remove.json"
 # ...and the same mode seeded from the PLACEMENT matrix, so the fuzzer mutates
 # programs whose ops are inserts and replaces rather than detaches. Same mode,
-# different seed corpus, different reachable states.
+# different seed corpus, different reachable states -- and the corrected oracle
+# for the same reason as above, with one route of its own: `ins` falls through
+# to the STATIC add_item_to_array past both entry points patched for `app`, so
+# make_fixed_core.py patches cJSON_InsertItemInArray separately.
 "$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
-    --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
+    --oracle "$HERE/oracle/cjson_oracle_fixed" --rust "$RUST_DRIVER" \
     --args seq --matrix "$HERE/oracle/matrix-place.json" \
     --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
     --json > "$HERE/reports/fuzz/dom-mutate-place.json"

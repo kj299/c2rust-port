@@ -1,7 +1,7 @@
 {
   "probe_transcript": 1,
   "module": "dom-mutate-place",
-  "oracle_sha256": "99721b14d77900c43de637114125be1b13cd4d287bd1255c47464d033b710d1c",
+  "oracle_sha256": "8f1743afdc2a32fc45effeea7810d06423fcbb74b8483f316e0df5141e948100",
   "generated_by": "harnesses/probe/probe.py run",
   "entries": [
     {
@@ -111,30 +111,6 @@
       "stdout_b64": "aW5pdD1bXXxpbnM6cj0xLGdvdD0tLGtleT0tLHN6PTEsZG9jPVswXXxhcHA6cj0xLGdvdD0tLGtleT0tLHN6PTIsZG9jPVswLDk5XQ==",
       "stdin_preview": "[]\nins\t\t0\napp\t\t99",
       "stdout_preview": "init=[]|ins:r=1,got=-,key=-,sz=1,doc=[0]|app:r=1,got=-,key=-,sz=2,doc=[0,99]"
-    },
-    {
-      "id": "place-ins-object-refused",
-      "args": [
-        "seq"
-      ],
-      "stdin_b64": "eyJhIjoxLCJiIjoyfQppbnMJCTE=",
-      "note": "the mode refuses a non-ARRAY target. The C would insert a member with a NULL key, which is not the same as a member keyed \"\": get_object_item stops its walk at a NULL string, so it would be present but unfindable -- unrepresentable in Value::Object. Stated limit, see cjson_modes.h",
-      "rc": 0,
-      "stdout_b64": "aW5pdD17ImEiOjEsImIiOjJ9fGluczpyPTAsZ290PS0sa2V5PS0sc3o9Mixkb2M9eyJhIjoxLCJiIjoyfQ==",
-      "stdin_preview": "{\"a\":1,\"b\":2}\nins\t\t1",
-      "stdout_preview": "init={\"a\":1,\"b\":2}|ins:r=0,got=-,key=-,sz=2,doc={\"a\":1,\"b\":2}"
-    },
-    {
-      "id": "place-ins-scalar-refused",
-      "args": [
-        "seq"
-      ],
-      "stdin_b64": "eyJhIjo3fQppbnMJYQkw",
-      "note": "same refusal for a scalar target, which the C would give a child (scalar-parent-child)",
-      "rc": 0,
-      "stdout_b64": "aW5pdD17ImEiOjd9fGluczpyPTAsZ290PS0sa2V5PS0sc3o9MCxkb2M9eyJhIjo3fQ==",
-      "stdin_preview": "{\"a\":7}\nins\ta\t0",
-      "stdout_preview": "init={\"a\":7}|ins:r=0,got=-,key=-,sz=0,doc={\"a\":7}"
     },
     {
       "id": "place-ins-missing-target",
@@ -267,18 +243,6 @@
       "stdout_b64": "aW5pdD1bXXxyZXA6cj0wLGdvdD0tLGtleT0tLHN6PTAsZG9jPVtd",
       "stdin_preview": "[]\nrep\t\t0",
       "stdout_preview": "init=[]|rep:r=0,got=-,key=-,sz=0,doc=[]"
-    },
-    {
-      "id": "place-rep-object-refused",
-      "args": [
-        "seq"
-      ],
-      "stdin_b64": "eyJhIjoxfQpyZXAJCTA=",
-      "note": "non-array target refused, same reason as insert",
-      "rc": 0,
-      "stdout_b64": "aW5pdD17ImEiOjF9fHJlcDpyPTAsZ290PS0sa2V5PS0sc3o9MSxkb2M9eyJhIjoxfQ==",
-      "stdin_preview": "{\"a\":1}\nrep\t\t0",
-      "stdout_preview": "init={\"a\":1}|rep:r=0,got=-,key=-,sz=1,doc={\"a\":1}"
     },
     {
       "id": "place-rep-nested",
@@ -557,5 +521,5 @@
       "stdout_preview": "init=[1,2]|app:r=1,got=-,key=-,sz=3,doc=[1,2,1]"
     }
   ],
-  "fingerprint": "0a3793232135d803b7756dff52c3cb55f07294d174b9180f6a075c7f2a53dd45"
+  "fingerprint": "5c0931e4fe521e7f8278146d678ab8c00c1e9999b8a785ae0cb3d4b4461ab6c2"
 }

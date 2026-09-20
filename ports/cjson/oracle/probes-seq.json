@@ -117,14 +117,6 @@
       "note": "DetachItemFromArray on an OBJECT: get_array_item has NO type check, so index 0 takes the first MEMBER -- and the detached node keeps its key (key=1:a). This file has shipped the array-only reading wrong three times"
     },
     {
-      "id": "seq-detach-object-by-index-then-append",
-      "args": [
-        "seq"
-      ],
-      "stdin": "{\"a\":1,\"b\":2}\nda\t\t0\napp\t\t5\n",
-      "note": "and the object's list relinks the same way; the append is refused because the target is not an array"
-    },
-    {
       "id": "seq-detach-scalar-root",
       "args": [
         "seq"
@@ -261,22 +253,6 @@
       "note": "the selector uses the case-SENSITIVE lookup, so `a` misses `A` -- deliberately fixed so the op's own case flag is the only thing varying"
     },
     {
-      "id": "seq-app-scalar-refused",
-      "args": [
-        "seq"
-      ],
-      "stdin": "{\"a\":7}\napp\ta\t5\n",
-      "note": "the C would hang a child off the scalar 7 (scalar-parent-child); the driver refuses on BOTH sides so this module's ledger stays on the removal surface. r=0, sz unchanged"
-    },
-    {
-      "id": "seq-app-object-refused",
-      "args": [
-        "seq"
-      ],
-      "stdin": "{\"a\":1}\napp\t\t5\n",
-      "note": "the C would give the object a NULL-keyed member printing as \"\"; same refusal, same reason"
-    },
-    {
       "id": "seq-app-array-ok",
       "args": [
         "seq"
@@ -387,6 +363,14 @@
       ],
       "stdin": "{\"a\":1,\"b\":2,\"arr\":[10,20,30],\"o\":{\"x\":1}}\nda\t\t0\napp\tarr\t99\nxo\t\tb\ndos\to\tx\nda\tarr\t0\napp\tarr\t1\n",
       "note": "six steps mixing every family across three containers; the descriptor after EVERY step is what makes a corruption that surfaces late visible at all"
+    },
+    {
+      "id": "seq-index-padded-with-zeros",
+      "args": [
+        "seq"
+      ],
+      "stdin": "[1]\nda\t\t0000000000000000008",
+      "note": "a 19-character index literal that is eighteen leading zeros then an 8. The C's strtol reads 8 and the detach fails as out of range. The port capped the digit run at 18 chars BEFORE stripping zeros, read 0, and detached the first element -- a real port bug the LESSONS #33 sweep found at iteration 13450. Pinned here so the differential keeps it."
     }
   ]
 }

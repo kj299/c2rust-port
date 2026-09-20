@@ -5,7 +5,7 @@
 // byte-compares this file against a fresh regeneration, so a hand
 // edit here FAILS the gate instead of silently redefining the spec.
 // module: dom-mutate-place
-// transcript fingerprint: sha256:0a3793232135d803b7756dff52c3cb55f07294d174b9180f6a075c7f2a53dd45
+// transcript fingerprint: sha256:5c0931e4fe521e7f8278146d678ab8c00c1e9999b8a785ae0cb3d4b4461ab6c2
 
 mod probe_glue;
 
@@ -80,20 +80,6 @@ fn probe_place_ins_end_then_append() {
 #[rustfmt::skip]
 fn probe_place_ins_empty_then_append() {
     check("place-ins-empty-then-append", &["seq"], b"[]\x0ains\x09\x090\x0aapp\x09\x0999", 0, b"init=[]|ins:r=1,got=-,key=-,sz=1,doc=[0]|app:r=1,got=-,key=-,sz=2,doc=[0,99]");
-}
-
-// the mode refuses a non-ARRAY target. The C would insert a member with a NULL key, which is not the same as a member keyed "": get_object_item stops its walk at a NULL string, so it would be present but unfindable -- unrepresentable in Value::Object. Stated limit, see cjson_modes.h
-#[test]
-#[rustfmt::skip]
-fn probe_place_ins_object_refused() {
-    check("place-ins-object-refused", &["seq"], b"{\"a\":1,\"b\":2}\x0ains\x09\x091", 0, b"init={\"a\":1,\"b\":2}|ins:r=0,got=-,key=-,sz=2,doc={\"a\":1,\"b\":2}");
-}
-
-// same refusal for a scalar target, which the C would give a child (scalar-parent-child)
-#[test]
-#[rustfmt::skip]
-fn probe_place_ins_scalar_refused() {
-    check("place-ins-scalar-refused", &["seq"], b"{\"a\":7}\x0ains\x09a\x090", 0, b"init={\"a\":7}|ins:r=0,got=-,key=-,sz=0,doc={\"a\":7}");
 }
 
 // an unresolvable selector: no target, so the op is a recorded no-op on both sides
@@ -171,13 +157,6 @@ fn probe_place_rep_negative() {
 #[rustfmt::skip]
 fn probe_place_rep_empty() {
     check("place-rep-empty", &["seq"], b"[]\x0arep\x09\x090", 0, b"init=[]|rep:r=0,got=-,key=-,sz=0,doc=[]");
-}
-
-// non-array target refused, same reason as insert
-#[test]
-#[rustfmt::skip]
-fn probe_place_rep_object_refused() {
-    check("place-rep-object-refused", &["seq"], b"{\"a\":1}\x0arep\x09\x090", 0, b"init={\"a\":1}|rep:r=0,got=-,key=-,sz=1,doc={\"a\":1}");
 }
 
 // replace inside a nested array

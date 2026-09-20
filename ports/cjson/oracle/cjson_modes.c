@@ -659,24 +659,35 @@ char *cjson_modes_seq(const char *json, size_t json_len,
             cJSON_DeleteItemFromObjectCaseSensitive(target, arg);
         } else if (strcmp(line, "app") == 0) {
             name = "app";
-            /* ARRAY targets only -- the C would accept any parent, and the two
-             * malformed trees that produces (a child hung off a scalar, an
-             * object member with a NULL key) are the `scalar-parent-child`
-             * class this module deliberately does not own. */
-            if (cJSON_IsArray(target)) {
-                r = cJSON_AddItemToArray(target, cJSON_CreateNumber(seq_index(arg))) ? 1 : 0;
-            } else {
-                r = 0;
-            }
+            /* NO container restriction. It used to refuse a non-array, because
+             * the C accepts any parent and the two malformed trees that
+             * produces -- a child hung off a scalar, an object member with a
+             * NULL key -- were the `scalar-parent-child` class no module
+             * owned. Module 16 (`dom-add-parent`) owns it now: the class is
+             * ledgered, the corrected oracle shares the port's type check, and
+             * the descriptor's `sz` field makes the hung child visible. So the
+             * restriction is lifted and the op runs against whatever the
+             * selector names -- which is the coverage the restriction cost.
+             *
+             * Ownership: now that this can FAIL, the node has to be held. The
+             * previous form passed cJSON_CreateNumber(...) straight in, which
+             * was leak-free only because a guarded append always succeeded. */
+            cJSON *item = cJSON_CreateNumber(seq_index(arg));
+            r = cJSON_AddItemToArray(target, item) ? 1 : 0;
+            if (!r) cJSON_Delete(item);
         } else if (strcmp(line, "ins") == 0) {
             name = "ins";
-            /* ARRAY only, same reason as `app`. Note what this op does NOT
+            /* Unrestricted now, same as `app`. Note what this op does NOT
              * fail at: an index past the end is not an error -- the C falls
              * through to add_item_to_array and appends (probed, see
              * spikes/place_relink.c), so `ins 99` on a 2-element array
-             * succeeds and grows it to 3. */
-            r = 0;
-            if (cJSON_IsArray(target)) {
+             * succeeds and grows it to 3.
+             *
+             * That fall-through is also why Insert is a THIRD route to the
+             * malformed tree: it reaches the static add_item_to_array
+             * directly, past both entry points the corrected oracle patches
+             * for `app`. make_fixed_core.py patches it separately. */
+            {
                 cJSON *item = cJSON_CreateNumber(seq_index(arg));
                 r = cJSON_InsertItemInArray(target, seq_index(arg), item) ? 1 : 0;
                 /* Ownership transfers only on SUCCESS; on every failure path
@@ -690,8 +701,12 @@ char *cjson_modes_seq(const char *json, size_t json_len,
             }
         } else if (strcmp(line, "rep") == 0) {
             name = "rep";
-            r = 0;
-            if (cJSON_IsArray(target)) {
+            /* Unrestricted now. cJSON_ReplaceItemInArray needs no correction of
+             * its own: it reaches get_array_item + cJSON_ReplaceItemViaPointer,
+             * both of which answer false on a non-array that has no children --
+             * and once Insert is patched, the corrected oracle can no longer
+             * build one that has. */
+            {
                 cJSON *item = cJSON_CreateNumber(seq_index(arg));
                 r = cJSON_ReplaceItemInArray(target, seq_index(arg), item) ? 1 : 0;
                 if (!r) cJSON_Delete(item);
