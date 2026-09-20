@@ -129,19 +129,35 @@ char *cjson_modes_set(double num, const char *key, const char *newstr,
  *   - deeper nesting is not directly addressable. Adding a path grammar would
  *     put the port's own tree walk on trial instead of the C's list surgery,
  *     which is what this module is for.
- *   - `app`, `ins` and `rep` run only when the target is an ARRAY. The C has no
- *     such check on any of them and will happily hang a child off a scalar or
- *     give an object a member with a NULL key; the port can represent neither.
- *     The NULL-keyed member is worth spelling out, because an empty key is NOT
- *     the same thing: the C's get_object_item stops its walk at a NULL string,
- *     so a NULL-keyed member is UNFINDABLE, while a member keyed "" is found by
- *     a lookup for "". A `Value::Object` entry has a key either way, so the port
- *     cannot express "present but unfindable". That is the `scalar-parent-child`
- *     class, it belongs to cJSON_AddItemTo*, and it is tracked as its own
- *     increment -- see DIVERGENCES.md. Refusing it HERE is a scope decision, and
- *     it is written down because an unstated one is indistinguishable from an
- *     oversight.
- *   - `ro`/`ros` are NOT restricted, because every way they can fail is
+ *   - NOTHING is restricted by target type any more. `app`, `ins` and `rep`
+ *     used to run only when the target was an ARRAY, because the C has no such
+ *     check on any of them and will hang a child off a scalar or give an object
+ *     a member with a NULL key -- states the port cannot represent, and while
+ *     no module OWNED that class, comparing it here would have been an
+ *     unledgered divergence. Module 16 (`dom-add-parent`) owns it now, so the
+ *     restriction is lifted and these ops run against whatever the selector
+ *     names. That is the point of lifting it: this is the only mode where the
+ *     ops COMPOSE, so a malformed tree built at step 2 is now carried into the
+ *     five steps after it, which no single-shot mode can reach.
+ *
+ *     `sz` is what makes the difference visible, and the reason this mode could
+ *     absorb the lift at all: `app a` onto a number leaves the DOCUMENT PRINT
+ *     byte-identical on both sides (`{"a":7}`) and only the child count
+ *     disagrees, 1 against 0.
+ *
+ *     `ins` and `rep` each needed a correction of their OWN in the fuzz oracle.
+ *     `ins`: an index past the end is not an error, so it falls through to the
+ *     *static* add_item_to_array, past both entry points patched for `app`.
+ *     `rep`: get_array_item walks ANY node's child list, so on an OBJECT index
+ *     0 finds the first MEMBER and the replacement -- which carries no
+ *     `string` -- destroys its key, turning {"x":1,"y":2} into {"":0,"y":2}.
+ *     No malformed tree is needed for that one; an ordinary object is enough.
+ *     This comment previously claimed `rep` needed no correction, reasoning
+ *     that a non-array has no children to find. That is true of a SCALAR and
+ *     false of an object, and the gate's diff-fuzz disproved it in 109
+ *     iterations (LESSONS #38 turned on the correction rather than the
+ *     subject).
+ *   - `ro`/`ros` were never restricted, because every way they can fail is
  *     representable: a missing key, a non-object parent and an empty container
  *     all just answer false on both sides.
  *

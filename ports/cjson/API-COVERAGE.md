@@ -363,6 +363,40 @@ mechanically against the ledgered predicate — the C added (`rc=1`) and the por
 refused (`rc=0`). All 25 distinct findings satisfy it; **0** fall outside. The
 correction is exactly as wide as the class.
 
+### High-budget sweep after lifting the `seq` array-only restriction (LESSONS #33 + #42)
+
+| Mode | Seeds from | Oracle | Seed | Iterations | Findings |
+|---|---|---|---|---|---|
+| `seq` | `matrix-seq` | corrected | 1 / 2 / 3 | 20 000 each | 0 |
+| `seq` | `matrix-place` | corrected | 1 / 2 / 3 | 20 000 each | 0 |
+| `seq` | `matrix-place` | **pristine** | 21 | 4 000 | 16, all one class |
+
+120 000 generated inputs against the corrected oracle, zero divergences
+(executed 2026-09-19). Six runs rather than three because `seq` is the one mode
+whose ops COMPOSE: an eight-op program reaches trees no single input describes,
+so the reachable state space is larger than the input space.
+
+**The sweep earned its budget twice over, and both findings were in work this
+same change had just written:**
+
+* At iteration 13 450 — six times past the gate's 2 000 floor — it found a real
+  **port bug** that has nothing to do with the lift: `parse_index` capped the
+  digit run at 18 characters *before* stripping leading zeros, so an index of
+  `0000000000000000008` read as 0. The port detached element 0 where the C,
+  whose `strtol` reads 8, detached nothing. Fixed, unit-pinned
+  (`index_ignores_leading_zeros`), and added to `matrix-seq` and the seq probe
+  set in the same change. It affected every mode that parses an index.
+* At iteration 109, against the *corrected* oracle, it disproved a claim this
+  change had written a few minutes earlier: that `cJSON_ReplaceItemInArray`
+  needed no correction because a non-array has no children to find. True of a
+  scalar; false of an object, whose members `get_array_item` walks happily —
+  so `rep` index 0 on `{"x":1,"y":2}` yields `{"":0,"y":2}` and the key is
+  gone. `make_fixed_core.py` gained a seventh correction.
+
+The pristine row is the LESSONS #42 control: all 16 distinct findings satisfy
+the ledgered predicate mechanically — some step where the C acted (`r=1`) and
+the port refused (`r=0`) — with 0 outside it.
+
 ### What this table changed
 
 Wiring it in moved the base library from "governed by prose" to a number that

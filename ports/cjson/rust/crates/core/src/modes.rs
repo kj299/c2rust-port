@@ -122,8 +122,21 @@ fn parse_index(field: &[u8]) -> i32 {
     // i64 then clamp: parsing straight to i32 would make an overflowing literal
     // an Err (→ 0), where C's strtol saturates to LONG_MAX and the driver clamps
     // that to INT_MAX. Same reason the digit run is capped before parsing.
-    let run = digits.get(..end.min(18)).unwrap_or("");
-    let magnitude: i64 = run.parse().unwrap_or(0);
+    //
+    // The cap is applied to the SIGNIFICANT digits, not the raw run. Capping
+    // the raw run truncated `0000000000000000008` to eighteen zeros — value 0 —
+    // so the port detached index 0 where the C, whose strtol reads 8, detached
+    // nothing. Leading zeros are not overflow. Found by the LESSONS #33 sweep
+    // at iteration 13 450 of 20 000, well past the gate's 2 000-iteration
+    // floor; pinned by `index_ignores_leading_zeros`.
+    let run = digits.get(..end).unwrap_or("");
+    let significant = run.trim_start_matches('0');
+    let magnitude: i64 = if significant.len() > 18 {
+        i64::MAX
+    } else {
+        // An all-zero run trims to "", which does not parse — that is the 0.
+        significant.parse().unwrap_or(0)
+    };
     // `checked_neg` and `try_from`, not `-x` and `as i32`: the workspace denies
     // arithmetic_side_effects and cast_possible_truncation, and a silent
     // wraparound here would turn a fuzzed index into a valid one — the exact
@@ -598,23 +611,29 @@ fn seq(input: &[u8]) -> (i32, Vec<u8>) {
                     b"dos" => got = dom::detach_from_object(t, arg, true),
                     b"xo" => dom::delete_from_object(t, arg, false),
                     b"xos" => dom::delete_from_object(t, arg, true),
+                    // NO container restriction. These three refused a
+                    // non-array until module 16 (`dom-add-parent`) put the
+                    // `scalar-parent-child` class on the compared contract:
+                    // the C accepts any parent and builds a tree the port
+                    // cannot represent (a child hung off a scalar, an object
+                    // member with a NULL key), and while nothing owned that
+                    // class, comparing it here would have been an unledgered
+                    // divergence. It is ledgered now, so the restriction is
+                    // lifted and the ops run against whatever the selector
+                    // names — which is the coverage the restriction cost, in
+                    // the mode where these ops COMPOSE with detach and delete.
+                    //
+                    // The port's own type checks live in `dom`, so these arms
+                    // just call through; the refusal is the enum's, not the
+                    // mode's.
                     b"app" => {
-                        // ARRAY targets only. The C accepts any parent and
-                        // produces a tree the port cannot represent — a child
-                        // hung off a scalar, or an object member with a NULL
-                        // key. That is `scalar-parent-child`, which belongs to
-                        // cJSON_AddItemTo* and is its own increment; refusing it
-                        // here is a scope decision, stated rather than silent.
-                        if matches!(t, Value::Array(_)) {
-                            r = i32::from(dom::add_item_to_array(t, dom::number(f64::from(index))));
-                        }
+                        r = i32::from(dom::add_item_to_array(t, dom::number(f64::from(index))));
                     }
-                    // `ins`/`rep` are array-only for exactly the same reason as
-                    // `app`. Their negative-index guard lives here too: the C
-                    // rejects `which < 0` before the lookup, and `at` is None
-                    // precisely then.
+                    // The negative-index guard stays here: the C rejects
+                    // `which < 0` before the lookup, and `at` is None exactly
+                    // then.
                     b"ins" => {
-                        if let (Value::Array(_), Some(i)) = (&*t, at) {
+                        if let Some(i) = at {
                             r = i32::from(dom::insert_in_array(
                                 t,
                                 i,
@@ -623,7 +642,7 @@ fn seq(input: &[u8]) -> (i32, Vec<u8>) {
                         }
                     }
                     b"rep" => {
-                        if let (Value::Array(_), Some(i)) = (&*t, at) {
+                        if let Some(i) = at {
                             r = i32::from(dom::replace_in_array(
                                 t,
                                 i,
@@ -1215,6 +1234,22 @@ pub fn run(mode: &str, input: &[u8]) -> (i32, Vec<u8>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Regression for a real port bug the high-budget sweep found: the digit
+    /// cap that keeps an overflowing literal from failing to parse must not
+    /// count leading zeros, or a padded index silently becomes 0.
+    #[test]
+    fn index_ignores_leading_zeros() {
+        assert_eq!(parse_index(b"0000000000000000008"), 8); // 19 chars
+        assert_eq!(parse_index(b"000000000000000000000001"), 1); // 24 chars
+        assert_eq!(parse_index(b"-0000000000000000008"), -8);
+        assert_eq!(parse_index(b"00000000000000000000"), 0); // all zeros
+        assert_eq!(parse_index(b"8"), 8);
+        // A genuine overflow still saturates, which is what the cap is for:
+        // C's strtol answers LONG_MAX and the driver clamps it to INT_MAX.
+        assert_eq!(parse_index(b"99999999999999999999"), i32::MAX);
+        assert_eq!(parse_index(b"-99999999999999999999"), i32::MIN);
+    }
 
     #[test]
     fn unknown_mode_and_variant_are_usage_errors() {

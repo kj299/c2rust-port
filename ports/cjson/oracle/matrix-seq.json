@@ -352,7 +352,7 @@
   ]
  },
  {
-  "name": "seq-app-scalar-refused",
+  "name": "seq-app-onto-scalar",
   "args": [
    "seq"
   ],
@@ -363,7 +363,7 @@
   ]
  },
  {
-  "name": "seq-app-object-refused",
+  "name": "seq-app-onto-object",
   "args": [
    "seq"
   ],
@@ -522,6 +522,17 @@
    "seq"
   ],
   "stdin_b64": "eyJhIjoxLCJiIjoyLCJhcnIiOlsxMCwyMCwzMF0sIm8iOnsieCI6MX19CmRhCQkwCmFwcAlhcnIJOTkKeG8JCWIKZG9zCW8JeApkYQlhcnIJMAphcHAJYXJyCTEK",
+  "expect_rc": 0,
+  "mods": [
+   "dom-mutate-remove"
+  ]
+ },
+ {
+  "name": "seq-index-padded-with-zeros",
+  "args": [
+   "seq"
+  ],
+  "stdin_b64": "WzFdCmRhCQkwMDAwMDAwMDAwMDAwMDAwMDA4",
   "expect_rc": 0,
   "mods": [
    "dom-mutate-remove"

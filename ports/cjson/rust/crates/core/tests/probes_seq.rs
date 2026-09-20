@@ -5,7 +5,7 @@
 // byte-compares this file against a fresh regeneration, so a hand
 // edit here FAILS the gate instead of silently redefining the spec.
 // module: dom-mutate-remove
-// transcript fingerprint: sha256:1aa748346b58d3fe5428f8853930c6af40c3af7ff2d2b0b3dd1fb25a29a50e0a
+// transcript fingerprint: sha256:80f9bc015ff9066d4face91de773d1aceaf84083c7f7411bb0a06fd2f8d2f820
 
 mod probe_glue;
 
@@ -115,13 +115,6 @@ fn probe_seq_detach_index_plus() {
 #[rustfmt::skip]
 fn probe_seq_detach_object_by_index() {
     check("seq-detach-object-by-index", &["seq"], b"{\"a\":1,\"b\":2}\x0ada\x09\x090\x0a", 0, b"init={\"a\":1,\"b\":2}|da:r=1,got=1,key=1:a,sz=1,doc={\"b\":2}");
-}
-
-// and the object's list relinks the same way; the append is refused because the target is not an array
-#[test]
-#[rustfmt::skip]
-fn probe_seq_detach_object_by_index_then_append() {
-    check("seq-detach-object-by-index-then-append", &["seq"], b"{\"a\":1,\"b\":2}\x0ada\x09\x090\x0aapp\x09\x095\x0a", 0, b"init={\"a\":1,\"b\":2}|da:r=1,got=1,key=1:a,sz=1,doc={\"b\":2}|app:r=0,got=-,key=-,sz=1,doc={\"b\":2}");
 }
 
 // a scalar has no child, so both the detach and the delete are no-ops -- size stays 0
@@ -243,20 +236,6 @@ fn probe_seq_selector_is_case_sensitive() {
     check("seq-selector-is-case-sensitive", &["seq"], b"{\"A\":[1,2]}\x0ada\x09a\x090\x0ada\x09A\x090\x0a", 0, b"init={\"A\":[1,2]}|da:r=0,got=-,key=-,sz=-1,doc={\"A\":[1,2]}|da:r=1,got=1,key=-,sz=1,doc={\"A\":[2]}");
 }
 
-// the C would hang a child off the scalar 7 (scalar-parent-child); the driver refuses on BOTH sides so this module's ledger stays on the removal surface. r=0, sz unchanged
-#[test]
-#[rustfmt::skip]
-fn probe_seq_app_scalar_refused() {
-    check("seq-app-scalar-refused", &["seq"], b"{\"a\":7}\x0aapp\x09a\x095\x0a", 0, b"init={\"a\":7}|app:r=0,got=-,key=-,sz=0,doc={\"a\":7}");
-}
-
-// the C would give the object a NULL-keyed member printing as ""; same refusal, same reason
-#[test]
-#[rustfmt::skip]
-fn probe_seq_app_object_refused() {
-    check("seq-app-object-refused", &["seq"], b"{\"a\":1}\x0aapp\x09\x095\x0a", 0, b"init={\"a\":1}|app:r=0,got=-,key=-,sz=1,doc={\"a\":1}");
-}
-
 // the only accepted target: an array. The appended value is CreateNumber of the index field, so it also crosses the negative branch
 #[test]
 #[rustfmt::skip]
@@ -353,4 +332,11 @@ fn probe_seq_doc_empty() {
 #[rustfmt::skip]
 fn probe_seq_interleaved() {
     check("seq-interleaved", &["seq"], b"{\"a\":1,\"b\":2,\"arr\":[10,20,30],\"o\":{\"x\":1}}\x0ada\x09\x090\x0aapp\x09arr\x0999\x0axo\x09\x09b\x0ados\x09o\x09x\x0ada\x09arr\x090\x0aapp\x09arr\x091\x0a", 0, b"init={\"a\":1,\"b\":2,\"arr\":[10,20,30],\"o\":{\"x\":1}}|da:r=1,got=1,key=1:a,sz=3,doc={\"b\":2,\"arr\":[10,20,30],\"o\":{\"x\":1}}|app:r=1,got=-,key=-,sz=4,doc={\"b\":2,\"arr\":[10,20,30,99],\"o\":{\"x\":1}}|xo:r=-,got=-,key=-,sz=2,doc={\"arr\":[10,20,30,99],\"o\":{\"x\":1}}|dos:r=1,got=1,key=1:x,sz=0,doc={\"arr\":[10,20,30,99],\"o\":{}}|da:r=1,got=10,key=-,sz=3,doc={\"arr\":[20,30,99],\"o\":{}}|app:r=1,got=-,key=-,sz=4,doc={\"arr\":[20,30,99,1],\"o\":{}}");
+}
+
+// a 19-character index literal that is eighteen leading zeros then an 8. The C's strtol reads 8 and the detach fails as out of range. The port capped the digit run at 18 chars BEFORE stripping zeros, read 0, and detached the first element -- a real port bug the LESSONS #33 sweep found at iteration 13450. Pinned here so the differential keeps it.
+#[test]
+#[rustfmt::skip]
+fn probe_seq_index_padded_with_zeros() {
+    check("seq-index-padded-with-zeros", &["seq"], b"[1]\x0ada\x09\x090000000000000000008", 0, b"init=[1]|da:r=0,got=-,key=-,sz=1,doc=[1]");
 }

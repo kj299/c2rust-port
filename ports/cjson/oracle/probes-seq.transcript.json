@@ -1,7 +1,7 @@
 {
   "probe_transcript": 1,
   "module": "dom-mutate-remove",
-  "oracle_sha256": "ef424a9b8b84853e86f2e65a81a89f3b1390a4924d2e358cb981d3337cd42a72",
+  "oracle_sha256": "8f1743afdc2a32fc45effeea7810d06423fcbb74b8483f316e0df5141e948100",
   "generated_by": "harnesses/probe/probe.py run",
   "entries": [
     {
@@ -171,18 +171,6 @@
       "stdout_b64": "aW5pdD17ImEiOjEsImIiOjJ9fGRhOnI9MSxnb3Q9MSxrZXk9MTphLHN6PTEsZG9jPXsiYiI6Mn0=",
       "stdin_preview": "{\"a\":1,\"b\":2}\nda\t\t0\n",
       "stdout_preview": "init={\"a\":1,\"b\":2}|da:r=1,got=1,key=1:a,sz=1,doc={\"b\":2}"
-    },
-    {
-      "id": "seq-detach-object-by-index-then-append",
-      "args": [
-        "seq"
-      ],
-      "stdin_b64": "eyJhIjoxLCJiIjoyfQpkYQkJMAphcHAJCTUK",
-      "note": "and the object's list relinks the same way; the append is refused because the target is not an array",
-      "rc": 0,
-      "stdout_b64": "aW5pdD17ImEiOjEsImIiOjJ9fGRhOnI9MSxnb3Q9MSxrZXk9MTphLHN6PTEsZG9jPXsiYiI6Mn18YXBwOnI9MCxnb3Q9LSxrZXk9LSxzej0xLGRvYz17ImIiOjJ9",
-      "stdin_preview": "{\"a\":1,\"b\":2}\nda\t\t0\napp\t\t5\n",
-      "stdout_preview": "init={\"a\":1,\"b\":2}|da:r=1,got=1,key=1:a,sz=1,doc={\"b\":2}|app:r=0,got=-,key=-,sz=\u2026"
     },
     {
       "id": "seq-detach-scalar-root",
@@ -389,30 +377,6 @@
       "stdout_preview": "init={\"A\":[1,2]}|da:r=0,got=-,key=-,sz=-1,doc={\"A\":[1,2]}|da:r=1,got=1,key=-,sz=\u2026"
     },
     {
-      "id": "seq-app-scalar-refused",
-      "args": [
-        "seq"
-      ],
-      "stdin_b64": "eyJhIjo3fQphcHAJYQk1Cg==",
-      "note": "the C would hang a child off the scalar 7 (scalar-parent-child); the driver refuses on BOTH sides so this module's ledger stays on the removal surface. r=0, sz unchanged",
-      "rc": 0,
-      "stdout_b64": "aW5pdD17ImEiOjd9fGFwcDpyPTAsZ290PS0sa2V5PS0sc3o9MCxkb2M9eyJhIjo3fQ==",
-      "stdin_preview": "{\"a\":7}\napp\ta\t5\n",
-      "stdout_preview": "init={\"a\":7}|app:r=0,got=-,key=-,sz=0,doc={\"a\":7}"
-    },
-    {
-      "id": "seq-app-object-refused",
-      "args": [
-        "seq"
-      ],
-      "stdin_b64": "eyJhIjoxfQphcHAJCTUK",
-      "note": "the C would give the object a NULL-keyed member printing as \"\"; same refusal, same reason",
-      "rc": 0,
-      "stdout_b64": "aW5pdD17ImEiOjF9fGFwcDpyPTAsZ290PS0sa2V5PS0sc3o9MSxkb2M9eyJhIjoxfQ==",
-      "stdin_preview": "{\"a\":1}\napp\t\t5\n",
-      "stdout_preview": "init={\"a\":1}|app:r=0,got=-,key=-,sz=1,doc={\"a\":1}"
-    },
-    {
       "id": "seq-app-array-ok",
       "args": [
         "seq"
@@ -579,7 +543,19 @@
       "stdout_b64": "aW5pdD17ImEiOjEsImIiOjIsImFyciI6WzEwLDIwLDMwXSwibyI6eyJ4IjoxfX18ZGE6cj0xLGdvdD0xLGtleT0xOmEsc3o9Myxkb2M9eyJiIjoyLCJhcnIiOlsxMCwyMCwzMF0sIm8iOnsieCI6MX19fGFwcDpyPTEsZ290PS0sa2V5PS0sc3o9NCxkb2M9eyJiIjoyLCJhcnIiOlsxMCwyMCwzMCw5OV0sIm8iOnsieCI6MX19fHhvOnI9LSxnb3Q9LSxrZXk9LSxzej0yLGRvYz17ImFyciI6WzEwLDIwLDMwLDk5XSwibyI6eyJ4IjoxfX18ZG9zOnI9MSxnb3Q9MSxrZXk9MTp4LHN6PTAsZG9jPXsiYXJyIjpbMTAsMjAsMzAsOTldLCJvIjp7fX18ZGE6cj0xLGdvdD0xMCxrZXk9LSxzej0zLGRvYz17ImFyciI6WzIwLDMwLDk5XSwibyI6e319fGFwcDpyPTEsZ290PS0sa2V5PS0sc3o9NCxkb2M9eyJhcnIiOlsyMCwzMCw5OSwxXSwibyI6e319",
       "stdin_preview": "{\"a\":1,\"b\":2,\"arr\":[10,20,30],\"o\":{\"x\":1}}\nda\t\t0\napp\tarr\t99\nxo\t\tb\ndos\to\tx\nda\tarr\u2026",
       "stdout_preview": "init={\"a\":1,\"b\":2,\"arr\":[10,20,30],\"o\":{\"x\":1}}|da:r=1,got=1,key=1:a,sz=3,doc={\"\u2026"
+    },
+    {
+      "id": "seq-index-padded-with-zeros",
+      "args": [
+        "seq"
+      ],
+      "stdin_b64": "WzFdCmRhCQkwMDAwMDAwMDAwMDAwMDAwMDA4",
+      "note": "a 19-character index literal that is eighteen leading zeros then an 8. The C's strtol reads 8 and the detach fails as out of range. The port capped the digit run at 18 chars BEFORE stripping zeros, read 0, and detached the first element -- a real port bug the LESSONS #33 sweep found at iteration 13450. Pinned here so the differential keeps it.",
+      "rc": 0,
+      "stdout_b64": "aW5pdD1bMV18ZGE6cj0wLGdvdD0tLGtleT0tLHN6PTEsZG9jPVsxXQ==",
+      "stdin_preview": "[1]\nda\t\t0000000000000000008",
+      "stdout_preview": "init=[1]|da:r=0,got=-,key=-,sz=1,doc=[1]"
     }
   ],
-  "fingerprint": "1aa748346b58d3fe5428f8853930c6af40c3af7ff2d2b0b3dd1fb25a29a50e0a"
+  "fingerprint": "80f9bc015ff9066d4face91de773d1aceaf84083c7f7411bb0a06fd2f8d2f820"
 }

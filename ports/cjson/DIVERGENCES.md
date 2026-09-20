@@ -229,6 +229,52 @@ Format:
   are carried for the same reason: `Compare` and `Duplicate` are blind here and
   a ledger that hid that would be claiming more than the run shows.
 
+  **The `seq` mode's array-only restriction is now LIFTED** (the same change
+  that added these rows). `app`, `ins` and `rep` refused a non-array target on
+  both sides while no module owned this class; they no longer do, and the six
+  rows below are the coverage that refusal was costing. They are worth having
+  separately from the twelve above because `seq` is the only mode where these
+  ops **compose**: a malformed tree built at step 2 is carried into the five
+  steps after it, which no single-shot mode reaches.
+
+- [x] `seq-app-onto-scalar` [sha256:a52aa6d4fbce]: `app` onto a number. The
+  DOCUMENT PRINT is byte-identical on both sides (`{"a":7}`) and only `sz`
+  disagrees, 1 against 0 — the clearest demonstration in the port of why this
+  mode's descriptor carries a child count at all (LESSONS #39).
+- [x] `seq-app-onto-object` [sha256:d3f60023aaea]: `app` onto an object, which
+  is the NULL-keyed member reached through the append op rather than through
+  `cJSON_AddItemToObject`.
+- [x] `seq-detach-object-by-index-then-append` [sha256:a353c265cc88]: a
+  two-step program — detach by index, then append — where the append's target
+  is an object. It was a MATCHING probe while `app` refused; lifting the
+  restriction turns it into the composed case, which is exactly the kind this
+  mode exists for.
+- [x] `place-ins-onto-scalar` [sha256:5151436c1dc5]: **`ins` is a third route
+  to the same malformed tree, and it bypasses both entry points the corrected
+  oracle patches for `app`.** An index past the end is not an error, so
+  `cJSON_InsertItemInArray` falls through to the *static* `add_item_to_array`
+  (cJSON.c:2293). `make_fixed_core.py` therefore needed a sixth correction of
+  its own; without it the corrected oracle still answered `rc=1 size=1` on a
+  number, measured rather than assumed.
+- [x] `place-ins-onto-object` [sha256:11adb05b5dba]: the same route, producing
+  the NULL-keyed member.
+- [x] `place-rep-onto-object` [sha256:2dd3c14d1ad6]: **`cJSON_ReplaceItemInArray`
+  on an OBJECT replaces a member by positional index and destroys its key.**
+  `get_array_item` walks any node's child list, so index 0 finds the first
+  member and `cJSON_ReplaceItemViaPointer` swaps in a node that has no
+  `string`: `{"x":1,"y":2}` becomes `{"":0,"y":2}`, and a subsequent lookup for
+  `x` finds nothing. A key-destroying write through an *array* API, on a
+  document the caller never asked to reshape. `rep` onto a childless SCALAR
+  needs no row and gets none — there `get_array_item` answers NULL and both
+  sides refuse.
+
+  An earlier revision of this row used that scalar case to argue that
+  `cJSON_ReplaceItemInArray` needed no correction in the fuzz oracle. It was
+  wrong, and the gate's own diff-fuzz disproved it 109 iterations after the
+  restriction was lifted: an object HAS children, so the argument covered
+  scalars and nothing else. `make_fixed_core.py` carries a seventh correction
+  for it.
+
   **The history, kept because it is the argument for the module.**
   `dom-construct` declined this class (no mode built a non-container parent).
   `dom-mutate-remove` came within one line of dragging it in and declined: its

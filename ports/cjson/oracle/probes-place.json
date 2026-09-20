@@ -77,22 +77,6 @@
       "note": "and for the fresh-list branch, where a wrong prev would make the next append the first element"
     },
     {
-      "id": "place-ins-object-refused",
-      "args": [
-        "seq"
-      ],
-      "stdin": "{\"a\":1,\"b\":2}\nins\t\t1",
-      "note": "the mode refuses a non-ARRAY target. The C would insert a member with a NULL key, which is not the same as a member keyed \"\": get_object_item stops its walk at a NULL string, so it would be present but unfindable -- unrepresentable in Value::Object. Stated limit, see cjson_modes.h"
-    },
-    {
-      "id": "place-ins-scalar-refused",
-      "args": [
-        "seq"
-      ],
-      "stdin": "{\"a\":7}\nins\ta\t0",
-      "note": "same refusal for a scalar target, which the C would give a child (scalar-parent-child)"
-    },
-    {
       "id": "place-ins-missing-target",
       "args": [
         "seq"
@@ -179,14 +163,6 @@
       ],
       "stdin": "[]\nrep\t\t0",
       "note": "empty container: also the `parent->child == NULL` guard inside ReplaceItemViaPointer"
-    },
-    {
-      "id": "place-rep-object-refused",
-      "args": [
-        "seq"
-      ],
-      "stdin": "{\"a\":1}\nrep\t\t0",
-      "note": "non-array target refused, same reason as insert"
     },
     {
       "id": "place-rep-nested",
