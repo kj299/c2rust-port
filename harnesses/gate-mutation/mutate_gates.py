@@ -221,11 +221,33 @@ MUTATIONS = [
      "why": "every documented flag counts as existing",
      "cmd": ["harnesses/doc-check/check_doc_flags.py", "--self-test"]},
 
+    # THREE rows: the citation verdict, the field-name verdict and the root
+    # list are independent, and one row would pin only their union (LESSONS
+    # #16). The two added below are the ones that were failing open
+    # (LESSONS #44) — each answers "did this gate look?", which no amount of
+    # "was it right?" covers. The harness's use-vs-mention rule gets no row on purpose:
+    # neutralizing it turns a quoted example into a declaration, which fails
+    # LOUDLY. Only a verdict whose silent failure lets the gate pass while
+    # checking nothing belongs in this table.
     {"gate": "lessons-pinned", "file": "harnesses/doc-check/check_lessons_pinned.py",
      "old": '    return any("LESSONS" in line and tok.search(line)\n'
             "               for line in file_text.splitlines())",
      "new": "    return True",
      "why": "every amended file counts as citing its lesson",
+     "cmd": ["harnesses/doc-check/check_lessons_pinned.py", "--self-test"]},
+
+    {"gate": "lessons-pinned-variant",
+     "file": "harnesses/doc-check/check_lessons_pinned.py",
+     "old": "            if variant != ELSEWHERE_VARIANT:",
+     "new": "            if False:",
+     "why": "any parenthesised `Section amended (...)` spelling silently drops the entry's obligations",
+     "cmd": ["harnesses/doc-check/check_lessons_pinned.py", "--self-test"]},
+
+    {"gate": "lessons-pinned-scope",
+     "file": "harnesses/doc-check/check_lessons_pinned.py",
+     "old": "    roots = [kit_root, *also]",
+     "new": "    roots = [kit_root]",
+     "why": "a vendored kit's host-repo paths are unreachable again and report as aged, not unpinned",
      "cmd": ["harnesses/doc-check/check_lessons_pinned.py", "--self-test"]},
 
     {"gate": "threat-model", "file": "harnesses/threat-model/check_threat_model.py",
