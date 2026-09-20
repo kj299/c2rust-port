@@ -1830,3 +1830,80 @@ points.)*
 
 - **Section amended:** ports/cjson/oracle/make_fixed_core.py (the ROUTES table);
   PLAYBOOK.md · Phase 4 step 3; skills/porting-kit-diff-fuzz/SKILL.md.
+
+---
+
+## 044. The name of a field is a key, and an unknown key opened the gate
+
+- **Date:** 2026-09-20
+- **Codebase:** the Porting Kit — `doc-check/check_lessons_pinned.py`, brought
+  back from the lsof line that had vendored it
+- **What happened:** a vendored copy of this kit needed a way to say that an
+  IMPORTED entry's amendments happened in the lineage it came from, so it wrote
+  `- **Section amended (source lineage):**` and the gate accepted it. That
+  seemed fine, and the reason it seemed fine is the whole entry: **nothing
+  accepted it.** `AMENDED_RE` matched the bare field exactly, so a parenthesised
+  spelling was not an unrecognised field — it was *no field*, and the entry's
+  obligations simply ceased to exist.
+
+  Run against a fixture here, the primary line does the same thing:
+
+  ```
+  - **Section amended:** harnesses/x/bad.py            1 link checked, 1 unpinned  (rc 1)
+  - **Section amended (source lineage):** …            0 links checked, 0 unpinned (rc 0)
+  - **Section amended (anything at all):** …           0 links checked, 0 unpinned (rc 0)
+  ```
+
+  Any word in parentheses turns the gate off for that entry, and the run line
+  announces it as `0 lesson→code link(s) checked` — this kit's own 0-of-0
+  signature (LESSONS #18) printed as a pass. The exemption the vendored copy
+  relied on was never designed; it was the absence of a check, and it was
+  reachable by typing.
+
+- **The general shape.** A format field's NAME is a key into the code that reads
+  it, and a reader that recognises one key and silently ignores the rest fails
+  in the direction that reads as success. `## 032.` vs `### #032` did this to
+  the lesson-number checker in the other lineage; `LESSONS #14` vs `#14` as a
+  continuation member did it to the citation expander; `harnesses/` vs `ports/`
+  did it to this very harness's path prefixes (#19). Each time the artifact
+  *looks* like it carries the thing, and each time the tool's answer is "I found
+  nothing here" rather than "I do not understand this." **A parser over a
+  human-written format needs a total function: known keys handled, unknown keys
+  REPORTED.** Not ignored, and not guessed at.
+
+- **The second half, from the same run.** The vendored copy also reported
+  `6 aged path(s) skipped` — the harness's note for a file renamed out from
+  under an append-only log, which is a correct and necessary allowance. None of
+  the six had been renamed. All six were live `.github/workflows/*.yml` files
+  that exist one directory ABOVE the vendored kit, because a vendored kit sits
+  at `porting-kit/` inside its host and the workflows a lesson amends live in
+  the host. Four of the six were genuinely unpinned. A skip is the one thing a
+  gate says about work it did not do, and filing it under a name that explains
+  it away converts an unknown into a settled fact: **every skip bucket needs a
+  reason that is verified, not assumed.**
+
+- **What the fix cost, and what it caught.** Three verdicts now, not one: does
+  the amended file cite its lesson, is the field's spelling one this harness
+  knows, and which roots is a path resolved against. Three gate-mutation rows
+  for the same reason (#16 — one row pins only the union), and the first draft
+  of the variant row **survived the sweep**: every fixture that exercised an
+  unknown spelling also happened to be a non-imported entry, so the
+  imported-entry verdict caught them all and the spelling check could be deleted
+  with the suite green. The isolating case — imported *and* misspelled — is what
+  pins it. Writing the check is not the work; finding the input that
+  distinguishes it from the check beside it is.
+
+- **Kit change:** `check_lessons_pinned.py` reads every `Section amended`
+  variant, treats the bare field as the obligation, accepts `(source lineage)`
+  as a designed exemption ONLY on an entry carrying `- **Imported:**` (counted
+  and printed, never silent), and **fails on any other spelling**. `--also-scan
+  DIR` (repeatable; KIT_ROOT tried first; a missing root is a hard failure, not
+  an empty scan) resolves the host-repo paths a vendored copy's lessons amend,
+  and `aged` / `resolved outside the kit` are separate numbers so they cannot
+  merge again. Eight new self-tests, including that WITHOUT the flag the host
+  file is silently skipped — the fail-open itself is a fixture, so dropping
+  `--also-scan` from a vendoring repo's Makefile is a behaviour change rather
+  than silence. Sweep: 27 gates, 0 survivors.
+- **Section amended:** harnesses/doc-check/check_lessons_pinned.py;
+  harnesses/gate-mutation/mutate_gates.py · MUTATIONS; Makefile · check-kit;
+  README · harness table.

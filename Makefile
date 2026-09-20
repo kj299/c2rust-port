@@ -34,6 +34,11 @@ check-kit:
 	@echo "== threat-model template =="; $(PY) $(H)/threat-model/check_threat_model.py skeleton/THREAT-MODEL.md --template
 	@echo "== doc-flags self-test ==="; $(PY) $(H)/doc-check/check_doc_flags.py --self-test
 	@echo "== doc-flags integrity =="; $(PY) $(H)/doc-check/check_doc_flags.py
+	@# No --also-scan here: this kit IS the repository root, so everything a
+	@# lesson can amend is already under KIT_ROOT. A repo that VENDORS the kit
+	@# at porting-kit/ must add `--also-scan ..`, or the .github/workflows files
+	@# its lessons amend resolve to nothing and are counted as aged history —
+	@# which is how four live unpinned links hid in one (LESSONS #044).
 	@echo "== lessons-pinned self-test =="; $(PY) $(H)/doc-check/check_lessons_pinned.py --self-test
 	@echo "== lessons-pinned integrity =="; $(PY) $(H)/doc-check/check_lessons_pinned.py
 	@echo "== skills self-test =="; $(PY) skills/check_skills.py --self-test
