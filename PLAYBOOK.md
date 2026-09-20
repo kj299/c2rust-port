@@ -297,6 +297,14 @@ Then the loop — each step is a CI-enforced gate:
    mode against the pristine oracle too and classify every finding
    **mechanically**, not by reading the first few hunks (which are the common
    case by construction). Record both runs side by side.
+
+   That measures WIDTH; **completeness** is separate and has no control
+   (LESSONS #43) — a route no mode calls yields zero findings against *both*
+   oracles, so a clean width check cannot distinguish a complete correction
+   from a badly incomplete one. When a change puts a new entry point on the
+   contract, enumerate by **call graph** which existing corrections it reaches
+   and re-derive them; keep a per-correction table of routes and the mode that
+   exercises each.
 4. **Sanitize** (`harnesses/sanitizers/run_sanitizers.sh`): Miri over the pure
    logic and, for the `sys` layer, ASan/UBSan (and TSan if threaded). winlsof's
    worker-thread hang fix is exactly the class TSan/Miri reasoning catches.

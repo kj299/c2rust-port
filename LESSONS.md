@@ -1760,3 +1760,73 @@ points.)*
 - **Section amended:** ports/cjson/API-COVERAGE.md (the `opts` sweep table now
   carries a PRISTINE-oracle control row alongside the corrected-oracle rows);
   PLAYBOOK.md; skills/porting-kit-diff-fuzz/SKILL.md.
+
+## 043. A correction's completeness is relative to the modes that exercise it
+
+*(2026-09-20, cJSON — module `dom-add-parent` and the `seq` restriction lift.)*
+
+- **What happened:** module 16 corrected the fuzz oracle for the
+  `scalar-parent-child` class by patching two public entry points,
+  `cJSON_AddItemToArray` and `add_item_to_object`. It then ran LESSONS #42's
+  width control — fuzz against the PRISTINE oracle, classify every finding
+  mechanically — and passed cleanly: 25 findings, all the ledgered class, none
+  outside it. The correction was as wide as the class and no wider.
+
+  It was also **incomplete**, and the very next change proved it. Lifting the
+  `seq` mode's array-only restriction put `cJSON_InsertItemInArray` and
+  `cJSON_ReplaceItemInArray` on the contract for the first time, and both reach
+  the same malformed states by routes neither patch covers:
+
+  * `Insert` falls through to the *static* `add_item_to_array` when the index is
+    past the end (cJSON.c:2293), past both patched entry points. Measured on the
+    corrected oracle: `ins -> number rc=1 size=1`, `ins -> object print={"":99}`.
+  * `Replace` reaches `get_array_item`, which walks ANY node's child list — so
+    on an object, index 0 finds the first MEMBER and the replacement, carrying
+    no `string`, destroys its key: `{"x":1,"y":2}` becomes `{"":0,"y":2}`.
+
+- **Why #42's control could not have caught it.** This is the part worth
+  keeping. A width control asks "does the correction suppress more than the
+  ledgered class?" and answers it by comparing against the pristine oracle
+  *through a given mode*. An unpatched route that **no mode calls** produces
+  zero findings in both oracles, so it contributes nothing to either side of
+  the comparison. "0 findings outside the class" is therefore equally
+  consistent with a perfect correction and a badly incomplete one. The control
+  is not weak; it is measuring a different axis.
+
+- **The generalization:** *a corrected oracle is only as complete as the set of
+  modes that exercise the corrected behaviour, and that set grows.* Width and
+  completeness are independent, and only one of them has a control. This is
+  LESSONS #41's shape one layer down: #41 says a simplification is sound only
+  over the API surface you have PORTED; this says a correction is complete only
+  over the surface you EXERCISE. Both fail silently, and both fail exactly when
+  the surface grows — which is the one moment nobody is looking at the old
+  decision.
+
+- **The habit that follows:** when a change puts a new entry point on the
+  compared contract, ask which EXISTING corrections that entry point can reach,
+  and re-derive them rather than assuming they transfer. Enumerate by call
+  graph, not by name similarity: `Insert` and `Replace` do not mention
+  `add_item_to_array` in their signatures and reach it anyway. Then patch per
+  ROUTE, and record which route each correction closes.
+
+- **Run it, do not argue it — including about your own patch.** I wrote, in two
+  files, that `cJSON_ReplaceItemInArray` needed no correction because a
+  non-array has no children to find. True of a scalar; false of an object. The
+  gate's own diff-fuzz disproved it **109 iterations** after the lift. That is
+  LESSONS #38 turned on the CORRECTION rather than on the subject under test:
+  the correction is code too, and the half of it you reasoned about instead of
+  running is the half that is wrong. Both claims were corrected in place rather
+  than quietly dropped.
+
+- **Kit change, and its honest limit.** `make_fixed_core.py` now carries a
+  ROUTES table: per correction, which public entry points reach the corrected
+  behaviour and which driver mode exercises each. That makes an unexercised
+  route visible by inspection instead of leaving it implicit in a call graph
+  nobody has drawn. It is **not** a mechanical check — I know of no cheap one
+  that distinguishes "this route is unreachable" from "no mode calls it yet",
+  which is precisely the distinction that matters. Saying so beats implying the
+  gate covers it (the #41 precedent). The playbook and the diff-fuzz skill now
+  ask for the completeness pass alongside #42's width pass.
+
+- **Section amended:** ports/cjson/oracle/make_fixed_core.py (the ROUTES table);
+  PLAYBOOK.md · Phase 4 step 3; skills/porting-kit-diff-fuzz/SKILL.md.

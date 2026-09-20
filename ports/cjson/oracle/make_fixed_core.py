@@ -147,6 +147,56 @@ where `ppa=0`, with the port's buffer all zeros — the ledgered class exactly.
 Recorded in API-COVERAGE.md's sweep table beside the corrected-oracle rows,
 which is what makes those rows mean anything.
 
+## ROUTES — which entry points reach each correction, and what exercises them
+
+A correction is only as complete as the set of driver modes that exercise the
+corrected behaviour, and that set GROWS (LESSONS #43). Width and completeness
+are independent properties: LESSONS #42's control measures width, and cannot
+see an unpatched route at all, because a route no mode calls produces zero
+findings against BOTH oracles.
+
+This table is the artifact that makes an unexercised route visible by
+inspection rather than leaving it implicit in a call graph nobody has drawn.
+When a change puts a new entry point on the compared contract, find it here
+first and ask which of these corrections it can reach.
+
+    correction                     reached by (public)            exercised by
+    -----------------------------  -----------------------------  ------------
+    1 CreateNumber NaN->int        cJSON_CreateNumber,            construct
+                                   the four typed-array ctors
+    2 SetNumberHelper              cJSON_SetNumberValue (macro),  set
+      (NaN + missing type check)   cJSON_SetNumberHelper
+    3 PrintPreallocated            cJSON_PrintPreallocated        opts
+      (partial write on failure)
+    4 AddItemToArray               cJSON_AddItemToArray           parent, seq
+      (no container check)                                        (`app`)
+    5 add_item_to_object           cJSON_AddItemToObject,         parent
+      (no container check)         ...ToObjectCS, and every
+                                   cJSON_Add*ToObject helper
+    6 InsertItemInArray            cJSON_InsertItemInArray        seq (`ins`)
+      (append fall-through to
+       the STATIC helper, past 4 and 5)
+    7 ReplaceItemInArray           cJSON_ReplaceItemInArray       seq (`rep`)
+      (replaces an OBJECT member
+       by index, destroying its key)
+
+Corrections 6 and 7 exist because 4 and 5 were complete for the `parent` mode
+and incomplete the moment `seq` lifted its array-only restriction — 6 measured
+before patching (`ins -> number rc=1 size=1` on the corrected oracle), 7 found
+by the gate's own diff-fuzz 109 iterations after the lift, disproving a claim
+this file had just made.
+
+Deliberately NOT patched, and the reason belongs here rather than in a commit
+message: `cJSON_AddItemReferenceToArray` / `...ToObject` also reach the static
+`add_item_to_array`, but API-COVERAGE.md lists them out-of-scope and no mode
+calls them, so patching them would add an unverified branch to the reference
+(LESSONS #31). If a future module puts them on the contract, they need
+corrections 4/5's treatment and this row is the reminder.
+
+There is no mechanical check behind this table, and pretending otherwise would
+be worse than the gap: distinguishing "this route is unreachable" from "no mode
+calls it YET" is exactly the judgement a checker cannot make.
+
 The pristine vendored source is never modified; this file is generated
 (gitignored) and used only to build the fuzz oracle.
 """
