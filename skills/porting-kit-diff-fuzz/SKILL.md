@@ -51,6 +51,15 @@ Needs a runnable C oracle (or a golden-replay wrapper, `porting-kit/harnesses/go
    common case by construction. Record both runs side by side; the pristine row
    is what makes the corrected rows mean anything.
 
+   **That is the correction's width, not its completeness** (LESSONS #43). The
+   two are independent and only width has a control: a route no mode calls
+   produces zero findings against both oracles, so a clean width check is
+   equally consistent with a complete correction and a badly incomplete one.
+   When a change puts a new entry point on the compared contract, enumerate by
+   CALL GRAPH which existing corrections it can reach and re-derive them —
+   name similarity will not find them. Record, per correction, which public
+   entry points reach it and which mode exercises each.
+
 ## Notes
 - Fidelity is shared, not reimplemented: every input is judged by
   `diff_run.compare_one`, so the stdout-AND-exit-code verdict (LESSONS #4), the
