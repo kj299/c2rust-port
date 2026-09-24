@@ -34,6 +34,13 @@ check-kit:
 	@echo "== threat-model template =="; $(PY) $(H)/threat-model/check_threat_model.py skeleton/THREAT-MODEL.md --template
 	@echo "== doc-flags self-test ==="; $(PY) $(H)/doc-check/check_doc_flags.py --self-test
 	@echo "== doc-flags integrity =="; $(PY) $(H)/doc-check/check_doc_flags.py
+	@# Every `LESSONS #N` citation must name an entry that exists, and entries
+	@# must be unique, contiguous and in the one heading form this reads. Until
+	@# LESSONS #45 nothing here checked it: a citation of an entry that does not
+	@# exist, planted in a harness, left this whole target green. The checker
+	@# came back from the lsof line, which had had one for months.
+	@echo "== lesson-refs self-test =="; $(PY) $(H)/lessons/check_lesson_refs.py --self-test
+	@echo "== lesson-refs integrity =="; $(PY) $(H)/lessons/check_lesson_refs.py .
 	@# No --also-scan here: this kit IS the repository root, so everything a
 	@# lesson can amend is already under KIT_ROOT. A repo that VENDORS the kit
 	@# at porting-kit/ must add `--also-scan ..`, or the .github/workflows files

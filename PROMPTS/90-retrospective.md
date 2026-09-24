@@ -84,6 +84,29 @@ retrospective and **patch the Porting Kit** with what you learned.
    the port worked around a harness rather than fixing it, that workaround is the
    bug report — fix the harness and pin it.
 
+4c. **Diff every shared harness against every copy of this kit that a port
+   vendors** (LESSONS #45). 4b assumes the port and the kit are one repository.
+   They are not: a port vendors a COPY at `porting-kit/`, the fixes it forces land
+   in that copy, and this kit — the one the NEXT port copies — never hears of
+   them. At the lsof cutover three of the four fail-opens a probe of this kit
+   found had been fixed in the lsof copy already, one of them months earlier.
+   With both trees checked out:
+
+       for f in $(cd porting-kit && find harnesses skills -name '*.py' -o -name '*.sh'); do
+         cmp -s "porting-kit/$f" "$KIT/$f" || echo "$f"; done
+
+   Most differences are renumbered `LESSONS #N` citations — the logs diverge, so
+   that is expected. For each that is not, decide: **a fix the copy has** (bring
+   it here), **a fix this kit has** (send it there), or a deliberate divergence
+   (say so in the copy's README). Bringing one here is an import in the *other*
+   direction: the copy's history is its own, and a `LESSONS #N` carried over
+   verbatim still resolves here and means a different lesson. Name its entries
+   as "the lsof line's entry NNN", never as a citation.
+
+   Then probe what you brought back **against this kit's structure, not the
+   copy's**: the same fix can be safe in one shape and a false negative in the
+   other (the literal-blanking port would have silenced `scanf("%s")` here).
+
 5. **Commit the kit changes separately** from the port, with a message explaining
    which failure each edit prevents next time.
 

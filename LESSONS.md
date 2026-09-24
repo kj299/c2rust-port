@@ -1907,3 +1907,81 @@ points.)*
 - **Section amended:** harnesses/doc-check/check_lessons_pinned.py;
   harnesses/gate-mutation/mutate_gates.py · MUTATIONS; Makefile · check-kit;
   README · harness table.
+
+---
+
+## 045. A fix made in a fork stays in the fork
+
+- **Date:** 2026-09-24
+- **Codebase:** the Porting Kit, closing the lsof kit-refresh arc — the
+  retrospective, run against THIS kit rather than the copy the arc worked in
+- **What happened:** the arc found two fail-open classes in one harness of the
+  lsof line's vendored copy: a skip bucket whose reason was assumed (#44's
+  "aged path(s)"), and a parser that silently dropped a spelling it did not know
+  (#44's field variants). The retrospective's step 0 says run every harness
+  against the real target, so this kit was probed for the same two classes — by
+  execution, not by reading:
+
+  | harness here | probe | result | fixed in the lsof copy? |
+  |---|---|---|---|
+  | control-coverage | gate names a control only in `# TODO: wire X here` | **RUN, rc 0** | yes, months ago |
+  | *(none)* | a citation of an entry that does not exist, planted in a harness | **check-kit green** | yes — a whole checker |
+  | c-flaw-scan | `fprintf(stderr, "can't stat() ", p)` | flagged toctou | yes, this arc |
+  | control-coverage | a gate-table row naming no harness | **dropped without a word** | no |
+
+  **Three of the four were already fixed** — in the copy. Step 4b of the
+  retrospective says to send every harness fix a port forces back to the kit,
+  and it assumes the port and the kit are one repository. They are not. A port
+  vendors a COPY at `porting-kit/`; the fixes it forces land in the copy; and
+  this kit, which is what the NEXT port copies, never hears of them. So the next
+  port starts with fail-opens the last port already closed. Nothing flagged the
+  gap — the two trees were simply never compared — and it was found here only
+  because this pass diffed them (`cmp`, file by file) before probing.
+
+  The one that was new is the row the control-coverage check silently dropped:
+  `unsafe contained | #![forbid(unsafe_code)] on core`. **The first row of the
+  non-negotiable table.** It names no harness, so it matched neither the script
+  regex nor the directory regex and vanished — and the docstring above that code
+  said a control "is reported as UNCHECKABLE, counted and listed, never silently
+  dropped". True of the directory case; claimed of the set. That is the same
+  overclaim the lsof line's entry 060 records about its own fix, now a third
+  time in one arc: **a sentence about the member, written as a sentence about
+  the class.** Nothing checks the attribute is present in `core` either — it is
+  reported now, every run, as enforced by nothing here; it is not yet enforced.
+
+- **Bringing a fix back is an import in the other direction, with the same trap.**
+  The lesson-ref checker arrived carrying the lsof line's history — its entries
+  022, 032, 033, 048, 056, 057. Four of those numbers do not exist here and the
+  checker flagged them itself. The other ones **resolve**, and mean different
+  lessons: this log's #22 is "a gate that can never pass", not a deleted heading.
+  Existence is the only thing a destination log can check, which is the lsof
+  line's entry 046 exactly, and this kit has no import checker to catch it. They
+  were rewritten by hand as "the lsof line's entry NNN" — prose, not a citation.
+
+  And a fix correct in one shape can be a false negative in another. The lsof
+  scanner blanks string literals; the obvious port blanked them for every check
+  here — which would have silenced `scanf("%s")`, whose evidence IS the literal.
+  The lsof scanner has no such regex. Caught by reading this kit's check list
+  before writing the port, and pinned so it stays caught.
+
+- **And the method trap, during the probing.** One probe read `rc=0` for a
+  threat model with a deleted section. The harness had failed; `$?` was `tail`'s,
+  because the probe piped through `tail` before echoing it. Re-run unpiped: rc 1.
+  The lsof line logged exactly that as its entry 059 — this log did not have it,
+  and it happened here, in the pass meant to catch that kind of thing.
+
+- **Kit change:** control-coverage reads only the EXECUTABLE text of a gate
+  (comments, `name:` labels and bare YAML keys removed) and reports every table
+  row naming no harness; the lesson-ref checker is brought back and wired into
+  `check-kit`, with four mutation rows where the lsof line had one (existence,
+  duplicate, gap, off-style heading — each fails open alone); c-flaw-scan blanks
+  literal contents for the generic sink checks, except those whose evidence is a
+  literal. Nine mutation rows new or re-aimed, 34 gates, 0 survivors. The
+  retrospective gains **step 4c: diff every shared harness against every
+  vendored copy**, with the command, the triage, and the reverse-import warning.
+- **Section amended:** harnesses/control-coverage/check_controls.py;
+  harnesses/lessons/check_lesson_refs.py (new here);
+  harnesses/c-flaw-scan/scan_c_flaws.py; harnesses/gate-mutation/mutate_gates.py
+  · MUTATIONS; Makefile · check-kit; PROMPTS/90-retrospective.md · step 4c;
+  skills/porting-kit-retrospective/SKILL.md · 4c; PLAYBOOK · the compounding
+  loop; README · harness table.

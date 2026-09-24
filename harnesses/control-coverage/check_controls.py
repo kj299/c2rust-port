@@ -22,9 +22,21 @@ Mechanics (deliberately conservative, format-driven):
     A control naming a directory rather than a script (e.g. `harnesses/fuzz/`
     for cargo-fuzz) names no command to grep for and is reported as UNCHECKABLE,
     counted and listed, never silently dropped.
-  * Require each extracted script to appear in at least one gate file's text.
+  * A row naming NO harness at all — `#![forbid(unsafe_code)]` on `core` is the
+    one in this kit's own table — is reported too, by its text, as a control
+    this gate cannot check. Until LESSONS #45 the sentence above said "never
+    silently dropped" and was true only of the directory case: a row with
+    neither a script nor a directory fell through both regexes and vanished,
+    and it was the FIRST row of the table. A parser over a human-written format
+    reports what it cannot read; it does not skip it.
+  * Require each extracted script to appear in the EXECUTABLE text of at least
+    one gate file — comments, `name:` labels and bare YAML keys removed. A
+    `# TODO: wire run_sanitizers.sh here` comment certified the sanitizer
+    control as RUN until LESSONS #45; the vendored copy in the lsof line had
+    fixed that and the fix never came back here.
   * Exemptions must be written down: `# control-coverage: exempt <path> -- <why>`
-    in a gate file records a deliberate non-use with its reason.
+    in a gate file records a deliberate non-use with its reason. (An exemption
+    IS a comment by design, so exemptions are read from the raw text.)
 
 A gate file that does not exist is an error, not a skip: pointing the check at a
 missing script is exactly how this would quietly pass.
@@ -49,30 +61,108 @@ CONTROL_RE = re.compile(r"harnesses/[A-Za-z0-9_./-]+\.(?:py|sh)\b")
 # A control naming a bare harness directory — declared but not a command.
 DIRONLY_RE = re.compile(r"harnesses/[A-Za-z0-9_-]+/(?![A-Za-z0-9_.-]*\.(?:py|sh)\b)")
 EXEMPT_RE = re.compile(r"control-coverage:\s*exempt\s+(\S+)\s*--\s*(.+)")
+# A separator (`|---|---|`) or the header row — neither declares anything.
+_SEPARATOR = re.compile(r"^\s*\|[\s:|-]*\|\s*$")
 
 
 def declared_controls(controls_path):
-    """(runnable, dir_only) control paths declared in the doc's gate table."""
+    """(runnable, dir_only, unreadable) controls declared in the gate table.
+
+    `unreadable` is every data row that names neither a harness script nor a
+    harness directory, returned as its first cell — the control's name — so the
+    caller can report it. A header row (the row directly above a `|---|`
+    separator, in any number of tables) is not a declaration."""
     with open(controls_path, encoding="utf-8") as fh:
-        rows = [ln for ln in fh if TABLE_ROW.match(ln)]
-    runnable, dir_only = [], []
+        lines = fh.read().splitlines()
+    headers = {i - 1 for i, ln in enumerate(lines)
+               if i and _SEPARATOR.match(ln) and TABLE_ROW.match(lines[i - 1])}
+    rows = [ln for i, ln in enumerate(lines)
+            if TABLE_ROW.match(ln) and not _SEPARATOR.match(ln) and i not in headers]
+    runnable, dir_only, unreadable = [], [], []
     for row in rows:
         found = CONTROL_RE.findall(row)
         for m in CONTROL_RE.finditer(row):
             if m.group(0) not in runnable:
                 runnable.append(m.group(0))
         if not found:
-            for m in DIRONLY_RE.finditer(row):
-                if m.group(0) not in dir_only:
-                    dir_only.append(m.group(0))
-    return runnable, dir_only
+            dirs = DIRONLY_RE.findall(row)
+            for d in dirs:
+                if d not in dir_only:
+                    dir_only.append(d)
+            if not dirs:
+                name = row.strip().strip("|").split("|")[0].strip()
+                if name and name not in unreadable:
+                    unreadable.append(name)
+    return runnable, dir_only, unreadable
+
+
+# ---------------------------------------------------------------------------
+# What counts as a gate INVOKING a control: text that configures or runs
+# something. Searching the raw file answers a different question — whether the
+# file SAYS the name — and the two come apart exactly when it matters: a gate
+# that has not wired a control yet is the gate most likely to carry a comment
+# saying it should. Excluded, because none of them runs anything: comments,
+# `name:` values (a step LABELLED "sanitizers" runs no sanitizer) and bare YAML
+# keys (a job called `miri:` is a label too). Deliberately conservative: a
+# `run:` script line that happens to look like `name: x` is dropped as well,
+# which can only cause a false NEGATIVE — the safe direction for a control whose
+# failure mode was accepting too little. Ported from the lsof line, where it
+# lives in `check_ledgers.py` beside the ledger check that first needed it.
+_KEYVAL = re.compile(r"^\s*-?\s*([A-Za-z_][\w.-]*)\s*:\s*(.*)$")
+_BLOCK_SCALAR = {"|", ">", "|-", ">-", "|+", ">+"}
+
+
+def _strip_comment(line):
+    """Drop an end-of-line `#` comment. A `#` inside quotes is not a comment,
+    and neither is one glued to a word (`$#`, `${#arr[@]}`)."""
+    out, quote, i = [], None, 0
+    while i < len(line):
+        ch = line[i]
+        if quote:
+            out.append(ch)
+            if ch == "\\" and quote == '"' and i + 1 < len(line):
+                out.append(line[i + 1])
+                i += 2
+                continue
+            if ch == quote:
+                quote = None
+        elif ch in ('"', "'"):
+            quote = ch
+            out.append(ch)
+        elif ch == "#" and (not out or out[-1].isspace()):
+            break
+        else:
+            out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+def executable_text(text):
+    """The parts of a gate file that configure or run something."""
+    keep = []
+    for raw in text.splitlines():
+        line = _strip_comment(raw)
+        if not line.strip():
+            continue
+        m = _KEYVAL.match(line)
+        if not m:
+            keep.append(line)          # a command, a block-scalar body, a list item
+            continue
+        key, val = m.group(1), m.group(2).strip()
+        if key.lower() == "name":
+            continue                   # a human-readable label
+        if not val or val in _BLOCK_SCALAR:
+            continue                   # a bare key, or a block-scalar introducer
+        keep.append(val)
+    return "\n".join(keep)
 
 
 def control_is_wired(control, gate_texts):
     """THE VERDICT (kept as one predicate so gate-mutation can neutralize it and
     the self-test's negative fixture must then go red — LESSONS #25)."""
     base = os.path.basename(control)
-    return any((control in text) or (base in text) for text in gate_texts)
+    return any((control in t) or (base in t)
+               for t in (executable_text(g) for g in gate_texts))
 
 
 def exemptions(gate_texts):
@@ -99,7 +189,7 @@ def check(controls_path, gate_paths, as_json=False):
         with open(g, encoding="utf-8") as fh:
             texts.append(fh.read())
 
-    runnable, dir_only = declared_controls(controls_path)
+    runnable, dir_only, unreadable = declared_controls(controls_path)
     if not runnable:
         # 0-of-0 proves nothing and must not pass (LESSONS #18).
         print(f"error: no runnable controls found in {controls_path}'s table — "
@@ -121,7 +211,7 @@ def check(controls_path, gate_paths, as_json=False):
         json.dump({"tool": "control-coverage", "controls": runnable,
                    "wired": wired, "unwired": unwired,
                    "exempt": [{"control": c, "why": w} for c, w in skipped],
-                   "uncheckable": dir_only,
+                   "uncheckable": dir_only, "not_a_harness": unreadable,
                    "gates": gate_paths, "ok": not unwired}, sys.stdout, indent=1)
         print()
     else:
@@ -133,6 +223,8 @@ def check(controls_path, gate_paths, as_json=False):
             print(f"  NOT RUN  {c}", file=sys.stderr)
         for d in dir_only:
             print(f"  (uncheckable, names no script: {d})")
+        for r in unreadable:
+            print(f"  (uncheckable, names no harness — enforced by nothing here: {r})")
         if unwired:
             print(f"\ncontrol-coverage FAILED: {len(unwired)} declared control(s) "
                   f"never invoked by {', '.join(gate_paths)}.\n"
@@ -142,7 +234,8 @@ def check(controls_path, gate_paths, as_json=False):
                   "in the gate with the reason.", file=sys.stderr)
         else:
             print(f"\ncontrol coverage: {len(wired)} control(s) invoked, "
-                  f"{len(skipped)} exempted, {len(dir_only)} uncheckable")
+                  f"{len(skipped)} exempted, "
+                  f"{len(dir_only) + len(unreadable)} uncheckable")
     return 1 if unwired else 0
 
 
@@ -162,13 +255,25 @@ def _self_test():
                      "| Control | Command |\n|---|---|\n"
                      "| a | `harnesses/alpha/a.py` |\n"
                      "| b | `harnesses/beta/b.sh` |\n"
-                     "| c | `harnesses/fuzz/` (cargo-fuzz) |\n")
+                     "| c | `harnesses/fuzz/` (cargo-fuzz) |\n"
+                     "| d | `#![forbid(unsafe_code)]` on `core` |\n")
 
-        runnable, dir_only = declared_controls(controls)
+        runnable, dir_only, unreadable = declared_controls(controls)
         check_case("table rows parsed, prose ignored",
                    runnable == ["harnesses/alpha/a.py", "harnesses/beta/b.sh"])
         check_case("a directory-only control is reported, not dropped",
                    dir_only == ["harnesses/fuzz/"])
+        # LESSONS #45: a row naming NO harness fell through both regexes and
+        # vanished — the docstring's "never silently dropped" was true of the
+        # directory case only. The header row must not be mistaken for one.
+        check_case("a row naming no harness is REPORTED, not dropped (header excluded)",
+                   unreadable == ["d"])
+        two = os.path.join(d, "two-tables.md")
+        with open(two, "w", encoding="utf-8") as fh:
+            fh.write("| Control | Command |\n|---|---|\n| a | `harnesses/alpha/a.py` |\n\n"
+                     "| Other | Table |\n|:--|--:|\n| x | `harnesses/beta/b.sh` |\n")
+        check_case("every table's header is excluded, not just the first",
+                   declared_controls(two)[2] == [])
 
         full = os.path.join(d, "full.sh")
         with open(full, "w", encoding="utf-8") as fh:
@@ -184,6 +289,25 @@ def _self_test():
         # the crown verdict must be what decides it (gate-mutation target)
         check_case("verdict predicate refuses an unwired control",
                    control_is_wired("harnesses/beta/b.sh", ["python3 harnesses/alpha/a.py"]) is False)
+
+        # LESSONS #45: a COMMENT is not an invocation. The gate most likely to
+        # carry "wire b.sh here" is the one that has not wired it yet. Also a
+        # step's `name:` label and a bare job key — neither runs anything. And
+        # the stripper must not eat bash's `$#` or `${#arr[@]}`.
+        commented = os.path.join(d, "commented.sh")
+        with open(commented, "w", encoding="utf-8") as fh:
+            fh.write("python3 harnesses/alpha/a.py\n"
+                     "# TODO: wire harnesses/beta/b.sh here eventually\n")
+        check_case("a control named only in a COMMENT is NOT RUN",
+                   check(controls, [commented]) == 1)
+        check_case("a control named only in a `name:` label or job key is NOT RUN",
+                   not control_is_wired("harnesses/beta/b.sh",
+                                        ["jobs:\n  b.sh:\n    steps:\n"
+                                         "      - name: run b.sh\n"
+                                         "        run: echo nothing\n"]))
+        check_case("a real invocation after `${#arr[@]}` on the same line still counts",
+                   control_is_wired("harnesses/beta/b.sh",
+                                    ['n=${#arr[@]} bash harnesses/beta/b.sh "$n"']))
 
         exempted = os.path.join(d, "exempt.sh")
         with open(exempted, "w", encoding="utf-8") as fh:

@@ -94,6 +94,15 @@ MUTATIONS = [
      "why": "the Phase-0 scanner reports 0 flaws on any C",
      "cmd": ["harnesses/c-flaw-scan/scan_c_flaws.py", "--self-test"]},
 
+    # Literal blanking (LESSONS #45) removes noise; neutralizing its exemption
+    # is the dangerous direction — every check then reads blanked literals and
+    # `scanf("%s")`, whose evidence IS the literal, goes silent.
+    {"gate": "c-flaw-scan-reads-literals", "file": "harnesses/c-flaw-scan/scan_c_flaws.py",
+     "old": "        text = masked if rx in READS_LITERALS else code_only",
+     "new": "        text = code_only",
+     "why": "scanf(\"%s\") stops being flagged: a false negative in a security scanner",
+     "cmd": ["harnesses/c-flaw-scan/scan_c_flaws.py", "--self-test"]},
+
     # LESSONS #31: proving a gate REFUSES says nothing about whether the port
     # ever CALLS it. Three declared controls were unwired at cutover and all
     # three passed this sweep.
@@ -147,9 +156,26 @@ MUTATIONS = [
 
     {"gate": "control-coverage", "file": "harnesses/control-coverage/check_controls.py",
      "old": "    base = os.path.basename(control)\n"
-            "    return any((control in text) or (base in text) for text in gate_texts)",
+            "    return any((control in t) or (base in t)\n"
+            "               for t in (executable_text(g) for g in gate_texts))",
      "new": "    return True",
      "why": "every declared control counts as wired: an unrun gate ships green",
+     "cmd": ["harnesses/control-coverage/check_controls.py", "--self-test"]},
+
+    # Two more rows for control-coverage, one per verdict that was failing open
+    # (LESSONS #45) — one row would pin only the union (LESSONS #16).
+    {"gate": "control-coverage-executable",
+     "file": "harnesses/control-coverage/check_controls.py",
+     "old": "               for t in (executable_text(g) for g in gate_texts))",
+     "new": "               for t in gate_texts)",
+     "why": "a `# TODO: wire X` comment certifies control X as RUN",
+     "cmd": ["harnesses/control-coverage/check_controls.py", "--self-test"]},
+
+    {"gate": "control-coverage-unreadable",
+     "file": "harnesses/control-coverage/check_controls.py",
+     "old": "                if name and name not in unreadable:",
+     "new": "                if False:",
+     "why": "a gate-table row naming no harness vanishes from the report without a word",
      "cmd": ["harnesses/control-coverage/check_controls.py", "--self-test"]},
 
     # The BASH gates (LESSONS #22/#25). None could be here until `_run` stopped
@@ -220,6 +246,33 @@ MUTATIONS = [
      "new": "                if False:",
      "why": "every documented flag counts as existing",
      "cmd": ["harnesses/doc-check/check_doc_flags.py", "--self-test"]},
+
+    # The lesson cross-reference checker (brought back from the lsof line by
+    # LESSONS #45). That line pinned ONE of its verdicts; it has four, each of
+    # which fails open alone, so one row each (LESSONS #16).
+    {"gate": "lesson-refs", "file": "harnesses/lessons/check_lesson_refs.py",
+     "old": "        if num not in known:",
+     "new": "        if False:",
+     "why": "a citation of a lesson that does not exist resolves silently",
+     "cmd": ["harnesses/lessons/check_lesson_refs.py", "--self-test"]},
+
+    {"gate": "lesson-refs-duplicate", "file": "harnesses/lessons/check_lesson_refs.py",
+     "old": "    dupes = sorted({n for n in nums if nums.count(n) > 1})",
+     "new": "    dupes = []",
+     "why": "two entries with one number: every citation of it resolves, to whichever",
+     "cmd": ["harnesses/lessons/check_lesson_refs.py", "--self-test"]},
+
+    {"gate": "lesson-refs-gap", "file": "harnesses/lessons/check_lesson_refs.py",
+     "old": "            if n not in nums:",
+     "new": "            if False:",
+     "why": "a deleted heading splices its body onto the entry above, unseen",
+     "cmd": ["harnesses/lessons/check_lesson_refs.py", "--self-test"]},
+
+    {"gate": "lesson-refs-offstyle", "file": "harnesses/lessons/check_lesson_refs.py",
+     "old": "        if ENTRY_RE.match(head + \" x\"):\n            continue",
+     "new": "        continue",
+     "why": "an entry written `### #032` is no entry at all, and nothing says so",
+     "cmd": ["harnesses/lessons/check_lesson_refs.py", "--self-test"]},
 
     # THREE rows: the citation verdict, the field-name verdict and the root
     # list are independent, and one row would pin only their union (LESSONS
