@@ -31,7 +31,12 @@ oracle is at gate 2 of 6, not done.
    entry points under a green api-coverage line (LESSONS #35). A green run that
    prints an UNPORTED count is not a complete API — quote that count in the
    audit report rather than writing "api-coverage: PASS".
-1. **Unsafe contained + documented** (toolchain-free hard gate):
+1. **Unsafe contained + documented** (toolchain-free hard gates — two of them, because
+   they answer different questions):
+   `python3 porting-kit/harnesses/unsafe-audit/check_forbid_unsafe.py crates/core` → the
+   core crate forbids `unsafe_code` on every target root. Until LESSONS #46 this step was
+   titled "contained" and ran only the documentation check below, which passes on
+   `unsafe` in core as long as it carries a `// SAFETY:`.
    `python3 porting-kit/harnesses/unsafe-audit/audit_unsafe.py crates/`  → must be 0
    undocumented. (On a real backend this found 51/131 undocumented — exactly what a
    gate catches.) Plus `cargo clippy --all-targets -- -D warnings -D

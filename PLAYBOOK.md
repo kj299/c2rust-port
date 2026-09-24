@@ -398,6 +398,6 @@ harness with the kit's `make check-kit` — run from the kit root, or as
 ## The compounding loop
 
 Every port **ends with a retrospective** (`PROMPTS/90-retrospective.md`) that
-diffs lived experience against this playbook and patches it. New lessons append
-to `LESSONS.md` with the section they amended. The kit is never "done" — it is
-the running sum of every port it has survived.
+diffs lived experience against this playbook — and a vendored copy's harnesses
+against this kit's (step 4c; LESSONS #45) — and patches both. The kit is the
+running sum of every port it has survived, but only of the fixes that come back.

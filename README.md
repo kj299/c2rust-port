@@ -54,6 +54,7 @@ repo-root `porting-kit/`; adjust the paths inside if you vendor it elsewhere).
 | Harness | Purpose | Gate |
 |---|---|---|
 | `harnesses/unsafe-audit/audit_unsafe.py` | every `unsafe {}` needs a `// SAFETY:` | **hard-fail CI** |
+| `harnesses/unsafe-audit/check_forbid_unsafe.py` | the `core` crate forbids `unsafe_code` on every target root, in a form rustc applies — not in a comment, not `deny`, not under `cfg_attr` | **hard-fail CI** |
 | `harnesses/differential/diff_run.py` (+`normalize.py`) | diff Rust vs C oracle; triage divergences via a ledger; timeout = liveness backstop | CI |
 | `harnesses/diff-fuzz/diff_fuzz.py` | differential fuzzing: same generated input to C & Rust, minimize divergences | CI + nightly |
 | `harnesses/cando/cando_diff.py` (+ driver templates) | function-level differential for C-ABI **libraries**; C-baseline-validated vectors | CI |
@@ -67,6 +68,7 @@ repo-root `porting-kit/`; adjust the paths inside if you vendor it elsewhere).
 | `harnesses/threat-model/check_threat_model.py` | the threat model must be filled in, not the shipped blank | Phase 0 + CI |
 | `harnesses/progress/progress.py` | per-module status table incl. safety gates | tracking |
 | `harnesses/doc-check/check_doc_flags.py` | doc'd harness flags must exist (anti-drift) | `check-kit` |
+| `harnesses/lessons/check_lesson_refs.py` | every `LESSONS #N` citation — lists and ranges expanded — names an entry that exists; entries unique, contiguous, and in the one heading form it reads. Brought back from the lsof line, which had it for months while nothing here checked a citation at all | `check-kit` |
 | `harnesses/doc-check/check_lessons_pinned.py` | every lesson that amends a harness stays cited/pinned there; an unrecognised `Section amended (…)` spelling fails instead of dropping the entry's obligations, and `--also-scan DIR` reaches the host repo when the kit is vendored | `check-kit` |
 | `harnesses/gate-mutation/mutate_gates.py` | break each gate's verdict on purpose; its self-test must go red (self-verifying gate set) | `check-kit` |
 | `harnesses/skeleton-check/check_skeleton.sh` | the skeleton passes the gates it ships (fmt/clippy/build/test) | `check-kit` (toolchain-optional) |

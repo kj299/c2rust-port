@@ -48,11 +48,13 @@ import os
 import re
 import sys
 
+# `scanf("%s")`: the evidence is in the format string — see READS_LITERALS.
+_SCANF_PCT_S = re.compile(r"\b(scanf|fscanf|sscanf|vscanf|vfscanf|vsscanf)\s*\([^)]*%s")
+
 CHECKS = [
     ("unbounded-copy", "CWE-120",
      re.compile(r"\b(strcpy|strcat|sprintf|vsprintf|gets)\s*\(")),
-    ("unbounded-copy", "CWE-120",
-     re.compile(r"\b(scanf|fscanf|sscanf|vscanf|vfscanf|vsscanf)\s*\([^)]*%s")),
+    ("unbounded-copy", "CWE-120", _SCANF_PCT_S),
     # memcpy/memmove with an attacker-controlled length is THE marquee CWE-120/787
     # buffer-overflow sink in real C — flag every call as a question (is the size
     # bounded by the destination?). Its total absence let the scanner report a
@@ -72,6 +74,21 @@ CHECKS = [
     ("toctou", "CWE-367",
      re.compile(r"\b(access|stat|lstat)\s*\(")),
 ]
+
+# The generic checks above match FUNCTION NAMES, and a function name inside a
+# string literal is prose, not a call: `fprintf(stderr, "can't stat() ", p)` is
+# not a TOCTOU. On lsof that was the single largest remaining toctou noise
+# source — 10 hits after comments were already masked — and a scanner whose noise
+# concentrates in one mechanical class trains its reader to skim (LESSONS #2).
+# So the generic checks run over text with literal CONTENTS blanked (quotes
+# kept). EXCEPT the ones whose evidence lives inside a literal: `scanf("%s")` is
+# unbounded only BECAUSE of what the format string says, and blanking it would
+# silently stop that check firing — a false negative, the direction this scanner
+# must never err in (LESSONS #6). Blanking every check was the obvious port from
+# the lsof line's scanner, which is structured differently and has no such regex;
+# it was caught by reading this list before writing the code, and the sscanf
+# fixture in the self-test pins it (LESSONS #45).
+READS_LITERALS = {_SCANF_PCT_S}
 
 # Pre-computed overflow: `size_t total = n * w; ... malloc(total);`. The product
 # is computed into a variable and the multiply is no longer inside the alloc call,
@@ -193,6 +210,34 @@ def _mask_c_comments(src):
                     i += 2
                     continue
                 out.append(src[i])
+                i += 1
+            if i < n:
+                out.append(c)
+                i += 1
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
+def _blank_literals(masked):
+    """`masked` with string/char literal CONTENTS blanked as well — quotes kept,
+    every byte offset and newline preserved, so line numbers still match. Takes
+    the comment-masked text, so a quote inside a comment is already gone."""
+    out = []
+    i, n = 0, len(masked)
+    while i < n:
+        c = masked[i]
+        if c in "\"'":
+            out.append(c)
+            i += 1
+            while i < n and masked[i] != c:
+                if masked[i] == "\\" and i + 1 < n:
+                    out.append(" ")
+                    out.append("\n" if masked[i + 1] == "\n" else " ")
+                    i += 2
+                    continue
+                out.append("\n" if masked[i] == "\n" else " ")
                 i += 1
             if i < n:
                 out.append(c)
@@ -334,11 +379,13 @@ def scan_text(src):
     # merely looks comment-like (`*out = ...`) is still scanned (no false
     # negatives). Line numbers survive masking (newlines preserved).
     masked = _mask_c_comments(src)
+    code_only = _blank_literals(masked)
     orig_lines = src.splitlines()
     hits = []
     for cat, cwe, rx in CHECKS:
-        for m in rx.finditer(masked):
-            line = _lineno(masked, m.start())
+        text = masked if rx in READS_LITERALS else code_only
+        for m in rx.finditer(text):
+            line = _lineno(text, m.start())
             hits.append({"line": line, "category": cat, "cwe": cwe,
                          "text": _line_text(orig_lines, line)})
     hits.extend(_scan_format_strings(masked, orig_lines))
@@ -482,6 +529,27 @@ def _self_test():
     ml = "void f(){ char *p = malloc(count *\n                 width); }"
     check("whole-file scan catches a multi-line malloc(a *\\n b)",
           any(h["category"] == "int-overflow-mul" for h in scan_text(ml)))
+
+    # --- a function NAME inside a string literal is prose, not a call ---
+    # LESSONS #45. Both directions, because the obvious fix breaks the second:
+    # blanking literals for every check silences `scanf("%s")`, whose evidence
+    # IS the literal. Line numbers must survive the blanking too.
+    lit = ('void f(char *p){\n'
+           '  fprintf(stderr, "%s: can\'t stat() or access() it", p);\n'
+           '  char c = \'"\'; puts("strcpy(a, b) and system(x)");\n'
+           '  struct stat sb; stat(p, &sb);\n'
+           '  sscanf(p, "%s", out);\n'
+           '}\n')
+    lh = scan_text(lit)
+    toc = [h["line"] for h in lh if h["category"] == "toctou"]
+    check("a sink named inside a string literal is NOT flagged; the real call is, "
+          "on its own line", toc == [4])
+    check("no copy/exec sink is read out of a literal (a `'\"'` char literal "
+          "does not unbalance the quote tracking)",
+          not any(h["category"] in ("command-exec",) or
+                  (h["category"] == "unbounded-copy" and h["line"] == 3) for h in lh))
+    check("scanf(\"%s\") is STILL flagged — its evidence is the literal itself",
+          [h["line"] for h in lh if h["category"] == "unbounded-copy"] == [5])
 
     print("\nself-test:", "OK" if ok else "FAILED")
     return 0 if ok else 1
