@@ -88,6 +88,40 @@ MUTATIONS = [
      "why": "every unsafe block counts as documented",
      "cmd": ["harnesses/unsafe-audit/audit_unsafe.py", "--self-test"]},
 
+    # Unsafe CONTAINED (LESSONS #46) — five verdicts, each of which lets a core
+    # crate that does not forbid unsafe pass on its own, so one row each
+    # (LESSONS #16). Every "does not count" below was checked against rustc,
+    # which compiles `unsafe` in each of those crates.
+    {"gate": "forbid-unsafe-deny", "file": "harnesses/unsafe-audit/check_forbid_unsafe.py",
+     "old": '    return level == "forbid" and not conditional',
+     "new": '    return level in ("forbid", "deny") and not conditional',
+     "why": "`deny(unsafe_code)` counts as contained; a local #[allow] then admits unsafe",
+     "cmd": ["harnesses/unsafe-audit/check_forbid_unsafe.py", "--self-test"]},
+
+    {"gate": "forbid-unsafe-cfg-attr", "file": "harnesses/unsafe-audit/check_forbid_unsafe.py",
+     "old": '    return level == "forbid" and not conditional',
+     "new": '    return level == "forbid"',
+     "why": "`cfg_attr(test, forbid(unsafe_code))` counts: every non-test build admits unsafe",
+     "cmd": ["harnesses/unsafe-audit/check_forbid_unsafe.py", "--self-test"]},
+
+    {"gate": "forbid-unsafe-nesting", "file": "harnesses/unsafe-audit/check_forbid_unsafe.py",
+     "old": '        if text.startswith("/*", i):\n            depth += 1',
+     "new": '        if text.startswith("/*", i):\n            depth = 1',
+     "why": "C comment rules: an attribute commented out inside `/* /* */ … */` reads as live",
+     "cmd": ["harnesses/unsafe-audit/check_forbid_unsafe.py", "--self-test"]},
+
+    {"gate": "forbid-unsafe-every-root", "file": "harnesses/unsafe-audit/check_forbid_unsafe.py",
+     "old": "    for rel in roots:",
+     "new": "    for rel in roots[:1]:",
+     "why": "a forbidding lib.rs certifies the binary beside it, which is its own crate",
+     "cmd": ["harnesses/unsafe-audit/check_forbid_unsafe.py", "--self-test"]},
+
+    {"gate": "forbid-unsafe-no-roots", "file": "harnesses/unsafe-audit/check_forbid_unsafe.py",
+     "old": "    if not roots:",
+     "new": "    if False:",
+     "why": "a crate with no target root passes a containment check over nothing",
+     "cmd": ["harnesses/unsafe-audit/check_forbid_unsafe.py", "--self-test"]},
+
     {"gate": "c-flaw-scan", "file": "harnesses/c-flaw-scan/scan_c_flaws.py",
      "old": '    hits.sort(key=lambda h: (h["line"], h["category"]))\n    return hits',
      "new": "    return []",

@@ -480,7 +480,14 @@ else
 fi
 
 echo "===== 5. unsafe-audit over the rust workspace ====="
-# The ffi crate's C-ABI shim is the only unsafe; every block must carry a
+# The ffi crate's C-ABI shim is the only unsafe — and that sentence is a claim
+# only `core`'s forbid makes true. audit_unsafe.py below would pass unsafe in
+# core given a // SAFETY:; this fails if core's forbid is deleted, commented
+# out, weakened to deny, or put under cfg_attr (LESSONS #46). ffi's own `//!`
+# header quotes the attribute while describing core — a grep-based check reads
+# that as ffi forbidding unsafe, which is the opposite of the truth.
+"$PY" "$KIT/harnesses/unsafe-audit/check_forbid_unsafe.py" "$HERE/rust/crates/core"
+# Every block must carry a
 # // SAFETY:. Emitted per-module as a stamped report so the final gate rung
 # (unsafe_audited) advances from the harness's own verdict, not by hand.
 "$PY" "$KIT/harnesses/unsafe-audit/audit_unsafe.py" "$HERE/rust/crates"

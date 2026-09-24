@@ -54,6 +54,7 @@ repo-root `porting-kit/`; adjust the paths inside if you vendor it elsewhere).
 | Harness | Purpose | Gate |
 |---|---|---|
 | `harnesses/unsafe-audit/audit_unsafe.py` | every `unsafe {}` needs a `// SAFETY:` | **hard-fail CI** |
+| `harnesses/unsafe-audit/check_forbid_unsafe.py` | the `core` crate forbids `unsafe_code` on every target root, in a form rustc applies — not in a comment, not `deny`, not under `cfg_attr` | **hard-fail CI** |
 | `harnesses/differential/diff_run.py` (+`normalize.py`) | diff Rust vs C oracle; triage divergences via a ledger; timeout = liveness backstop | CI |
 | `harnesses/diff-fuzz/diff_fuzz.py` | differential fuzzing: same generated input to C & Rust, minimize divergences | CI + nightly |
 | `harnesses/cando/cando_diff.py` (+ driver templates) | function-level differential for C-ABI **libraries**; C-baseline-validated vectors | CI |

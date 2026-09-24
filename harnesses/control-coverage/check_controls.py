@@ -22,9 +22,10 @@ Mechanics (deliberately conservative, format-driven):
     A control naming a directory rather than a script (e.g. `harnesses/fuzz/`
     for cargo-fuzz) names no command to grep for and is reported as UNCHECKABLE,
     counted and listed, never silently dropped.
-  * A row naming NO harness at all — `#![forbid(unsafe_code)]` on `core` is the
-    one in this kit's own table — is reported too, by its text, as a control
-    this gate cannot check. Until LESSONS #45 the sentence above said "never
+  * A row naming NO harness at all is reported too, by its text, as a control
+    this gate cannot check. `#![forbid(unsafe_code)]` on `core` was such a row —
+    the first of this kit's own table — until LESSONS #46 gave it a harness to
+    name. Until LESSONS #45 the sentence above said "never
     silently dropped" and was true only of the directory case: a row with
     neither a script nor a directory fell through both regexes and vanished,
     and it was the FIRST row of the table. A parser over a human-written format

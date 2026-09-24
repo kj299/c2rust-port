@@ -10,6 +10,11 @@ H  := harnesses
 .PHONY: check-kit
 check-kit:
 	@echo "== unsafe-audit ==";     $(PY) $(H)/unsafe-audit/audit_unsafe.py --self-test
+	@# Contained, not just documented (LESSONS #46): the skeleton every port
+	@# copies must itself forbid unsafe in core, or the first thing a port
+	@# inherits is the gap.
+	@echo "== forbid-unsafe self-test =="; $(PY) $(H)/unsafe-audit/check_forbid_unsafe.py --self-test
+	@echo "== forbid-unsafe: the skeleton's core =="; $(PY) $(H)/unsafe-audit/check_forbid_unsafe.py skeleton/crates/core
 	@echo "== normalize ==";        $(PY) $(H)/differential/normalize.py --self-test
 	@echo "== diff_run ==";         $(PY) $(H)/differential/diff_run.py --self-test
 	@echo "== golden ==";           $(PY) $(H)/golden/golden.py --self-test

@@ -109,6 +109,12 @@ else
 fi
 
 echo "===== 5. unsafe-audit ====="
+# Contained first, then documented. `audit_unsafe.py` checks that every
+# `unsafe` block carries a `// SAFETY:` — it passes happily on unsafe in core.
+# Only `forbid(unsafe_code)` on core keeps it OUT, and until LESSONS #46
+# nothing failed when that line was deleted. Name the core crate explicitly:
+# the package is not called `core`, so nothing can infer it.
+"$PY" "$KIT/harnesses/unsafe-audit/check_forbid_unsafe.py" "$HERE/rust/crates/core"
 "$PY" "$KIT/harnesses/unsafe-audit/audit_unsafe.py" "$HERE/rust/crates"
 
 echo "===== 5b. supply-chain — the dependency surface ====="
