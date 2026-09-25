@@ -85,9 +85,19 @@ CHECKS = [
 # unbounded only BECAUSE of what the format string says, and blanking it would
 # silently stop that check firing — a false negative, the direction this scanner
 # must never err in (LESSONS #6). Blanking every check was the obvious port from
-# the lsof line's scanner, which is structured differently and has no such regex;
-# it was caught by reading this list before writing the code, and the sscanf
-# fixture in the self-test pins it (LESSONS #45).
+# the lsof line's scanner; it was caught here by reading this list before writing
+# the code, and the sscanf fixture in the self-test pins it (LESSONS #45).
+#
+# LESSONS #45 also said the lsof scanner "has no such regex". It has one, and its
+# literal blanking had silenced it: that copy reported no `scanf("%s")` at all
+# from the day its blanking landed. The claim was written about the other copy
+# without running its scanner once (LESSONS #47).
+#
+# Keeping literals for these checks re-admits what the blanking existed to
+# exclude — a function NAME inside a literal: `puts("scanf(%s) is prose")` was
+# flagged. So a match counts only if its call name is code: `masked` and
+# `code_only` are offset-aligned, and a name inside a literal is blank in
+# `code_only` (LESSONS #47).
 READS_LITERALS = {_SCANF_PCT_S}
 
 # Pre-computed overflow: `size_t total = n * w; ... malloc(total);`. The product
@@ -385,6 +395,8 @@ def scan_text(src):
     for cat, cwe, rx in CHECKS:
         text = masked if rx in READS_LITERALS else code_only
         for m in rx.finditer(text):
+            if rx in READS_LITERALS and code_only[m.start(1):m.end(1)] != m.group(1):
+                continue  # the call name sat inside a literal: prose, not a call
             line = _lineno(text, m.start())
             hits.append({"line": line, "category": cat, "cwe": cwe,
                          "text": _line_text(orig_lines, line)})
@@ -539,6 +551,7 @@ def _self_test():
            '  char c = \'"\'; puts("strcpy(a, b) and system(x)");\n'
            '  struct stat sb; stat(p, &sb);\n'
            '  sscanf(p, "%s", out);\n'
+           '  puts("scanf(%s) and sscanf(b, \\"%s\\", x) are prose");\n'
            '}\n')
     lh = scan_text(lit)
     toc = [h["line"] for h in lh if h["category"] == "toctou"]
@@ -548,7 +561,11 @@ def _self_test():
           "does not unbalance the quote tracking)",
           not any(h["category"] in ("command-exec",) or
                   (h["category"] == "unbounded-copy" and h["line"] == 3) for h in lh))
-    check("scanf(\"%s\") is STILL flagged — its evidence is the literal itself",
+    # LESSONS #47: the scanf check reads literals, so without the call-must-be-
+    # code rule it also read `scanf(%s)` INSIDE a message (line 6) — including
+    # one after an escaped quote, which is still inside the literal.
+    check("scanf(\"%s\") is STILL flagged — its evidence is the literal itself — "
+          "and a scanf named inside a message is not",
           [h["line"] for h in lh if h["category"] == "unbounded-copy"] == [5])
 
     print("\nself-test:", "OK" if ok else "FAILED")

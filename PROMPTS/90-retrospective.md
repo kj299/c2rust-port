@@ -104,8 +104,11 @@ retrospective and **patch the Porting Kit** with what you learned.
    as "the lsof line's entry NNN", never as a citation.
 
    Then probe what you brought back **against this kit's structure, not the
-   copy's**: the same fix can be safe in one shape and a false negative in the
-   other (the literal-blanking port would have silenced `scanf("%s")` here).
+   copy's** — and probe the copy too before saying anything about it. The
+   literal-blanking fix would have silenced `scanf("%s")` here, and LESSONS #45
+   recorded that the copy it came from was safe; it had been silencing the same
+   check there since the day it landed (LESSONS #47). A claim about the other
+   tree is a run you owe in the other tree.
 
 5. **Commit the kit changes separately** from the port, with a message explaining
    which failure each edit prevents next time.
