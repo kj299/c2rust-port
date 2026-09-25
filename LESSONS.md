@@ -2177,3 +2177,31 @@ points.)*
   144-line baseline.
 - **Section amended:** harnesses/gate-mutation/mutate_gates.py;
   harnesses/gate-mutation/unpinned.jsonl; README.md · harness table.
+
+---
+
+## 049. #48's ledger was a file type the citation checker never read
+
+- **Date:** 2026-09-25
+- **Codebase:** the Porting Kit — found when the lsof line imported #48 (its
+  entry 069) and hit a lesson-number collision the same day
+- **What happened:** #48's `unpinned.jsonl` cites #48 on every line — 145
+  citations here. `check_lesson_refs.py` scans a fixed list of file types, and
+  `.jsonl` was not on it, so none of those citations was checked: a mistyped
+  number in a `why` would have passed. The collision resolver in the lsof line
+  walks with the same list. When another branch took the number that line's
+  copy of #48 held, the resolver moved the entry and repointed every citation
+  to it in every file it scans — and planned to leave all 204 lines of that
+  ledger citing the other branch's lesson, with every check green.
+
+  It is the lsof line's entry 057 again: a Makefile, outside the same list,
+  kept stale citations through a renumber. That fix added one file type. The
+  class is "a new file type that cites lessons", and #48 made one without
+  asking whether the checker could read it.
+
+- **Kit change:** `.jsonl` is scanned, pinned by a fixture that fails without
+  it; 662 → 810 citations checked, 0 problems. Separately, a fix that missed
+  #36's merge by seconds lands here: the decision sweep's compile check
+  silences compile-time warnings, which a valid mutant such as `((True))[2]`
+  printed into check-kit's output.
+- **Section amended:** harnesses/lessons/check_lesson_refs.py · SCAN_EXTS.
