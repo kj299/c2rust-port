@@ -2046,3 +2046,56 @@ points.)*
   · MUTATIONS; harnesses/control-coverage/check_controls.py (docstring); CLAUDE.md
   · control table; Makefile · check-kit; README · harness table;
   skills/porting-kit-audit/SKILL.md · step 1.
+
+---
+
+## 047. #45 described the other copy without running anything there
+
+- **Date:** 2026-09-25
+- **Codebase:** the Porting Kit — correcting LESSONS #45, found when the lsof line
+  imported #45 and #46 (its entry 064)
+- **What happened:** #45 said of the lsof copy's scanner: "The lsof scanner has
+  no such regex." That was false. It has `\bscanf\s*\([^)]*%s`, and its literal
+  blanking — the fix #45 brought here — had silenced it. Probed in the lsof tree
+  before importing anything back:
+
+  | fixture | lsof scanner | its regex on the raw line |
+  |---|---|---|
+  | `scanf("%s", b);` | no hit | matches |
+  | `fscanf(stdin, "%s", b);` | no hit | `\bscanf` never matched the family |
+  | `sscanf(b, "%s", b);` | no hit | — |
+
+  So the false negative #45 congratulated this kit on avoiding was live in the
+  copy the fix came from, from the day its blanking landed. #45's table also
+  listed the literal fix as "fixed in the lsof copy, this arc": true, and the fix
+  was defective there. Nothing was hidden — lsof's only `scanf`-family call is
+  `sscanf(fp[0], "%" SCNx64 …)`, with no `%s` — but the scanner every lsof-shaped
+  port would have inherited could not see the classic unbounded read at all.
+
+- **How it was written.** #45 is an entry about re-probing what crosses between
+  the two copies, and it probed carefully in one direction: it caught the false
+  negative HERE by reading this kit's check list before porting. Then it made a
+  claim about the OTHER copy from a read of its structure — "structured
+  differently" became "has no such regex" — and never ran that copy's scanner on
+  the one fixture that would have settled it. The lesson it was writing applied
+  to its own sentence, and nothing checks sentences.
+
+- **And the carve-out had a false positive.** Keeping literals for the `scanf`
+  check re-admitted what the blanking existed to exclude: a function name inside
+  a message. `puts("scanf(%s) is prose")` was flagged here, and in lsof once it
+  was fixed the same way. #45's fixture put `strcpy` and `system` in a message,
+  never `scanf`, so the one check that reads literals was the one never tested
+  against a literal naming it. A match now counts only if its call name is code:
+  the two masks are offset-aligned, so a name inside a literal is blank in the
+  literal-free one.
+
+- **Kit change:** c-flaw-scan: the call-must-be-code rule, a fixture line with
+  `scanf(%s)` inside a message (including after an escaped quote), and the
+  comment that repeated #45's claim corrected. The self-test was seen to fail
+  without the rule. One mutation row for its dangerous direction — skipping every
+  match silences the check; 40 gates, 0 survivors. cJSON's C 25 → 25 and lsof's
+  398 → 398: neither tree has the case, so this is for the next port. Step 4c now
+  says a claim about the other tree is a run owed in the other tree.
+- **Section amended:** harnesses/c-flaw-scan/scan_c_flaws.py;
+  harnesses/gate-mutation/mutate_gates.py · MUTATIONS;
+  PROMPTS/90-retrospective.md · step 4c.

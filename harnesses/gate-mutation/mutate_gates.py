@@ -137,6 +137,14 @@ MUTATIONS = [
      "why": "scanf(\"%s\") stops being flagged: a false negative in a security scanner",
      "cmd": ["harnesses/c-flaw-scan/scan_c_flaws.py", "--self-test"]},
 
+    # The call-must-be-code rule (LESSONS #47) removes a false positive; its
+    # dangerous direction is skipping EVERY match, which silences the check.
+    {"gate": "c-flaw-scan-call-is-code", "file": "harnesses/c-flaw-scan/scan_c_flaws.py",
+     "old": "            if rx in READS_LITERALS and code_only[m.start(1):m.end(1)] != m.group(1):",
+     "new": "            if rx in READS_LITERALS:",
+     "why": "every scanf match is judged prose and skipped: scanf(\"%s\") goes silent",
+     "cmd": ["harnesses/c-flaw-scan/scan_c_flaws.py", "--self-test"]},
+
     # LESSONS #31: proving a gate REFUSES says nothing about whether the port
     # ever CALLS it. Three declared controls were unwired at cutover and all
     # three passed this sweep.
