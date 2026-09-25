@@ -54,7 +54,6 @@ import argparse
 import ast
 import json
 import os
-import queue
 import shutil
 import signal
 import subprocess
@@ -610,33 +609,33 @@ def sweep_decisions(kit_root, files, table, tmp, durations, workers=None,
                     min_timeout=10):
     """Mutate every decision in the verdict functions of `files` and run each
     harness's self-test(s) from `table` against it. Returns a list of
-    (key, outcome), outcome in caught / hang / survived. Each worker thread owns
-    one scratch copy of the kit and restores the file after every mutant."""
+    (key, outcome), outcome in caught / hang / survived.
+
+    Every mutant gets a FRESH copy of the kit, as every hand row does. Mutating
+    one copy in place and restoring it lets whatever a mutant leaves behind — a
+    file its self-test wrote, a cache — reach the next mutant, which then
+    reports a kill it did not earn, and a real survivor behind it is masked
+    (the lsof line's entry 066: its hand-rolled drivers did exactly that)."""
     jobs = []
     for rel in files:
         src = open(os.path.join(kit_root, rel), encoding="utf-8").read()
         rows = [m for m in table if m["file"] == rel]
         cmds = sorted({tuple(m["cmd"]) for m in rows})
         for key, mutated in decision_mutants(rel, src, [m["old"] for m in rows]):
-            jobs.append((rel, cmds, key, mutated, src))
+            jobs.append((len(jobs), rel, cmds, key, mutated))
     if not jobs:
         return []
-    free = queue.Queue()
-    for w in range(min(workers or os.cpu_count() or 1, len(jobs))):
-        copy = os.path.join(tmp, f"decisions-{w}")
-        _copy_kit(kit_root, copy)
-        free.put(copy)
 
     def one(job):
-        rel, cmds, key, mutated, original = job
+        i, rel, cmds, key, mutated = job
         try:
             compile(mutated, rel, "exec")
         except SyntaxError as e:
             return key, f"syntax error: {e}"
-        copy = free.get()
-        path = os.path.join(copy, rel)
+        copy = os.path.join(tmp, f"decision-{i}")
+        _copy_kit(kit_root, copy)
         try:
-            open(path, "w", encoding="utf-8").write(mutated)
+            open(os.path.join(copy, rel), "w", encoding="utf-8").write(mutated)
             for c in cmds:
                 try:
                     rc, _out = _run(copy, list(c),
@@ -647,10 +646,10 @@ def sweep_decisions(kit_root, files, table, tmp, durations, workers=None,
                     return key, "caught"
             return key, "survived"
         finally:
-            open(path, "w", encoding="utf-8").write(original)
-            free.put(copy)
+            shutil.rmtree(copy, ignore_errors=True)
 
-    with ThreadPoolExecutor(max_workers=free.qsize()) as ex:
+    with ThreadPoolExecutor(max_workers=min(workers or os.cpu_count() or 1,
+                                            len(jobs))) as ex:
         results = list(ex.map(one, jobs))
     broken = [(k, o) for k, o in results if o.startswith("syntax error")]
     if broken:
@@ -670,15 +669,12 @@ def _run(kit_copy, cmd, timeout=300):
     path = os.path.join(kit_copy, cmd[0])
     argv = ([sys.executable, path] if cmd[0].endswith(".py")
             else ["bash", path]) + cmd[1:]
-    # No bytecode cache: a decision mutant and its restore can land in the same
-    # second at the same size, and a cached mutant would outlive its restore.
     # Its own process group, killed whole on timeout: a mutant that hangs can
     # leave a grandchild holding the output pipe, and reading after killing
     # only the child would then wait on the grandchild — for ever, if it hangs.
     posix = os.name == "posix"
     p = subprocess.Popen(argv, cwd=kit_copy, stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE, text=True,
-                         env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"),
                          start_new_session=posix)
     try:
         out, err = p.communicate(timeout=timeout)
@@ -881,6 +877,23 @@ def count(x):
 
 if __name__ == "__main__":
     sys.exit(0 if count(3) == 3 else 1)
+'''
+
+# Forcing `x > 5` True writes a file into the kit copy, and the self-test fails
+# if it finds one. In a copy shared between mutants the NEXT mutant (`x > 5`
+# forced False, which changes nothing) would find it and be reported caught.
+_TOY_POLLUTE = '''\
+#!/usr/bin/env python3
+import os, sys
+
+def verdict(x):
+    if x > 5:
+        open("POLLUTED", "w").close()
+    return x > 0
+
+if __name__ == "__main__":
+    clean = not os.path.exists("POLLUTED")
+    sys.exit(0 if clean and verdict(1) and not verdict(-1) else 1)
 '''
 
 # Forcing `x > 5` True makes the gate hang AND leave a grandchild holding its
@@ -1149,6 +1162,14 @@ def _self_test():
         check("a mutant that HANGS the self-test is caught (as a hang), not survived",
               got.get(("i < x", "True")) == "hang"
               and got.get(("i < x", "False")) == "caught")
+        pollute = {"gate": "toy-pollute", "file": "harnesses/toy/pollute.py",
+                   "cmd": ["harnesses/toy/pollute.py"], "why": "toy pollute",
+                   "old": "    return x > 0", "new": "    return True"}
+        got = outcomes(pollute, _TOY_POLLUTE, workers=1)
+        check("each mutant runs in a fresh copy: one that writes into the kit "
+              "cannot make the next look caught",
+              got.get(("x > 5", "True")) == "survived"
+              and got.get(("x > 5", "False")) == "survived")
         orphan = {"gate": "toy-orphan", "file": "harnesses/toy/orphan.py",
                   "cmd": ["harnesses/toy/orphan.py"], "why": "toy orphan",
                   "old": "    return x > 0", "new": "    return True"}

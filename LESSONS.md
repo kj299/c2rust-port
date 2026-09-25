@@ -2153,18 +2153,27 @@ points.)*
   enumerated: in this kit they are hundreds of parser bounds checks, and
   LESSONS #20 says their bugs are a different search. A verdict moved into a
   helper escapes unless its call site is itself a decision. Bash harnesses keep
-  hand rows only. The sweep adds about a minute and a half to `make check-kit`
-  on four cores.
+  hand rows only. The sweep adds about two minutes to `make check-kit` on four
+  cores.
+
+- **One copy per mutant.** The first draft gave each worker thread one kit copy
+  and restored the file after every mutant. The lsof line's entry 066 is the
+  reason not to: its hand-rolled drivers restored in place, a mutant survived
+  its restore, and later mutants reported kills they had not earned — masking a
+  real survivor behind them. Every mutant now gets a fresh copy, as every hand
+  row always has; a fixture whose mutant writes into its copy passes on that
+  and fails on the draft. The ledger came out the same 144 both ways, so this
+  kit had not been fooled — but it cost about 20 seconds to stop hoping so.
 
 - **Kit change:** gate-mutation: verdict functions read from the whole table;
   decisions enumerated (constants and f-string interiors skipped); a threaded
-  sweep over per-worker kit copies, with no bytecode cache so a mutant cannot
-  outlive its restore; a crash or hang counts as caught, and a hang's whole
-  process group is killed — killing only the child left a grandchild holding
-  the pipe, and the fixture for it waited 60 s without the fix; the ledger
-  parsed fail closed (missing or empty field, unknown field, bad `to` or `n`,
-  duplicate, non-object line — each a hard error, each with its own fixture);
-  new and stale both fail; `--rows-only` for a quick row check. The self-test
-  grew from 9 checks to 44. `unpinned.jsonl` holds the 144-line baseline.
+  sweep with a fresh kit copy per mutant; a crash or hang counts as caught, and
+  a hang's whole process group is killed — killing only the child left a
+  grandchild holding the pipe, and the fixture for it waited 60 s without the
+  fix; the ledger parsed fail closed (missing or empty field, unknown field,
+  bad `to` or `n`, duplicate, non-object line — each a hard error, each with
+  its own fixture); new and stale both fail; `--rows-only` for a quick row
+  check. The self-test grew from 9 checks to 45. `unpinned.jsonl` holds the
+  144-line baseline.
 - **Section amended:** harnesses/gate-mutation/mutate_gates.py;
   harnesses/gate-mutation/unpinned.jsonl; README.md · harness table.
