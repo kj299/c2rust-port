@@ -2099,3 +2099,72 @@ points.)*
 - **Section amended:** harnesses/c-flaw-scan/scan_c_flaws.py;
   harnesses/gate-mutation/mutate_gates.py · MUTATIONS;
   PROMPTS/90-retrospective.md · step 4c.
+
+---
+
+## 048. "One row per verdict" was a convention, and the audit counted harnesses
+
+- **Date:** 2026-09-25
+- **Codebase:** the Porting Kit itself — after the lsof line's scanner shipped a
+  verdict with no mutation row (its entry 064)
+- **What happened:** LESSONS #16 set the rule: one mutation row per verdict that
+  fails open alone. Nothing enforced it. The table audit (#25) asks whether a
+  HARNESS has a row, never whether each verdict does. In the lsof line's copy of
+  this kit, its entry 064 put a call-must-be-code rule into the scanner's verdict
+  function with a fixture and no row, and the audit could not see it: the
+  scanner already had two. This kit carried the same rule with a row only
+  because #47 added one by hand.
+
+  So the sweep now finds the verdicts itself. A verdict function is one holding
+  a row's target. Every decision in it — an if/while/conditional test, a
+  comparison, an and/or and each operand, a `not` — is forced True, then
+  False, and the harness's self-test must go red. Run over this kit for the
+  first time: 476 mutants in 27 verdict functions across 20 harnesses, and 144
+  of them — 116 decisions in 23 functions — left the self-test green. Three,
+  read to see what the number means:
+  - **api-coverage's ceiling.** With nothing unported, `ratchet_holds` passes
+    any declared ceiling. "Slack is not a pass" is pinned only for a non-zero
+    count, so a stale ceiling of 3 over an empty surface — room for three
+    ungated symbols to arrive later — passes the self-test either way.
+  - **diff_run's timeout note** is part of a divergence's ledger fingerprint,
+    and nothing checks it.
+  - **control-coverage's `control in t`** can never matter: the basename is a
+    suffix of the path, so `base in t` already holds. An equivalent mutant —
+    the kind a ledger line exists to explain.
+
+  None was triaged here. All 144 go into `harnesses/gate-mutation/unpinned.jsonl`
+  as a dated baseline, and each line says so. The sweep fails on an unpinned
+  decision the file does not name, and on a line that no longer names one —
+  pinned since, or moved — so the file can only shrink. It ran three times
+  with the same 144, and the keys (function, source line, expression; never a
+  line number) came out identical on Python 3.10 through 3.13.
+
+- **And on itself.** Run over its own new code, the sweep found the new checks
+  pinned only in bundles: the misspelled-field fixture also dropped `why`, so
+  the unknown-field check was never tested alone — #44's class, inside the fix
+  for it. It found two older rules no fixture pinned: a table gap failing the
+  run (the self-test called `coverage_gaps` directly and never through the
+  sweep — #31's use-versus-mention, in the harness built to catch it), and a
+  hand row that crashes its self-test being a hard error. All are pinned now.
+  What still survives there is report text, worker counts and guards no input
+  reaches.
+
+- **Where it stops.** Helpers a verdict function calls are plumbing and are not
+  enumerated: in this kit they are hundreds of parser bounds checks, and
+  LESSONS #20 says their bugs are a different search. A verdict moved into a
+  helper escapes unless its call site is itself a decision. Bash harnesses keep
+  hand rows only. The sweep adds about a minute and a half to `make check-kit`
+  on four cores.
+
+- **Kit change:** gate-mutation: verdict functions read from the whole table;
+  decisions enumerated (constants and f-string interiors skipped); a threaded
+  sweep over per-worker kit copies, with no bytecode cache so a mutant cannot
+  outlive its restore; a crash or hang counts as caught, and a hang's whole
+  process group is killed — killing only the child left a grandchild holding
+  the pipe, and the fixture for it waited 60 s without the fix; the ledger
+  parsed fail closed (missing or empty field, unknown field, bad `to` or `n`,
+  duplicate, non-object line — each a hard error, each with its own fixture);
+  new and stale both fail; `--rows-only` for a quick row check. The self-test
+  grew from 9 checks to 44. `unpinned.jsonl` holds the 144-line baseline.
+- **Section amended:** harnesses/gate-mutation/mutate_gates.py;
+  harnesses/gate-mutation/unpinned.jsonl; README.md · harness table.
