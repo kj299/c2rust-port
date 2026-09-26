@@ -91,8 +91,12 @@ def declared_controls(controls_path):
                 if d not in dir_only:
                     dir_only.append(d)
             if not dirs:
-                name = row.strip().strip("|").split("|")[0].strip()
-                if name and name not in unreadable:
+                # Named by its first cell — or, when that is empty, by the whole
+                # row: an empty name used to drop the row without a word, the
+                # very thing LESSONS #45 exists to stop (LESSONS #48's decision
+                # sweep found it).
+                name = row.strip().strip("|").split("|")[0].strip() or row.strip()
+                if name not in unreadable:
                     unreadable.append(name)
     return runnable, dir_only, unreadable
 
@@ -275,6 +279,18 @@ def _self_test():
                      "| Other | Table |\n|:--|--:|\n| x | `harnesses/beta/b.sh` |\n")
         check_case("every table's header is excluded, not just the first",
                    declared_controls(two)[2] == [])
+        blank = os.path.join(d, "blank-name.md")
+        with open(blank, "w", encoding="utf-8") as fh:
+            fh.write("| Control | Command |\n|---|---|\n| | `#![forbid(unsafe_code)]` |\n")
+        check_case("a row with an EMPTY first cell is reported by its text, not dropped",
+                   declared_controls(blank)[2] == ["| | `#![forbid(unsafe_code)]` |"])
+        # A gate may reach a harness through a variable directory; the basename
+        # is what it shares with the table (unpinned until LESSONS #48's sweep).
+        via_var = os.path.join(d, "via-var.sh")
+        with open(via_var, "w", encoding="utf-8") as fh:
+            fh.write('python3 "$KIT/alpha/a.py"\nbash "$KIT/beta/b.sh"\n')
+        check_case("a gate invoking controls through a variable path passes (basename)",
+                   check(controls, [via_var]) == 0)
 
         full = os.path.join(d, "full.sh")
         with open(full, "w", encoding="utf-8") as fh:
