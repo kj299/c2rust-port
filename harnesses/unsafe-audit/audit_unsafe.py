@@ -217,7 +217,7 @@ def audit_text(src: str, window: int):
     # Split exactly where find_unsafe_blocks counts: on "\n" only. splitlines()
     # also breaks on a form feed — whitespace to rustc — so one \f early in a
     # file shifted every later line by one, and a block was judged by its
-    # neighbour's SAFETY comment. Found triaging LESSONS #48's ledger.
+    # neighbour's SAFETY comment. Found triaging LESSONS #48/#50's ledger.
     lines = src.split("\n")
     documented, undocumented = [], []
     for line_no, kind in find_unsafe_blocks(src):
@@ -327,7 +327,7 @@ def self_test():
     rdoc, rundoc = audit_text(real, window=3)
     check("SAFETY: in a real trailing comment DOES document the block",
           rdoc == [(1, "block")] and rundoc == [])
-    # One fixture per rule of the upward scan (LESSONS #16). LESSONS #48's
+    # One fixture per rule of the upward scan (LESSONS #16). LESSONS #48/#50's
     # decision sweep found the first two unpinned, and both fail open: forced
     # on, ANY comment above a block documented it, and the window was never
     # enforced. The rest are documented allowances nothing exercised.

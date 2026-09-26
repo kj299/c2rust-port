@@ -181,7 +181,7 @@ def _self_test() -> int:
         open(stub, "w").write("# Threat model\n\nTODO\n")
         chk("a stub threat model FAILS", rc(stub, False) == 1)
         # That stub fails three ways at once (length, sections, TODO), so none
-        # was pinned alone (LESSONS #16) — LESSONS #48's decision sweep turned
+        # was pinned alone (LESSONS #16) — LESSONS #48/#50's decision sweep turned
         # the length check off unnoticed. Every heading, nothing unfilled, too
         # short: length alone.
         short = os.path.join(d, "short.md")

@@ -378,7 +378,7 @@ def _self_test():
         cmd_ingest(p3, diff_jsons=[dif("codec.json")], repo_sha=None)
         check("an unexplained DIVERGE does not advance", load(p3)["modules"]["codec"] == "ported")
         # "An empty report proves nothing and must not advance a gate" — the
-        # predicate's own comment, held by no fixture until LESSONS #48's
+        # predicate's own comment, held by no fixture until LESSONS #48/#50's
         # decision sweep forced its length test off. Nor does a report whose
         # items are not verdict objects.
         wlist(dif("codec.json"), [])

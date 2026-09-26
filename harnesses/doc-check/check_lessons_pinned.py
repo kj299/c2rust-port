@@ -243,7 +243,7 @@ def _self_test():
         check("cited lesson→harness link passes", run(root) == 0)
         # The summary's counters are how a skip stays visible (the docstring's
         # "a skip counter is where a gate hides"): none here, all three at the
-        # end. LESSONS #48's decision sweep found every one unpinned.
+        # end. LESSONS #48/#50's decision sweep found every one unpinned.
         import contextlib
         import io
 

@@ -65,7 +65,7 @@ def check_skill(skill_dir, kit_root):
     # `porting-kit/harnesses/<name>.py` is read only up to the `<` — PATH_RE
     # stops there — so it checks the directory, which must exist. (A skip for
     # placeholders stood here and could never fire: PATH_RE cannot match the
-    # characters it looked for. LESSONS #48's decision sweep found it.)
+    # characters it looked for. LESSONS #48/#50's decision sweep found it.)
     for m in dict.fromkeys(PATH_RE.findall(text)):  # dedupe, keep order
         rel = m[len("porting-kit/"):].rstrip(".,);:")
         if not os.path.exists(os.path.join(kit_root, rel)):
@@ -123,7 +123,7 @@ def _self_test():
         open(os.path.join(bad, "SKILL.md"), "w").write(
             "---\nname: WRONG\ndescription: d\n---\nsee porting-kit/PLAYBOOK.md\n")
         check("a name mismatch ALONE is caught", run(skills) == 1)
-        # The same rule for every other check (LESSONS #48's decision sweep
+        # The same rule for every other check (LESSONS #48/#50's decision sweep
         # found each of these unreached: a missing description passed outright).
         for label, body in [
                 ("no frontmatter", "no frontmatter here\n"),

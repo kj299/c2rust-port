@@ -1,4 +1,4 @@
-# Decisions in verdict functions that no self-test pins — LESSONS #48.
+# Decisions in verdict functions that no self-test pins — LESSONS #48, #50.
 #
 # harnesses/gate-mutation/mutate_gates.py forces every decision in a verdict
 # function (one holding a mutation row's target) True, then False, and runs the
@@ -10,9 +10,17 @@
 # a fixture, then delete its line. Keys name a decision by function, source
 # line and expression, never by line number; `n` numbers repeats on one line.
 #
-# Every line below is the baseline of 2026-09-25, when the sweep first ran, and
-# says so: nobody has yet looked at which kind it is. A line added later needs a
-# reason of its own: why this decision cannot, or need not, be pinned.
+# Every line was triaged on 2026-09-26 (LESSONS #50). Of the 144 in the first
+# baseline, 104 were pinned by fixtures and 7 went with code that was fixed or
+# removed. The 33 left, and one decision added since, say which of three kinds
+# each is, and why:
+#   equivalent:  forcing it cannot change what the harness does.
+#   report:      it changes only what a person reads; the verdict, the exit code
+#                and every field another tool reads are the same.
+#   stricter:    forced one way it only refuses more, and the permission it
+#                guards is a design choice rather than documented behaviour.
+# A decision that changes a verdict, an exit code or a machine-read field is
+# never any of these: pin it. A new line needs its own reason of one kind.
 {"file": "harnesses/api-coverage/check_api.py", "func": "ratchet_holds", "line": "if declared is None:", "expr": "declared is None", "to": "False", "why": "equivalent: forced False, the next line compares a nonzero count with None, which is False as well"}
 {"file": "harnesses/api-coverage/check_api.py", "func": "symbol_is_accounted", "line": "if status in NEEDS_REASON and not note:", "expr": "status in NEEDS_REASON", "to": "True", "why": "stricter: forced True, a `ported` row must also carry a written reason; the format asks one only of exclusions, and whether ported rows should is a design question, not a gap"}
 {"file": "harnesses/cando/cando_diff.py", "func": "compare", "line": "oracle_errored = r[\"oracle_rc\"] != 0 or r[\"timed_out\"][\"oracle\"]", "expr": "r[\"timed_out\"][\"oracle\"]", "to": "False", "why": "equivalent: diff_run.run_one reports a timeout as rc 124, so `oracle_rc != 0` already holds whenever this does; it matters only if that contract changes"}
@@ -22,39 +30,11 @@
 {"file": "harnesses/control-coverage/check_controls.py", "func": "declared_controls", "line": "if i and _SEPARATOR.match(ln) and TABLE_ROW.match(lines[i - 1])}", "expr": "i", "to": "True", "why": "equivalent: at i == 0 the marked index is -1, which no row's index ever equals"}
 {"file": "harnesses/control-coverage/check_controls.py", "func": "declared_controls", "line": "if m.group(0) not in runnable:", "expr": "m.group(0) not in runnable", "to": "True", "why": "report: a de-duplication; forced True, a control named twice is checked and listed twice with the same result"}
 {"file": "harnesses/control-coverage/check_controls.py", "func": "declared_controls", "line": "if name not in unreadable:", "expr": "name not in unreadable", "to": "True", "why": "report: a de-duplication; forced True, a row named twice is reported twice"}
-{"file": "harnesses/differential/diff_run.py", "func": "_validate_matrix", "line": "if \"stdin_b64\" in case:", "expr": "\"stdin_b64\" in case", "to": "True", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/differential/diff_run.py", "func": "_validate_matrix", "line": "if not name or not isinstance(name, str):", "expr": "not isinstance(name, str)", "to": "False", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/differential/diff_run.py", "func": "_validate_matrix", "line": "if not name or not isinstance(name, str):", "expr": "not name", "to": "False", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/differential/diff_run.py", "func": "_validate_matrix", "line": "if not name or not isinstance(name, str):", "expr": "not name or not isinstance(name, str)", "to": "False", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/differential/diff_run.py", "func": "_validate_matrix", "line": "if re.search(r\"[/\\\\]\", name) or name in (\".\", \"..\"):", "expr": "name in (\".\", \"..\")", "to": "False", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "\"diff\": None if verdict == \"MATCH\" else (note + body),", "expr": "verdict == \"MATCH\"", "to": "False", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "\"fingerprint\": None if clean else fp[:12],", "expr": "clean", "to": "False", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "\"fingerprint_full\": None if clean else fp,", "expr": "clean", "to": "False", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "\"fingerprint_full\": None if clean else fp,", "expr": "clean", "to": "True", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "\"pinned\": pin is not None,", "expr": "pin is not None", "to": "False", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "body = \"\" if stdout_match else \"\".join(difflib.unified_diff(", "expr": "stdout_match", "to": "False", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "body = \"\" if stdout_match else \"\".join(difflib.unified_diff(", "expr": "stdout_match", "to": "True", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "clean = verdict in (\"MATCH\", \"LEDGER-STALE\")  # no observed-divergence fingerprint", "expr": "verdict in (\"MATCH\", \"LEDGER-STALE\")", "to": "False", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "if not exit_match:", "expr": "not exit_match", "to": "True", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "if not stderr_match:", "expr": "not stderr_match", "to": "True", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "if o_to or r_to:", "expr": "o_to", "to": "False", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "if o_to or r_to:", "expr": "o_to", "to": "True", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "if o_to or r_to:", "expr": "o_to or r_to", "to": "False", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "if o_to or r_to:", "expr": "o_to or r_to", "to": "True", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "if o_to or r_to:", "expr": "r_to", "to": "False", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "if o_to or r_to:", "expr": "r_to", "to": "True", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "o_e, r_e = (norm(o_err), norm(r_err)) if with_stderr else (\"\", \"\")", "expr": "with_stderr", "to": "True", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "pin = known.get(name) if name in known else None", "expr": "name in known", "to": "True", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "stderr_match = (not with_stderr) or o_e == r_e", "expr": "not with_stderr", "to": "False", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "stderr_match = (not with_stderr) or o_e == r_e", "expr": "o_e == r_e", "to": "False", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "which = \"both\" if (o_to and r_to) else (\"rust\" if r_to else \"oracle\")", "expr": "o_to", "to": "False", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "which = \"both\" if (o_to and r_to) else (\"rust\" if r_to else \"oracle\")", "expr": "o_to", "to": "True", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "which = \"both\" if (o_to and r_to) else (\"rust\" if r_to else \"oracle\")", "expr": "o_to and r_to", "to": "False", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "which = \"both\" if (o_to and r_to) else (\"rust\" if r_to else \"oracle\")", "expr": "o_to and r_to", "to": "True", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "which = \"both\" if (o_to and r_to) else (\"rust\" if r_to else \"oracle\")", "expr": "r_to", "to": "False", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "which = \"both\" if (o_to and r_to) else (\"rust\" if r_to else \"oracle\")", "expr": "r_to", "to": "False", "n": 1, "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "which = \"both\" if (o_to and r_to) else (\"rust\" if r_to else \"oracle\")", "expr": "r_to", "to": "True", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "which = \"both\" if (o_to and r_to) else (\"rust\" if r_to else \"oracle\")", "expr": "r_to", "to": "True", "n": 1, "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
+{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "body = \"\" if stdout_match else \"\".join(difflib.unified_diff(", "expr": "stdout_match", "to": "False", "why": "equivalent: forced False it diffs equal texts, and difflib yields nothing for equal inputs, so body is empty either way"}
+{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "if not stderr_match:", "expr": "not stderr_match", "to": "True", "why": "equivalent: forced True it diffs equal stderr texts (or two empty ones), and difflib yields nothing for equal inputs"}
+{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "o_e, r_e = (norm(o_err), norm(r_err)) if with_stderr else (\"\", \"\")", "expr": "with_stderr", "to": "True", "why": "equivalent: stderr is only compared through stderr_match, which is True whenever with_stderr is off, so normalizing it anyway changes nothing"}
+{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "pin = known.get(name) if name in known else None", "expr": "name in known", "to": "True", "why": "equivalent: known.get(name) already returns None for a name the ledger does not hold"}
+{"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "stderr_match = (not with_stderr) or o_e == r_e", "expr": "not with_stderr", "to": "False", "why": "equivalent: with --with-stderr off, both stderr texts are \"\", so `o_e == r_e` holds and stderr_match is True either way"}
 {"file": "harnesses/doc-check/check_doc_flags.py", "func": "run", "line": "if script not in sources:", "expr": "script not in sources", "to": "True", "why": "equivalent: a read cache; forced True, the same script is read again and gives the same text"}
 {"file": "harnesses/lessons/check_lesson_refs.py", "func": "run", "line": "if err is not None:", "expr": "err is not None", "to": "False", "why": "report: forced False, a malformed citation is still a problem, reported as `LESSONS #None — no such entry` instead of its parse error, and counted as a citation"}
 {"file": "harnesses/library-differential/lib_diff.py", "func": "compare_call", "line": "\"diff\": None if verdict == \"MATCH\" else text,", "expr": "verdict == \"MATCH\"", "to": "False", "why": "report: only whether a MATCH's JSON report includes the diff text; the verdict is already MATCH"}

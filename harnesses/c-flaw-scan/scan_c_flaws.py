@@ -569,8 +569,8 @@ def _self_test():
           [h["line"] for h in lh if h["category"] == "unbounded-copy"] == [5])
 
     # A form feed — a page break, common in old C — is not a line. Found beside
-    # the same bug in audit_unsafe while triaging LESSONS #48's ledger: the hit's
-    # line was right and the text shown with it was the line above.
+    # the same bug in audit_unsafe while triaging LESSONS #48/#50's ledger: the
+    # hit's line was right and the text shown with it was the line above.
     ff = scan_text("int a;\x0cint b;\nvoid f(char *d, char *s) {\n  strcpy(d, s);\n}\n")
     check("after a form feed, a hit shows its own line's text",
           [(h["line"], h["text"]) for h in ff] == [(3, "strcpy(d, s);")])

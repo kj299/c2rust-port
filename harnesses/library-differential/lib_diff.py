@@ -571,7 +571,7 @@ def _self_test():
           compare_call(vs, synth(ret=1, outputs={"b": b"x"}),
                        synth(ret=2, outputs={"b": b"x"}), {})["verdict"] == "DIVERGE")
     # The C side's own failures, and ERROR on either side — reached by no
-    # fixture until LESSONS #48's decision sweep forced them off. A C crash on a
+    # fixture until LESSONS #48/#50's decision sweep forced them off. A C crash on a
     # void call with no outputs leaves nothing to compare, so equal-looking
     # empties must not read as MATCH.
     check("a C crash with empty-equal results is not a MATCH (the C cannot validate)",

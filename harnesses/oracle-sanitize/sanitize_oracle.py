@@ -228,7 +228,7 @@ def _self_test():
     report("an UNINSTRUMENTED binary is refused, not reported clean",
            rc.returncode == 1 and b"no sanitizer runtime" in rc.stderr)
     # ...unless the porter opts out in writing. The flag was documented and
-    # never run; LESSONS #48's decision sweep forced the requirement on and
+    # never run; LESSONS #48/#50's decision sweep forced the requirement on and
     # nothing noticed.
     rc = subprocess.run([sys.executable, __file__, "--oracle", plain, "--matrix", matrix,
                          "--no-require-instrumented"], capture_output=True, check=False)

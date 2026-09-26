@@ -125,7 +125,7 @@ def _self_test():
     check("sort canonicalizes order",
           normalize_text("b\na", sort=True) == normalize_text("a\nb", sort=True))
     # Every option masks something, so each must mask ONLY when asked — forced
-    # on, it hides a real difference in every comparison. LESSONS #48's
+    # on, it hides a real difference in every comparison. LESSONS #48/#50's
     # decision sweep found all of them unpinned; strip_blank's test forced True
     # dropped every line, so any two outputs compared equal.
     check("numbers are NOT masked unless asked",

@@ -2205,3 +2205,74 @@ points.)*
   silences compile-time warnings, which a valid mutant such as `((True))[2]`
   printed into check-kit's output.
 - **Section amended:** harnesses/lessons/check_lesson_refs.py · SCAN_EXTS.
+
+---
+
+## 050. The ledger was a list of fail-opens, and a count could not say which
+
+- **Date:** 2026-09-26
+- **Codebase:** the Porting Kit — triaging #48's decision ledger, line by line
+- **What happened:** #48 recorded 144 unpinned decisions as untriaged debt:
+  a number, with three lines read to see what it meant. Reading all of them
+  meant, for each, either a fixture that fails under the mutant or a reason
+  it cannot or need not be pinned. Of the 144, 104 were pinned (one in #38's
+  api-coverage fix), 7 went with code that was fixed or removed, and 33 stay
+  with a reason: 15 equivalent, 17 report, 1 stricter. The ledger's header
+  now defines those three kinds and forbids them for anything a verdict, an
+  exit code or another tool depends on.
+
+  The count had hidden a list of gates that could pass wrongly:
+  - **the differential's normalizer.** Forcing strip_blank's test on dropped
+    every line, so any two outputs compared equal, and strip_blank=True is
+    diff_run's own setting. Every other option was pinned in the direction
+    that masks nothing extra, and none in the direction that masks too much.
+  - **the unsafe audit.** Any comment above a block documented it, and the
+    scan window was never enforced. Not in the ledger but found beside it:
+    the audit split lines where rustc does not (on a form feed), so one \f
+    shifted every later block onto its neighbour's SAFETY comment.
+  - **probe verify** passed an oracle whose exit code drifted while its stdout
+    held. That is half of its own crown verdict.
+  - **progress** advanced a module on an EMPTY diff report. The predicate's
+    comment said it must not.
+  - **perf_gate** read an oracle timeout as OK, because a fast Rust looks
+    fast beside a hung C. **lib_diff** read a C crash as MATCH when both
+    sides came back empty.
+  - **check_skills** passed a skill with no description. **lessons-pinned**
+    let a bare `#8` ("fixed in PR #8") pin lesson 8.
+  - **forbid-unsafe**: a forbid inside `/*xx…*/` read as live under a
+    misread close. **diff_run**: stdout could drop out of the fingerprint
+    a ledger pin locks.
+
+- **The shape they share** is #16's: the fixture asked one question that
+  many failures answer. Probe's verify checks, golden's statuses, the threat
+  model's stub and sanitize's missing oracle all asked "did it exit 1?", and
+  any failure anywhere said yes. The other shape is an option tested in one
+  direction only: --with-stderr, --no-require-instrumented, --also-scan and
+  each normalizer flag had a fixture showing they work when asked, and none
+  showing they stay off when not asked.
+
+- **Behaviour changed, each with a fixture that fails on the old code:**
+  golden fails an UNREADABLE .rc sidecar (it warned, and CI reads no
+  warnings); lesson-refs fails a log with no entries (0-of-0);
+  control-coverage reports a table row with an empty first cell (it vanished,
+  which #45 exists to stop); audit_unsafe and the C scanner split lines on
+  "\n" only. check_skills' placeholder skip was dead code, since PATH_RE
+  cannot match what it looked for. It is removed, and a fixture pins how
+  placeholders really behave.
+
+- **Kit change:** fixtures in sixteen harnesses' self-tests, each seen
+  failing under its mutant; the five behaviour changes above; the ledger
+  down to 34 lines, each with a reason of a defined kind, and a header that
+  says what the kinds are.
+- **Section amended:** harnesses/differential/normalize.py;
+  harnesses/differential/diff_run.py; harnesses/unsafe-audit/audit_unsafe.py;
+  harnesses/unsafe-audit/check_forbid_unsafe.py;
+  harnesses/c-flaw-scan/scan_c_flaws.py; harnesses/probe/probe.py;
+  harnesses/progress/progress.py; harnesses/perf/perf_gate.py;
+  harnesses/library-differential/lib_diff.py; harnesses/golden/golden.py;
+  harnesses/oracle-sanitize/sanitize_oracle.py;
+  harnesses/lessons/check_lesson_refs.py;
+  harnesses/doc-check/check_lessons_pinned.py;
+  harnesses/control-coverage/check_controls.py;
+  harnesses/threat-model/check_threat_model.py; skills/check_skills.py;
+  harnesses/gate-mutation/unpinned.jsonl.

@@ -440,7 +440,7 @@ def _self_test():
               run([os.path.join(t, "nope")]) == 2)
         check("no crate named at all is an error", run([]) == 2)
 
-        # LESSONS #48's decision sweep: every test in _skip_block_comment could
+        # LESSONS #48/#50's decision sweep: every test in _skip_block_comment could
         # be forced either way with this self-test green, because no fixture put
         # a block comment BEFORE a live attribute, none had a comment whose
         # close could be misread, and none left one unterminated.

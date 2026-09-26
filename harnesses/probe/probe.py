@@ -562,7 +562,7 @@ def _self_test():
 
         # Every check above asks only whether verify exits 1, and one failure
         # anywhere answers yes for all of them. Each verdict below is asked for
-        # by its own message (LESSONS #48's decision sweep found four that no
+        # by its own message (LESSONS #48/#50's decision sweep found four that no
         # fixture reached on its own).
         import contextlib
         import io

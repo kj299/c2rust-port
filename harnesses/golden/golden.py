@@ -300,7 +300,7 @@ def _replay_case(rust, case, corpus, norm, ignore_exit):
             except (OSError, ValueError):
                 # An exit code that cannot be read cannot be matched. This used
                 # to warn on stderr and pass on stdout alone, and CI reads no
-                # warnings; LESSONS #48's decision sweep found it by forcing the
+                # warnings; LESSONS #48/#50's decision sweep found it by forcing the
                 # "readable" test the other way and seeing nothing notice.
                 matched = False
                 note = "  (unreadable .rc sidecar: exit code cannot be checked — re-capture)"
@@ -507,7 +507,7 @@ def _self_test():
         check("replay with matching flags is quiet", "differ" not in buf.getvalue())
 
         # Each replay status is its own verdict, and each was pinned only by
-        # the exit code it shares with FAIL (LESSONS #48's decision sweep).
+        # the exit code it shares with FAIL (LESSONS #48/#50's decision sweep).
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             replay(slow, tm, tc, False, False)
