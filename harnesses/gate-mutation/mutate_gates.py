@@ -60,6 +60,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import warnings
 from concurrent.futures import ThreadPoolExecutor
 
 # One entry per gate: neutralize the CROWN verdict — the single predicate whose
@@ -629,7 +630,11 @@ def sweep_decisions(kit_root, files, table, tmp, durations, workers=None,
     def one(job):
         i, rel, cmds, key, mutated = job
         try:
-            compile(mutated, rel, "exec")
+            # A mutant can be valid and still draw a compile-time warning —
+            # `((True))[2]` — which is noise here: the run decides its fate.
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                compile(mutated, rel, "exec")
         except SyntaxError as e:
             return key, f"syntax error: {e}"
         copy = os.path.join(tmp, f"decision-{i}")
