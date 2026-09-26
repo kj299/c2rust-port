@@ -377,6 +377,17 @@ def _self_test():
         wlist(dif("codec.json"), [{"name": "a", "verdict": "DIVERGE"}])
         cmd_ingest(p3, diff_jsons=[dif("codec.json")], repo_sha=None)
         check("an unexplained DIVERGE does not advance", load(p3)["modules"]["codec"] == "ported")
+        # "An empty report proves nothing and must not advance a gate" — the
+        # predicate's own comment, held by no fixture until LESSONS #48's
+        # decision sweep forced its length test off. Nor does a report whose
+        # items are not verdict objects.
+        wlist(dif("codec.json"), [])
+        cmd_ingest(p3, diff_jsons=[dif("codec.json")], repo_sha=None)
+        check("an EMPTY diff report does not advance (0-of-0 proves nothing)",
+              load(p3)["modules"]["codec"] == "ported")
+        check("a report that is not a list of verdict objects is not clean",
+              _clean_verdicts(None) is False and _clean_verdicts(7) is False
+              and _clean_verdicts(["MATCH"]) is False)
         wlist(dif("codec.json"), [{"name": "fn", "verdict": "MATCH"}])
         cmd_ingest(p3, lib_jsons=[dif("codec.json")], repo_sha=None)
         check("clean lib_diff report advances ported→differential (library port)",
