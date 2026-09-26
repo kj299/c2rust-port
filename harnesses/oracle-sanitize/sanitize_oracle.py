@@ -227,6 +227,12 @@ def _self_test():
                         capture_output=True, check=False)
     report("an UNINSTRUMENTED binary is refused, not reported clean",
            rc.returncode == 1 and b"no sanitizer runtime" in rc.stderr)
+    # ...unless the porter opts out in writing. The flag was documented and
+    # never run; LESSONS #48/#50's decision sweep forced the requirement on and
+    # nothing noticed.
+    rc = subprocess.run([sys.executable, __file__, "--oracle", plain, "--matrix", matrix,
+                         "--no-require-instrumented"], capture_output=True, check=False)
+    report("--no-require-instrumented runs an uninstrumented binary", rc.returncode == 0)
 
     rc = subprocess.run([sys.executable, __file__, "--oracle", clean, "--matrix", empty],
                         capture_output=True, check=False)
@@ -236,7 +242,10 @@ def _self_test():
     rc = subprocess.run([sys.executable, __file__, "--oracle",
                          os.path.join(tmp, "nope"), "--matrix", matrix],
                         capture_output=True, check=False)
-    report("a missing oracle is an error, not a skip", rc.returncode == 1)
+    # The message, not just the code: with the existence check gone, the
+    # instrumentation probe also exits 1 on a missing file, for the wrong reason.
+    report("a missing oracle is an error, not a skip",
+           rc.returncode == 1 and b"does not exist" in rc.stderr)
 
     print("\nself-test:", "OK" if ok else "FAILED")
     return 0 if ok else 1

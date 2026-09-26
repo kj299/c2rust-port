@@ -214,7 +214,11 @@ def has_safety_comment(lines, line_no: int, window: int) -> bool:
 
 
 def audit_text(src: str, window: int):
-    lines = src.splitlines()
+    # Split exactly where find_unsafe_blocks counts: on "\n" only. splitlines()
+    # also breaks on a form feed — whitespace to rustc — so one \f early in a
+    # file shifted every later line by one, and a block was judged by its
+    # neighbour's SAFETY comment. Found triaging LESSONS #48/#50's ledger.
+    lines = src.split("\n")
     documented, undocumented = [], []
     for line_no, kind in find_unsafe_blocks(src):
         (documented if has_safety_comment(lines, line_no, window) else undocumented).append(
@@ -323,6 +327,30 @@ def self_test():
     rdoc, rundoc = audit_text(real, window=3)
     check("SAFETY: in a real trailing comment DOES document the block",
           rdoc == [(1, "block")] and rundoc == [])
+    # One fixture per rule of the upward scan (LESSONS #16). LESSONS #48/#50's
+    # decision sweep found the first two unpinned, and both fail open: forced
+    # on, ANY comment above a block documented it, and the window was never
+    # enforced. The rest are documented allowances nothing exercised.
+    for label, src, want in [
+        ("a comment above that is NOT a SAFETY comment does not document the block",
+         "// just a note\nunsafe { f(); }", False),
+        ("a SAFETY comment beyond the window does not document the block",
+         "// SAFETY: too far\n\n\n\nunsafe { f(); }", False),
+        ("a blank line between the SAFETY comment and the block is allowed",
+         "// SAFETY: ok\n\nunsafe { f(); }", True),
+        ("a one-line /* SAFETY: */ comment documents the block",
+         "/* SAFETY: ok */\nunsafe { f(); }", True),
+        ("a SAFETY line inside a multi-line /* */ comment documents the block",
+         "/*\n * SAFETY: ok\n */\nunsafe { f(); }", True),
+        ("an attribute between the SAFETY comment and the block is allowed",
+         "// SAFETY: ok\n#[allow(unused_unsafe)]\nunsafe { f(); }", True),
+    ]:
+        d, u = audit_text(src, window=3)
+        check(label, (len(d) == 1 and u == []) if want else (d == [] and len(u) == 1))
+    ff = "let x = 1;\x0clet y = 2;\nunsafe { a(); } // SAFETY: a is fine\nunsafe { b(); }\n"
+    d, u = audit_text(ff, window=3)
+    check("a form feed does not shift a block onto its neighbour's SAFETY comment",
+          d == [(2, "block")] and u == [(3, "block")])
     print("\nself-test:", "OK" if ok else "FAILED")
     return 0 if ok else 1
 

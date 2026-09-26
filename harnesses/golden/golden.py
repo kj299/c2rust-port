@@ -61,6 +61,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 
@@ -297,11 +298,16 @@ def _replay_case(rust, case, corpus, norm, ignore_exit):
             try:
                 want_rc = int(open(rcpath, encoding="utf-8").read().strip())
             except (OSError, ValueError):
-                want_rc = None
-                print(f"warn: unreadable {rcpath}; exit code unchecked", file=sys.stderr)
-            if want_rc is not None and rc != want_rc:
+                # An exit code that cannot be read cannot be matched. This used
+                # to warn on stderr and pass on stdout alone, and CI reads no
+                # warnings; LESSONS #48/#50's decision sweep found it by forcing the
+                # "readable" test the other way and seeing nothing notice.
                 matched = False
-                note = f"  (exit code: golden={want_rc} got={rc})"
+                note = "  (unreadable .rc sidecar: exit code cannot be checked — re-capture)"
+            else:
+                if rc != want_rc:
+                    matched = False
+                    note = f"  (exit code: golden={want_rc} got={rc})"
         else:
             note = "  (no .rc sidecar; exit code unchecked — re-capture to add)"
     return ("MATCH" if matched else "FAIL"), note
@@ -499,6 +505,34 @@ def _self_test():
         with contextlib.redirect_stderr(buf):
             replay(o, ecm, ecc, False, False)
         check("replay with matching flags is quiet", "differ" not in buf.getvalue())
+
+        # Each replay status is its own verdict, and each was pinned only by
+        # the exit code it shares with FAIL (LESSONS #48/#50's decision sweep).
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            replay(slow, tm, tc, False, False)
+        check("a hanging rust is reported as TIMEOUT, not as an output mismatch",
+              "[TIMEOUT] hang" in buf.getvalue())
+        nog = os.path.join(d, "nog.json")
+        open(nog, "w").write('[{"name": "nogolden", "args": []}]')
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            nog_rc = replay(o, nog, ecc, False, False)
+        check("a case with no golden is MISSING and fails replay",
+              nog_rc == 1 and "MISSING GOLDEN: nogolden" in buf.getvalue())
+        badrc = os.path.join(d, "badrc")
+        shutil.copytree(ecc, badrc)
+        open(os.path.join(badrc, "ec.rc"), "w").write("not a number\n")
+        check("an unreadable .rc sidecar FAILS replay (an unknown exit code is not a match)",
+              replay(o, ecm, badrc, False, False) == 1)
+        norc = os.path.join(d, "norc")
+        shutil.copytree(ecc, norc)
+        os.remove(os.path.join(norc, "ec.rc"))
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            norc_rc = replay(o, ecm, norc, False, False)
+        check("a corpus from before .rc sidecars replays on stdout alone, and says so",
+              norc_rc == 0 and "no .rc sidecar" in buf.getvalue())
 
         # ---- held-back vectors (--holdout / --final): a reserved set is
         # excluded from iteration and run only at final acceptance, so the

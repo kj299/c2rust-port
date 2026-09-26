@@ -570,6 +570,20 @@ def _self_test():
     check("without returns_ignore the same differing return → DIVERGE (flag is load-bearing)",
           compare_call(vs, synth(ret=1, outputs={"b": b"x"}),
                        synth(ret=2, outputs={"b": b"x"}), {})["verdict"] == "DIVERGE")
+    # The C side's own failures, and ERROR on either side — reached by no
+    # fixture until LESSONS #48/#50's decision sweep forced them off. A C crash on a
+    # void call with no outputs leaves nothing to compare, so equal-looking
+    # empties must not read as MATCH.
+    check("a C crash with empty-equal results is not a MATCH (the C cannot validate)",
+          compare_call(vs, synth(status="crash", ret=None),
+                       synth(ret=None), {})["verdict"] == "DIVERGE")
+    check("a C timeout with empty-equal results is not a MATCH",
+          compare_call(vs, synth(status="timeout", ret=None),
+                       synth(ret=None), {})["verdict"] == "DIVERGE")
+    check("an error on the Rust side is ERROR",
+          compare_call(vs, synth(ret=1), synth(status="error", ret=1), {})["verdict"] == "ERROR")
+    check("an error on the C side is ERROR",
+          compare_call(vs, synth(status="error", ret=1), synth(ret=1), {})["verdict"] == "ERROR")
 
     print("\nself-test:", "OK" if ok else "FAILED")
     return 0 if ok else 1
