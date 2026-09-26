@@ -14,7 +14,6 @@
 # says so: nobody has yet looked at which kind it is. A line added later needs a
 # reason of its own: why this decision cannot, or need not, be pinned.
 {"file": "harnesses/api-coverage/check_api.py", "func": "ratchet_holds", "line": "if declared is None:", "expr": "declared is None", "to": "False", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
-{"file": "harnesses/api-coverage/check_api.py", "func": "ratchet_holds", "line": "return declared in (None, 0)", "expr": "declared in (None, 0)", "to": "True", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
 {"file": "harnesses/api-coverage/check_api.py", "func": "symbol_is_accounted", "line": "if status in NEEDS_REASON and not note:", "expr": "status in NEEDS_REASON", "to": "True", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
 {"file": "harnesses/cando/cando_diff.py", "func": "compare", "line": "oracle_errored = r[\"oracle_rc\"] != 0 or r[\"timed_out\"][\"oracle\"]", "expr": "r[\"timed_out\"][\"oracle\"]", "to": "False", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}
 {"file": "harnesses/control-coverage/check_controls.py", "func": "control_is_wired", "line": "return any((control in t) or (base in t)", "expr": "base in t", "to": "False", "why": "untriaged: in the 2026-09-25 baseline (LESSONS #48)"}

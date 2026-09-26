@@ -347,6 +347,21 @@ def _self_test():
              ratchet_holds(3, None) is False)
         case("ratchet predicate: slack is not a pass", ratchet_holds(1, 5) is False)
         case("ratchet predicate: exact match passes", ratchet_holds(3, 3) is True)
+        # With NOTHING unported, a ceiling above zero is slack all the same: room
+        # for three ungated symbols to arrive unseen. Slack was pinned only for a
+        # non-zero count; LESSONS #48's decision sweep found that forcing the
+        # zero branch's `declared in (None, 0)` True left this self-test green.
+        PORTED = "| `lib_AddPatch` | ported | driver mode `patch` |\n"
+        case("nothing unported under a ceiling of 0 passes",
+             check([hdr], manifest("r_zero.md", PORTED,
+                                   "\napi-coverage: max-unported = 0\n"),
+                   "CJSON_PUBLIC") == 0)
+        case("nothing unported under a ceiling of 3 fails (ratchet down to 0)",
+             check([hdr], manifest("r_zero_slack.md", PORTED,
+                                   "\napi-coverage: max-unported = 3\n"),
+                   "CJSON_PUBLIC") == 1)
+        case("ratchet predicate: slack over an empty surface is not a pass",
+             ratchet_holds(0, 3) is False)
 
         # 0-of-0 must not pass
         empty = os.path.join(d, "empty.h")
