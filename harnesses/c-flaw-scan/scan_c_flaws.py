@@ -390,7 +390,7 @@ def scan_text(src):
     # negatives). Line numbers survive masking (newlines preserved).
     masked = _mask_c_comments(src)
     code_only = _blank_literals(masked)
-    orig_lines = src.splitlines()
+    orig_lines = src.split("\n")  # as _lineno counts: a form feed is not a line
     hits = []
     for cat, cwe, rx in CHECKS:
         text = masked if rx in READS_LITERALS else code_only
@@ -567,6 +567,13 @@ def _self_test():
     check("scanf(\"%s\") is STILL flagged — its evidence is the literal itself — "
           "and a scanf named inside a message is not",
           [h["line"] for h in lh if h["category"] == "unbounded-copy"] == [5])
+
+    # A form feed — a page break, common in old C — is not a line. Found beside
+    # the same bug in audit_unsafe while triaging LESSONS #48's ledger: the hit's
+    # line was right and the text shown with it was the line above.
+    ff = scan_text("int a;\x0cint b;\nvoid f(char *d, char *s) {\n  strcpy(d, s);\n}\n")
+    check("after a form feed, a hit shows its own line's text",
+          [(h["line"], h["text"]) for h in ff] == [(3, "strcpy(d, s);")])
 
     print("\nself-test:", "OK" if ok else "FAILED")
     return 0 if ok else 1
