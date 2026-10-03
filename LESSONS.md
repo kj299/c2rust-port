@@ -2326,3 +2326,73 @@ points.)*
 - **Section amended:** PLAYBOOK · Phase 2; harnesses/differential/diff_run.py;
   harnesses/golden/golden.py; harnesses/gate-mutation/mutate_gates.py;
   skills/porting-kit-oracle/SKILL.md.
+
+---
+
+## 052. A stale verdict read off one run in a busy pool is noise the gate cannot repeat
+
+- **Date:** 2026-10-03
+- **Codebase:** the Porting Kit, bringing over the lsof line's entry 073 (its
+  CI, on this kit's decision sweep)
+- **What happened:** lsof's `kit integrity` job went red on a kit tree that
+  had passed two days before. The sweep (#48) called one decision-ledger line
+  stale. That evening a commit that touched no kit file failed the same way,
+  naming a different decision in the same function, and passed when the job
+  was run again. Neither decision can change what its self-test observes:
+  one is unreachable as written, and the other only starts a walk that skips
+  every file. So no fixture killed them. The self-test failed, or overran its
+  budget, about once per sweep on the shared runner, and the sweep took that
+  one run's word.
+
+  The sweep here has the same shape: one self-test per CPU at once, each on a
+  budget of ten times a baseline measured with nothing beside it. Its CI has
+  not hit this yet. That is luck, not a property of the gate. "Stale" claims
+  that a fixture now kills the decision, and a fixture kills it on every run.
+  One run in a shared pool cannot show that.
+- **The rule.** A verdict that fails a gate must be one the gate can repeat.
+  When a failure rests on a single run in a shared, parallel environment, run
+  it again alone before failing on it. When the two runs disagree, report
+  that with the output, rather than failing on noise or swallowing it.
+- **Kit change:** `mutate_gates.py`, taken from the lsof line by a three-way
+  merge against its pre-change text. `sweep_decisions()` takes the ledger's
+  keys as `confirm`. A ledgered decision that is caught or hangs in the pool
+  runs again alone, on the same budget. A kill the second run repeats stands,
+  and the line is stale as before. One it does not leaves the line standing
+  and goes into `unstable` with the tail of the self-test's output. The text
+  report prints those as UNSTABLE, which does not fail the run, and `--json`
+  carries them. Nothing re-runs unless a ledgered decision dies, so a clean
+  sweep costs what it did. The self-test gains the lsof line's toy, whose
+  self-test fails once per sweep, or with `--stall` overruns its budget, with
+  both its decisions in the ledger. Each of four breakages turns this copy's
+  self-test red, each checked here: removing the confirmation, confirming
+  kills but not hangs, dropping the report, and not passing the ledger's keys.
+- **Section amended:** harnesses/gate-mutation/mutate_gates.py ·
+  sweep_decisions, run_gates, self-test; README.md · gate-mutation row.
+
+---
+
+## 053. A fallback written for one input fired only for another
+
+- **Date:** 2026-10-03
+- **Codebase:** the Porting Kit, bringing over the PLAYBOOK rule of the lsof
+  line's entry 075 (lsof-rs's path arguments)
+- **What happened:** lsof-rs matched a path argument by device and inode, as
+  the C does, and also compared each row's NAME with the argument. That
+  comparison was meant for Unix sockets, which the C finds by their bound
+  path. But a socket's NAME is that path plus a `type=` tail, so it never
+  matched one. It did match a file at the same path in another mount
+  namespace, which is a different file and one the C does not match. The
+  differential had no socket named by its path and no second namespace, so
+  neither half showed. A review of the fix found the same shape in the new
+  code. An exemption by path prefix was sound for fd link targets, which the
+  kernel makes canonical. It was reused on bound paths, which are text a
+  process chose, so `//`, `/./` or a symlink got past it.
+- **The rule.** A fallback, an exemption or a second matching rule is a
+  feature of its own. Name the input it is for. Give the matrix one case where
+  it must fire for that input, and one where another input must not reach it.
+  A check that holds for values from one source does not hold for the same
+  type from another until the property it relies on is checked there too.
+- **Kit change:** PLAYBOOK Phase 4, step 2, asks for the two cases. The step's
+  timeout sentence is tightened to make room. The PLAYBOOK grows by one line,
+  to 404.
+- **Section amended:** PLAYBOOK · Phase 4 "The module port loop", step 2.
