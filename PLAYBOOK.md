@@ -264,11 +264,10 @@ Then the loop — each step is a CI-enforced gate:
    exit code** (LESSONS #4): a rewrite that prints the right thing but returns
    the wrong status is not a match — lsof exits 1 on no-match and scripts branch
    on it; `--ignore-exit` opts out for tools without stable codes. This gate is
-   also the **liveness backstop** (LESSONS #1): a hang is not UB, so sanitizers
-   won't see it — the harness's per-case timeout marks a wedged run as
-   `<<TIMEOUT>>` and fails it. Treat a timeout as a design smell (an unbounded
-   blocking call on the hot path) — the winlsof fix was to *avoid* the blocking
-   call, not wrap it.
+   also the **liveness backstop** (LESSONS #1): sanitizers can't see a hang, so
+   the per-case timeout fails a wedged run as `<<TIMEOUT>>`. Treat a timeout as
+   a design smell (an unbounded blocking call on the hot path): winlsof's fix
+   *avoided* the blocking call rather than wrapping it.
 
    **Before writing the mode, ask what state the C keeps that no output depends
    on** (LESSONS #39) — a last-item cache, a length beside a pointer, a memoized
@@ -276,7 +275,9 @@ Then the loop — each step is a CI-enforced gate:
    any of it, so the mode must contain the operation that *consumes* it, or the
    gate goes green over a field nothing touched. If the mode is multi-step, emit
    the descriptor after every step: a corruption at step 2 that step 5 masks is
-   invisible to a final-state comparison.
+   invisible to a final-state comparison. **A fallback is a feature of its own**
+   (LESSONS #53): give each fallback, exemption or second matching rule a case
+   where it must fire, and one where another input must not reach it.
 3. **Fuzz** the module's parse/input surface (`harnesses/fuzz/gen_fuzz_target.sh`
    scaffolds a `cargo-fuzz` target). Any crash/panic on untrusted input is a
    release blocker. Where a C oracle exists, also run **differential fuzzing**
