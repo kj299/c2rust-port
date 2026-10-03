@@ -51,6 +51,9 @@ iteration, run only under `--final` — so the rewrite cannot be tuned to pass t
 Golden files are plain text under DIR/<case>.golden (+ DIR/<case>.rc for the
 exit code) — diff-friendly, reviewable, committed. An oracle-substitution
 wrapper for diff_run.py should emit the .golden and exit with the .rc value.
+Output is normalized as diff_run normalizes it, whitespace collapsed; a case
+that sets `keep_whitespace = true` is captured and replayed with its spacing
+intact, since a column's alignment is part of the format a golden locks.
 capture also records its --sort/--mask-numbers/--ignore-exit flags and the
 holdout set in DIR/corpus.meta; replay warns when invoked with different flags
 (a silent mismatch produces baffling false failures).
@@ -188,6 +191,18 @@ def _validate_vector(case, runs, rcs, ignore_exit):
     return None
 
 
+def _normalizer(sort, mask_numbers):
+    """The one normalization capture and replay share. A case that sets
+    `keep_whitespace` keeps its spacing, as diff_run compares it (LESSONS #51):
+    this is the tool for locking output FORMAT, and the default collapse makes
+    a column aligned the other way normalize to the same golden."""
+    def norm(text, case):
+        return N.normalize_text(text, sort=sort, strip_blank=True,
+                                trim=not case.get("keep_whitespace", False),
+                                mask_numbers=mask_numbers)
+    return norm
+
+
 def capture(oracle, matrix_path, corpus, repeats, sort, mask_numbers, ignore_exit=False,
             holdout_path=None, validate=False):
     os.makedirs(corpus, exist_ok=True)
@@ -219,7 +234,7 @@ def capture(oracle, matrix_path, corpus, repeats, sort, mask_numbers, ignore_exi
         cases = list(matrix)
 
     _write_meta(corpus, sort, mask_numbers, ignore_exit, holdout_names)
-    norm = lambda t: N.normalize_text(t, sort=sort, strip_blank=True, mask_numbers=mask_numbers)
+    norm = _normalizer(sort, mask_numbers)
     nondet, timeouts, rejected, stored_names = [], [], [], set()
     for case in cases:
         name = case["name"]
@@ -230,7 +245,7 @@ def capture(oracle, matrix_path, corpus, repeats, sort, mask_numbers, ignore_exi
         if any(timed_out for _out, _rc, timed_out, _err in runs):
             timeouts.append(name)
             continue
-        outs = [norm(out) for out, _rc, _t, _e in runs]
+        outs = [norm(out, case) for out, _rc, _t, _e in runs]
         rcs = sorted({rc for _out, rc, _t, _e in runs})
         if len(set(outs)) != 1:
             nondet.append((name, _unstable_lines(outs)))
@@ -288,7 +303,7 @@ def _replay_case(rust, case, corpus, norm, ignore_exit):
     out, rc, timed_out, _err = D.run_one(rust, case)
     if timed_out:
         return "TIMEOUT", " (rust exceeded the case timeout — hard fail)"
-    got = norm(out)
+    got = norm(out, case)
     # Fidelity is stdout AND exit code (LESSONS #4). Corpora captured before .rc
     # sidecars existed get a warning, not a silent pass.
     matched, note = got == golden, ""
@@ -316,7 +331,7 @@ def _replay_case(rust, case, corpus, norm, ignore_exit):
 def replay(rust, matrix_path, corpus, sort, mask_numbers, ignore_exit=False,
            holdout_path=None, final=False):
     _check_meta(corpus, sort, mask_numbers, ignore_exit)
-    norm = lambda t: N.normalize_text(t, sort=sort, strip_blank=True, mask_numbers=mask_numbers)
+    norm = _normalizer(sort, mask_numbers)
     matrix = D.load_matrix(matrix_path, allow_empty=True)
     # Fail closed on a present-but-unreadable reservation record — a tampered or
     # partially written corpus.meta must not silently disable the holdout guard.
@@ -533,6 +548,30 @@ def _self_test():
             norc_rc = replay(o, ecm, norc, False, False)
         check("a corpus from before .rc sidecars replays on stdout alone, and says so",
               norc_rc == 0 and "no .rc sidecar" in buf.getvalue())
+
+        # keep_whitespace, read from the case as diff_run reads it (LESSONS #51).
+        # This tool locks output FORMAT, and a column's alignment is format.
+        wide = os.path.join(d, "wide.sh")
+        open(wide, "w").write("#!/bin/sh\nprintf 'a    b\\n'\n"); os.chmod(wide, 0o755)
+        narrow = os.path.join(d, "narrow.sh")
+        open(narrow, "w").write("#!/bin/sh\nprintf 'a b \\n'\n"); os.chmod(narrow, 0o755)
+        for keep in (False, True):
+            wm = os.path.join(d, f"ws-{keep}.json")
+            json.dump([{"name": "ws", "args": [], **({"keep_whitespace": True} if keep else {})}],
+                      open(wm, "w"))
+            wc = os.path.join(d, f"ws-{keep}")
+            with contextlib.redirect_stdout(io.StringIO()):
+                capture(wide, wm, wc, repeats=1, sort=False, mask_numbers=False)
+                stored = open(os.path.join(wc, "ws.golden")).read()
+                narrow_rc = replay(narrow, wm, wc, False, False)
+                wide_rc = replay(wide, wm, wc, False, False)
+            if keep:
+                check("a keep_whitespace case is captured with its spacing, and replay "
+                      "FAILs a spacing-only difference but MATCHes the same spacing",
+                      stored == "a    b\n" and narrow_rc == 1 and wide_rc == 0)
+            else:
+                check("by default the golden is collapsed, and a spacing-only "
+                      "difference MATCHes", stored == "a b\n" and narrow_rc == 0)
 
         # ---- held-back vectors (--holdout / --final): a reserved set is
         # excluded from iteration and run only at final acceptance, so the

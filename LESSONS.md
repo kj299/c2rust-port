@@ -2276,3 +2276,53 @@ points.)*
   harnesses/control-coverage/check_controls.py;
   harnesses/threat-model/check_threat_model.py; skills/check_skills.py;
   harnesses/gate-mutation/unpinned.jsonl.
+
+---
+
+## 051. The normalizer hid every column the port aligned the other way, and golden locked format through it
+
+- **Date:** 2026-10-03
+- **Codebase:** the Porting Kit — bringing over the lsof line's entry 070, plus
+  the second consumer of the same case schema that this copy has and that one
+  does not use
+- **What happened:** the differential normalizes both outputs before
+  comparing them. It applies the masking rules, collapses runs of blanks and
+  strips trailing ones. The collapse is what lets two formatters be compared
+  at all, and it also hides every difference of layout. The lsof line found
+  this by reading the C's printing code, not through the gate. Its port had
+  left-aligned five columns that the C right-aligns, on every line of every
+  table, and all 205 differential cases matched through it. With the renderer
+  fixed, comparing spacing found 204 of 205 byte-identical, plus one real bug
+  the collapse had hidden (a trailing space on one row kind). Its fix is a
+  per-case `keep_whitespace = true`, brought over unchanged: the runner
+  compares that case's spacing, a non-boolean value is refused so a typo
+  cannot mean "collapse", and a mutation row makes ignoring the key a
+  survivor.
+
+  This copy has a second reader of the same matrix that the lsof line does not
+  use: `golden.py`, whose docstring calls it the tool for locking output
+  *format*. It normalized capture and replay the same collapsing way, so a
+  `keep_whitespace` case would have been compared spacing-intact by diff_run
+  and captured collapsed by golden, green on any alignment. A key that one
+  reader honours and another silently ignores is not a control. golden now
+  builds its one normalizer from the case: the key is honoured on capture and
+  on replay, with fixtures in both directions and a mutation row of its own.
+
+- **The rule.** Normalize what varies between runs, and nothing else. Spacing
+  is output for a tool that prints a table, so once the port matches, compare
+  it byte for byte. When a case key is added, find every harness that reads the
+  same matrix: the kit's verdict is the strictest reading it gets anywhere, and
+  the loosest reading is the one a port will hit.
+- **Kit change:** `diff_run.py` takes a per-case `keep_whitespace`, refuses a
+  non-boolean value, and has the lsof line's fixtures unchanged: spacing
+  matches without the key, diverges with it, and still matches identical
+  output. `golden.py` reads the key through one `_normalizer` shared by
+  capture and replay. It has fixtures for a default case (captured collapsed,
+  spacing-only drift matches) and for a keep case (captured as printed,
+  spacing-only drift fails). There are two mutation rows,
+  `diff-keep-whitespace` and `golden-keep-whitespace`. The PLAYBOOK Phase 2
+  bullet says to mask only what varies, in the same four lines. The oracle
+  skill's normalization step says the same.
+- **Section amended:** PLAYBOOK · Phase 2; harnesses/differential/diff_run.py;
+  harnesses/golden/golden.py; harnesses/gate-mutation/mutate_gates.py;
+  skills/porting-kit-oracle/SKILL.md.

@@ -76,6 +76,15 @@ MUTATIONS = [
      "why": "every case MATCHes regardless of output/exit",
      "cmd": ["harnesses/differential/diff_run.py", "--self-test"]},
 
+    # A layout case asks for its spacing to be compared (LESSONS #51, from the
+    # lsof line's entry 070). If the key is ignored, every such case collapses
+    # its whitespace like any other and MATCHes whatever the alignment.
+    {"gate": "diff-keep-whitespace", "file": "harnesses/differential/diff_run.py",
+     "old": '    trim = not case.get("keep_whitespace", False)',
+     "new": "    trim = True",
+     "why": "keep_whitespace is ignored: a layout case MATCHes whatever the spacing",
+     "cmd": ["harnesses/differential/diff_run.py", "--self-test"]},
+
     {"gate": "lib_diff", "file": "harnesses/library-differential/lib_diff.py",
      "old": "    is_match = (not c_bad) and ret_match and out_match",
      "new": "    is_match = True",
@@ -274,6 +283,15 @@ MUTATIONS = [
      "old": '    matched, note = got == golden, ""',
      "new": '    matched, note = True, ""',
      "why": "replay always MATCHes the golden regardless of output",
+     "cmd": ["harnesses/golden/golden.py", "--self-test"]},
+
+    # ...and golden reads the same key from the same matrix (LESSONS #51). A
+    # golden that ignored it would capture a layout case collapsed and replay
+    # it green on any alignment, while diff_run held the line.
+    {"gate": "golden-keep-whitespace", "file": "harnesses/golden/golden.py",
+     "old": '                                trim=not case.get("keep_whitespace", False),',
+     "new": "                                trim=True,",
+     "why": "golden ignores keep_whitespace: a layout case replays green on any spacing",
      "cmd": ["harnesses/golden/golden.py", "--self-test"]},
 
     {"gate": "perf", "file": "harnesses/perf/perf_gate.py",

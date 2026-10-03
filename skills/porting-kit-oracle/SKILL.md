@@ -35,6 +35,10 @@ semantic-comparison stage, not build time — "it builds" tells you almost nothi
    whatever you erase from C you must erase from Rust, or you manufacture a divergence.
    Put project-specific masks in a rules file — `normalize.py --rules <file>` (start
    from `normalize.py --dump-default-rules`), also accepted by `diff_run.py --rules`.
+   Mask only what varies. The runner also collapses whitespace, which hides a
+   column aligned the other way; for a tool whose output is a table, set
+   `keep_whitespace = true` on its matrix cases once the port matches (diff_run
+   and golden both read it; LESSONS #51).
 5. **Validate every vector against the C first** — a wrong vector that "passes"
    teaches nothing — and **hold back a hidden acceptance set** (an LLM overfits the
    vectors it can see): `golden.py capture --oracle <c> --matrix <m> --corpus <dir>

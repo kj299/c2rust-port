@@ -111,9 +111,9 @@ winlsof's phase order was sound; its one miss was not spiking the hang first.
   `harnesses/oracle-sanitize/sanitize_oracle.py --oracle <sanitized> --matrix <m>`.
   cJSON's driver went fourteen modules unchecked this way.
 - **Detect oracle nondeterminism up front** — `golden.py` runs each input N times
-  and flags fields that vary (PIDs, timestamps, addresses, ordering). Those feed
-  the normalization rules (`harnesses/differential/normalize.py`), so a real
-  regression isn't masked by noise and noise isn't mistaken for a regression.
+  and flags fields that vary (PIDs, timestamps, addresses, ordering); mask those
+  in `harnesses/differential/normalize.py` and *only* those. Whitespace collapse
+  hides a misaligned column: a table's cases set `keep_whitespace` (LESSONS #51).
 - If the reference binary **cannot run on your dev/target environment** (winlsof:
   C lsof doesn't run on Windows), substitute:
   - **structural golden tests** for output *format* (columns, field codes, JSON
