@@ -23,7 +23,16 @@ Matrix (TOML or JSON): a list of cases, each with a name and argv, e.g.
   [[case]]
   name = "listen-sockets"
   args = ["-nP", "-iTCP"]
-  # optional: stdin = "...", env = {FOO="bar"}, timeout = 10
+  # optional: stdin = "...", env = {FOO="bar"}, timeout = 10,
+  #           keep_whitespace = true
+
+Output is normalized before it is compared: masking rules, and runs of blanks
+collapsed with trailing ones stripped. That collapse is what lets content be
+compared at all across two formatters, and it makes LAYOUT invisible — a column
+right-aligned in one program and left-aligned in the other normalizes to the
+same line. `keep_whitespace = true` compares that case's output with its
+spacing intact, for a case whose point is alignment (LESSONS #51). golden.py
+reads the same key, so a captured layout case is replayed byte for byte too.
 
 Give stdin as `stdin` (UTF-8 text) or `stdin_b64` (raw bytes), never both. Use
 `stdin_b64` for any input a JSON/TOML string cannot spell — a lone 0x80-0xFF
@@ -88,6 +97,10 @@ def _validate_matrix(cases):
         if re.search(r"[/\\]", name) or name in (".", ".."):
             sys.exit(f"error: case name {name!r} contains a path separator / traversal "
                      "(names become corpus file names)")
+        # A misspelt value must not quietly mean "collapse": `"yes"` and `1`
+        # are refused, so a layout case cannot pass on a typo.
+        if "keep_whitespace" in case and not isinstance(case["keep_whitespace"], bool):
+            sys.exit(f"error: case {name!r} has a non-boolean `keep_whitespace`")
         if "stdin_b64" in case:
             if case.get("stdin"):
                 sys.exit(f"error: case {name!r} sets both `stdin` and `stdin_b64` — "
@@ -260,8 +273,11 @@ def compare_one(name, oracle_bin, rust_bin, case, known, sort, mask_numbers,
     place. `known` is a {name: pin} map from `load_ledger`."""
     o_out, o_rc, o_to, o_err = run_one(oracle_bin, case)
     r_out, r_rc, r_to, r_err = run_one(rust_bin, case)
+    # `keep_whitespace`: compare this case's spacing too (see the module doc).
+    trim = not case.get("keep_whitespace", False)
     norm = lambda t: N.normalize_text(t, rules=rules if rules is not None else N.DEFAULT_RULES,
-                                      sort=sort, strip_blank=True, mask_numbers=mask_numbers)
+                                      sort=sort, strip_blank=True, trim=trim,
+                                      mask_numbers=mask_numbers)
     o_n, r_n = norm(o_out), norm(r_out)
     # Fidelity is stdout AND exit code: a rewrite that prints the right thing
     # but returns the wrong status (lsof exits 1 on no-match; scripts branch
@@ -565,6 +581,27 @@ def _self_test():
               "timed out: both" in says(slow, slow))
         check("...rust", "timed out: rust" in says(fast, slow))
         check("...oracle", "timed out: oracle" in says(slow, fast))
+
+    # Whitespace: collapsed by default, which is what makes a layout difference
+    # invisible; compared as it stands for a case that sets `keep_whitespace`.
+    with tempfile.TemporaryDirectory() as d:
+        o = os.path.join(d, "o.sh")
+        open(o, "w").write("#!/bin/sh\nprintf 'a    b\\n'\n"); os.chmod(o, 0o755)
+        r = os.path.join(d, "r.sh")
+        open(r, "w").write("#!/bin/sh\nprintf 'a b \\n'\n"); os.chmod(r, 0o755)
+        wc = [{"name": "spacing", "args": []}]
+        res = compare(o, r, wc, ledger=None, sort=False, mask_numbers=False)
+        check("a spacing-only difference MATCHes by default", res[0]["verdict"] == "MATCH")
+        wc = [{"name": "spacing", "args": [], "keep_whitespace": True}]
+        res = compare(o, r, wc, ledger=None, sort=False, mask_numbers=False)
+        check("`keep_whitespace` makes a spacing-only difference DIVERGE",
+              res[0]["verdict"] == "DIVERGE")
+        res = compare(o, o, wc, ledger=None, sort=False, mask_numbers=False)
+        check("`keep_whitespace` still MATCHes identical output", res[0]["verdict"] == "MATCH")
+        check("a non-boolean `keep_whitespace` is refused",
+              _exits(lambda: _validate_matrix([{"name": "x", "keep_whitespace": "yes"}])))
+        check("a boolean `keep_whitespace` is accepted",
+              not _exits(lambda: _validate_matrix([{"name": "x", "keep_whitespace": False}])))
 
     # stderr: ignored by default (documented), compared with --with-stderr
     with tempfile.TemporaryDirectory() as d:
