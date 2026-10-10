@@ -102,6 +102,17 @@ def run_case(oracle, case, timeout):
     # they are off by default in some builds.
     env["ASAN_OPTIONS"] = "detect_leaks=1:" + env.get("ASAN_OPTIONS", "")
     env["UBSAN_OPTIONS"] = "print_stacktrace=1:" + env.get("UBSAN_OPTIONS", "")
+    # The case runs as the differential runs it: its `env`, and its `cwd`
+    # (LESSONS #56), with a relative oracle path taken from here, not from the
+    # case's directory. This ran every case in the harness's own directory and
+    # environment, so a case whose meaning depends on either drove the
+    # sanitized oracle through a different input than the one compared.
+    env.update({k: str(v) for k, v in case.get("env", {}).items()})
+    cwd = case.get("cwd")
+    if cwd is not None and not (isinstance(cwd, str) and os.path.isdir(cwd)):
+        sys.exit(f"error: case {case.get('name')!r}: cwd is not a directory: {cwd!r}")
+    if not os.path.isabs(oracle) and os.sep in oracle:
+        oracle = os.path.abspath(oracle)
     try:
         proc = subprocess.run(
             [oracle] + list(case.get("args", [])),
@@ -109,6 +120,7 @@ def run_case(oracle, case, timeout):
             capture_output=True,
             timeout=timeout,
             env=env,
+            cwd=cwd,
             check=False,
         )
     except subprocess.TimeoutExpired:
@@ -150,6 +162,56 @@ def _self_test():
         ok = ok and passed
 
     tmp = tempfile.mkdtemp()
+    # A case runs with its own `env` and `cwd`, as the differential runs it
+    # (LESSONS #56). The script complains in a sanitizer's words when either
+    # is not what the case says, so a run that ignored them reads as a finding.
+    probe_sh = os.path.join(tmp, "where.sh")
+    with open(probe_sh, "w") as fh:
+        fh.write('#!/bin/sh\n[ "$(pwd -P)" = "$WANT_DIR" ] || '
+                 'echo "runtime error: started in $(pwd -P)" >&2\n')
+    os.chmod(probe_sh, 0o755)
+    want = os.path.realpath(tmp)
+    report("a case's `env` and `cwd` are where its oracle runs",
+           run_case(probe_sh, {"name": "w", "args": [], "env": {"WANT_DIR": want},
+                               "cwd": tmp}, 10) is None)
+    report("...and ignoring them would read as a finding",
+           run_case(probe_sh, {"name": "w", "args": [], "env": {"WANT_DIR": want}}, 10)
+           is not None)
+    def refused(case):
+        try:
+            run_case(probe_sh, case, 10)
+        except SystemExit as e:
+            return "cwd" in str(e.code)
+        return False
+
+    report("a `cwd` that is not a directory is refused",
+           refused({"name": "gone", "args": [], "cwd": os.path.join(tmp, "gone")}))
+    dir_fd = os.open(tmp, os.O_RDONLY)
+    try:
+        report("a `cwd` that is not a string is refused, even a directory's descriptor",
+               refused({"name": "fd", "args": [], "cwd": dir_fd}))
+    finally:
+        os.close(dir_fd)
+    # A relative oracle path is taken from here, not from the case's `cwd`; a
+    # bare name is looked up on PATH.
+    sub = os.path.join(tmp, "sub")
+    os.makedirs(sub)
+    here = os.getcwd()
+    try:
+        os.chdir(tmp)
+        rel = run_case(os.path.join(".", "where.sh"),
+                       {"name": "rel", "args": [], "cwd": sub,
+                        "env": {"WANT_DIR": os.path.realpath(sub)}}, 10)
+    except (OSError, SystemExit):
+        rel = "could not run"
+    finally:
+        os.chdir(here)
+    report("a relative oracle path is resolved from here, not the case's `cwd`", rel is None)
+    try:
+        bare = run_case("true", {"name": "bare", "args": [], "cwd": sub}, 10)
+    except (OSError, SystemExit):
+        bare = "could not run"
+    report("a bare oracle name is looked up on PATH", bare is None)
     # A program that leaks whatever it reads, and one that does not. Kept
     # deliberately dull: a fixture too clever to compile turns this whole
     # self-test into a SKIP, which is the failure mode the harness is about.

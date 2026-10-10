@@ -102,6 +102,14 @@ MUTATIONS = [
      "why": "a misspelt case key is ignored, so the case MATCHes without the check it names",
      "cmd": ["harnesses/differential/diff_run.py", "--self-test"]},
 
+    # A case's `cwd` (LESSONS #56): dropped, every case starts in the harness's
+    # own directory again, and a relative path means another file to each side.
+    {"gate": "diff-case-cwd", "file": "harnesses/differential/diff_run.py",
+     "old": "            cwd=cwd,\n",
+     "new": "            cwd=None,\n",
+     "why": "a case's cwd is ignored: a relative argument names a file beside the harness",
+     "cmd": ["harnesses/differential/diff_run.py", "--self-test"]},
+
     {"gate": "lib_diff", "file": "harnesses/library-differential/lib_diff.py",
      "old": "    is_match = (not c_bad) and ret_match and out_match",
      "new": "    is_match = True",
@@ -119,6 +127,31 @@ MUTATIONS = [
      "new": "    return False",
      "why": "nothing is ever a finding: the fuzzer reports clean on divergence",
      "cmd": ["harnesses/diff-fuzz/diff_fuzz.py", "--self-test"]},
+
+    # The port's own mutants (LESSONS #58). The verdict that calls a mutant
+    # killed: neutralized, a kill table of survivors reads all green.
+    {"gate": "port-mutation", "file": "harnesses/port-mutation/mutate_port.py",
+     "old": '    if killers:\n        return "KILLED"',
+     "new": '    if True:\n        return "KILLED"',
+     "why": "every mutant counts as killed: a kill table of survivors reads all green",
+     "cmd": ["harnesses/port-mutation/mutate_port.py", "--self-test"]},
+
+    # A run killed outright leaves a journal, and --restore writes only a file
+    # that holds exactly one journaled mutant (LESSONS #58). Neutralized, a
+    # file changed by hand since the kill is written over.
+    {"gate": "port-mutation-restore", "file": "harnesses/port-mutation/mutate_port.py",
+     "old": '    return ("b", names) if names else ("c", [])',
+     "new": '    return ("b", names or ["?"])',
+     "why": "a file changed by hand after a killed run is restored over: the change is lost",
+     "cmd": ["harnesses/port-mutation/mutate_port.py", "--self-test"]},
+
+    # The clean-tree proof (LESSONS #58): an inserted line keeps its `old`,
+    # so only reverting its `new` can see it left in the tree.
+    {"gate": "port-mutation-clean", "file": "harnesses/port-mutation/mutate_port.py",
+     "old": "        elif pre != []:\n            live.append(_where(rel, text, pre))",
+     "new": "        elif False:\n            live.append(_where(rel, text, pre))",
+     "why": "an inserted line left in the tree passes --check-clean, and a full run tests it as the baseline",
+     "cmd": ["harnesses/port-mutation/mutate_port.py", "--self-test"]},
 
     {"gate": "unsafe-audit", "file": "harnesses/unsafe-audit/audit_unsafe.py",
      "old": "        break  # first real code line: the run is over, not documented\n"

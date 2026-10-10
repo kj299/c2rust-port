@@ -16,6 +16,7 @@ vulnerability. Maximize safety controls.
 | You want to… | Read / run |
 |---|---|
 | Understand the whole process | [`PLAYBOOK.md`](PLAYBOOK.md) (≤400 lines) |
+| Design a module's differential cases | [`MATRIX-CHECKLIST.md`](MATRIX-CHECKLIST.md) |
 | Run a port well (tokens, efficiency, security, backlog) | [`OPERATING-GUIDE.md`](OPERATING-GUIDE.md) |
 | Kick off a new port | paste [`PROMPTS/00-new-port-kickoff.md`](PROMPTS/00-new-port-kickoff.md) |
 | Port one module | paste [`PROMPTS/10-module-port.md`](PROMPTS/10-module-port.md) |
@@ -54,10 +55,11 @@ repo-root `porting-kit/`; adjust the paths inside if you vendor it elsewhere).
 |---|---|---|
 | `harnesses/unsafe-audit/audit_unsafe.py` | every `unsafe {}` needs a `// SAFETY:` | **hard-fail CI** |
 | `harnesses/unsafe-audit/check_forbid_unsafe.py` | the `core` crate forbids `unsafe_code` on every target root, in a form rustc applies — not in a comment, not `deny`, not under `cfg_attr` | **hard-fail CI** |
-| `harnesses/differential/diff_run.py` (+`normalize.py`) | diff Rust vs C oracle; triage divergences via a ledger; timeout = liveness backstop | CI |
-| `harnesses/diff-fuzz/diff_fuzz.py` | differential fuzzing: same generated input to C & Rust, minimize divergences | CI + nightly |
+| `harnesses/differential/diff_run.py` (+`normalize.py`) | diff Rust vs C oracle; triage divergences via a ledger; timeout = liveness backstop; a case may name the `cwd` it starts in (LESSONS #56) | CI |
+| `harnesses/diff-fuzz/diff_fuzz.py` | differential fuzzing: same generated input to C & Rust, minimize divergences; on stdin, or on argv from the C's option letters (`--argv-inventory`, LESSONS #59) | CI + nightly |
 | `harnesses/cando/cando_diff.py` (+ driver templates) | function-level differential for C-ABI **libraries**; C-baseline-validated vectors | CI |
 | `harnesses/library-differential/lib_diff.py` | complementary ctypes library differential — no driver, auto return + output-buffer/ptr compare | CI |
+| `harnesses/port-mutation/mutate_port.py` | the port's own mutants, committed as data: each a plausible way to get one rule wrong, run against the port's gates; KILLED / SURVIVED / DOES-NOT-APPLY / NOBUILD / INFRA, files restored and checked, `--apply-only` to check every mutant still fits the code. A journal on disk, so a run killed outright is named by the next and undone by `--restore`; `--check-clean` proves no mutant is left in the tree (LESSONS #58) | per change; `--apply-only` suits every PR |
 | `harnesses/perf/perf_gate.py` | fail a module >1.3× the C median runtime (a perf bug, not "the cost of Rust"); NOISY when repeats disagree; `--warn` advisory mode for shared/noisy runners | CI (advisory on shared runners) |
 | `harnesses/golden/golden.py` | capture/version/replay the oracle; flag oracle nondeterminism | CI |
 | `harnesses/fuzz/gen_fuzz_target.sh` | scaffold a cargo-fuzz target per module | CI smoke + nightly |
