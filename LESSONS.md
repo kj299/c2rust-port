@@ -2529,3 +2529,176 @@ points.)*
   skills/porting-kit-module/SKILL.md; skeleton/FLAW-SCAN.md,
   skeleton/DIVERGENCES.md; examples/adler32/README.md; the cJSON port's
   README, API-COVERAGE, THREAT-MODEL, FLAW-SCAN and DIVERGENCES.
+
+---
+
+## 056. Every case the matrix could spell agreed, and the rules were wrong on the first it could not
+
+- **Date:** 2026-10-10
+- **Codebase:** the Porting Kit, bringing over the lsof line's entries 076, 077,
+  078 and 081 (its port lsof-rs, 2026-10-03 → 2026-10-04)
+- **What happened:** four rules in lsof-rs matched the C on every case in the
+  differential, and each was wrong on an input the matrix had no way to hold.
+  Every list option was split with `filter(|s| !s.is_empty())`, so an empty
+  item vanished, where the C reads an empty `-p` item as PID 0: `lsof -p ,`
+  looked for PID 0 in the C and listed the whole host in the port. Path
+  arguments went through `canonicalize()`, where the C uses its own `Readlink()`;
+  the two agree on an absolute path with no `.`, `..` or relative link, and every
+  path in the matrix was one, because the runner started every case in its own
+  directory and so no case could name a relative path. Two cases meant to show
+  that a run with nothing to list goes on matched because both binaries exited 1
+  with empty output, for opposite reasons, and one of them had been recorded as
+  a C defect because the C's options end at the first name and the case put a
+  name first. And a fixture that bind-mounted a file changed the mount table
+  every other case read, so a case that never named it diverged. None of the
+  four showed while the cases were written; each was found by measuring the C on
+  the input the rule was about.
+- **The rule.** Splitting input is a decision about what it means: give every
+  list an empty item in each position, a lone prefix, an unnamed separator, a
+  repeat and mixed kinds. Spell a path every way a user types it, and where the
+  C uses a helper of its own, port the helper and use the C's function as its
+  oracle. A case whose outcome is silence needs something to list that its claim
+  would change, and a recorded C defect that depends on argument order needs the
+  options first. A fixture that changes shared state is an input to every case:
+  judge it by the whole matrix.
+- **Kit change:** `MATRIX-CHECKLIST.md` (new) holds these rules beside the
+  matrix detail that had lived in PLAYBOOK Phase 4 (LESSONS #39, #53) and the
+  corrected-oracle procedure of step 3 (LESSONS #28, #42, #43); the PLAYBOOK keeps
+  a summary and every citation. `diff_run.py` takes a per-case `cwd`, the
+  directory both binaries start in: a case naming one that is not there, or that
+  is not a string, is an infra error, and a binary named by a relative path is
+  still the one beside the harness (the lsof line's CI broke on that). The key
+  joins the known set, and `sanitize_oracle.py` honours a case's `cwd` and
+  `env`, which it had ignored, so the sanitized oracle runs the input the
+  differential compares. Each is pinned by a self-test fixture. With a
+  gate-mutation row on `cwd`, `run_one` is swept for the first time, and the
+  sweep found its stdin handling unpinned since LESSONS #11: no fixture fed a
+  case a `stdin` string, or showed that a case with none reads EOF rather than
+  the harness's own stdin. Both are fixtures now; the one decision in each
+  runner that only re-resolves an absolute path is ledgered as equivalent.
+- **Section amended:** harnesses/differential/diff_run.py · run_one, self-test;
+  harnesses/oracle-sanitize/sanitize_oracle.py · run_case, self-test;
+  harnesses/gate-mutation/mutate_gates.py · diff-case-cwd;
+  MATRIX-CHECKLIST.md; PLAYBOOK · Phase 4 step 2.
+
+---
+
+## 057. A faithful port brought the C's costs with it, to input a user chose
+
+- **Date:** 2026-10-10
+- **Codebase:** the Porting Kit, bringing over the lsof line's entry 079
+- **What happened:** lsof-rs ported the C's `Readlink()` and its `+D` walk
+  faithfully, and took on two costs the code they replaced did not have.
+  Spelling every mount's source with `Readlink()` re-read the whole path once
+  per link it replaced, so a source of 3,894 bytes ending in 20 links took two
+  seconds per mount on every run. And `+D` following links let a tree of links
+  to itself make each name longer than the last, so the walk's limit of 200,000
+  entries let it reach 1.1 GB. The differential and the unit tests passed: they
+  measure answers, not costs.
+- **The rule.** A port that takes on the C's behaviour takes on its costs. For a
+  routine that runs on data a user can choose, measure its time and memory on
+  the worst such input at each place it runs, run it only where its answer is
+  used, and bound what it keeps by size, not only by count.
+- **Kit change:** SECURITY-CHECKLIST, per module: "Bounded cost on hostile
+  input".
+- **Section amended:** SECURITY-CHECKLIST · Per module (Phase 4 gates).
+
+---
+
+## 058. A kill table that cannot be run again is a claim, and a mutant left in the tree reads as a kill
+
+- **Date:** 2026-10-10
+- **Codebase:** the Porting Kit, bringing over the lsof line's entries 026, 059,
+  066, 083 and 086 and the harness they built, `mutate_port.py`
+- **What happened:** the lsof line's playbook asked each change to mutate the
+  cases it wrote, one plausible wrong version of each rule, and to record which
+  case killed each mutant. Its 026 is why: a case expecting silence matched for
+  the wrong reason, and only a mutant that should have killed it showed it was
+  checking nothing. lsof-rs did this sixteen times, 233 mutants, each change
+  with a throwaway script, so every kill table survived only as prose; run again
+  against master, the last one's table had already moved. Each script re-learnt
+  two failures: an edit whose text no longer occurs reads as a survivor (059),
+  and a mutant that is not reverted reads as a kill (066). Then a run killed
+  outright left a mutant in the source tree, because the harness kept its
+  originals only in memory, and the hand-written check that cleared the tree
+  read a misspelt key, checked nothing and reported nothing (086). This kit had
+  no such harness and asked for no kill table at all.
+- **The rule.** A mutant is evidence only if it can be run again: commit the
+  mutants as data beside the cases they prove, and run them with a harness that
+  refuses an edit that does not apply, restores and checks every file it
+  touched, and keeps on disk, before its first write, what it must undo after a
+  kill. A check that can find nothing must say how much it looked at.
+- **Kit change:** `harnesses/port-mutation/mutate_port.py`, from the lsof line
+  with its journal, re-cited to this log: a TOML mutants file (build, gates,
+  mutants as `file`/`old`/`new` edits), verdicts KILLED / SURVIVED /
+  DOES-NOT-APPLY / NOBUILD / INFRA, a baseline that must be green, `--apply-only`
+  for a per-PR check that every mutant still fits the code, a journal under the
+  run directory that `--restore` undoes, and `--check-clean` as the proof no
+  mutant is left. Its self-test (95 checks) runs in check-kit. Gate-mutation
+  gains its three rows, and all 46 decisions in its three swept verdict
+  functions are pinned. PLAYBOOK Phase 4 step 2, MATRIX-CHECKLIST, the module
+  skill, PROMPTS/10 and SECURITY-CHECKLIST ask for the mutants; PROMPTS/10 also
+  teaches the pinned ledger form now (LESSONS #8).
+- **Section amended:** harnesses/port-mutation/mutate_port.py;
+  harnesses/gate-mutation/mutate_gates.py; Makefile · check-kit; PLAYBOOK ·
+  Phase 4 step 2; MATRIX-CHECKLIST.md; skills/porting-kit-module/SKILL.md;
+  PROMPTS/10-module-port.md; SECURITY-CHECKLIST · Per module; README · harness
+  table.
+
+---
+
+## 059. The differential fuzzer could not reach the input a command-line tool parses
+
+- **Date:** 2026-10-10
+- **Codebase:** the Porting Kit, bringing over the lsof line's entry 084
+- **What happened:** `diff_fuzz.py` fuzzes stdin with argv fixed. lsof does not
+  read stdin; its parser is its command line. So the fuzzer could not be pointed
+  at lsof-rs, and the option-parsing divergences of a whole arc were found by
+  hand, a measured case at a time. A spike that drew option words from the C's
+  own option letters, anchored to one fixture process, found 52 distinct
+  divergences in 1,500 vectors against the binary from before that arc, 34 of
+  which the following eight days had fixed by hand; its first real run found
+  four no one had recorded.
+- **The rule.** Point the differential fuzzer at the surface the port parses.
+  For a command-line tool that is argv, and the C's own option letters are its
+  alphabet.
+- **Kit change:** `diff_fuzz.py` gains an argv mode: `--argv-inventory` (a TOML
+  `[features]` table of option letters and which take a value), `--argv-value`,
+  `--argv-exclude`, `--argv-words`. Vectors put options first and at most one
+  operand last, minimizing drops whole words, a finding is saved as `<fp>.argv`,
+  and the mode refuses stdin seeds rather than ignoring them. Six self-test
+  fixtures pin it. The diff-fuzz skill and README describe it, and the skill
+  and the CI template no longer say a golden replay can stand in for the live C:
+  it answers the captured cases, never a generated input.
+- **Section amended:** harnesses/diff-fuzz/diff_fuzz.py;
+  harnesses/ci/porting-ci.template.yml · differential job;
+  skills/porting-kit-diff-fuzz/SKILL.md; MATRIX-CHECKLIST.md; PLAYBOOK · Phase 4
+  step 3; README · harness table.
+
+---
+
+## 060. The loop that found the bugs was not the loop the playbook described
+
+- **Date:** 2026-10-10
+- **Codebase:** the Porting Kit, bringing over the lsof line's entry 085
+- **What happened:** lsof-rs's last arc ran a loop the playbook did not name.
+  The C was measured by hand on fixtures first, as root and not, inside
+  namespaces and out; then the Rust was written, then cases and mutants; then a
+  second agent was asked to find what the change got wrong and to measure each
+  suspicion against the C, and every finding became a ledger row, fixed or not.
+  Of the 44 rows that say how they were found, 22 came from that review and 9
+  from measuring the C for a change. Every rule found wrong after a merge had
+  been reasoned about, not measured. And the progress table read "done" for
+  units in which 37 more rows were then found: a gate state says the gates ran,
+  not that the port matches. This kit's Phase 4 had no step that measures the C
+  before the Rust, and its last step, "review & merge", did not say what a
+  review is.
+- **The rule.** Measure the C before writing a rule. Have a second reader, with
+  no stake in the change, try to break it against the C, and record what they
+  find as rows. Read the top of the progress table as "gated"; the open rows are
+  the work that remains.
+- **Kit change:** PLAYBOOK Phase 4 measures the C before the loop, and step 6
+  says what the review is and what it produces. Steps 2 and 3 keep a summary of
+  their detail, which moved to `MATRIX-CHECKLIST.md`, so the PLAYBOOK stays under
+  the ~400 lines `CLAUDE.md` asks.
+- **Section amended:** PLAYBOOK · Phase 4 (before the loop; step 6).

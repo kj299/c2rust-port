@@ -15,7 +15,8 @@ addition for a security-critical port."
 ## When
 After the matrix differential is green (a port that fails fixed cases isn't ready
 to fuzz). Run a short budget per module/PR and a long `--max-time` sweep nightly.
-Needs a runnable C oracle (or a golden-replay wrapper, `porting-kit/harnesses/golden`).
+Needs a live, runnable C oracle: a golden replay (`porting-kit/harnesses/golden`)
+answers only the captured matrix cases, never a generated input.
 
 ## Procedure
 1. **Run it** against both binaries, seeded from the real corpus:
@@ -26,10 +27,18 @@ Needs a runnable C oracle (or a golden-replay wrapper, `porting-kit/harnesses/go
    final `--` for arguments that start with `-`. `--seed N` makes the run
    reproducible; `--max-time` alone runs for its time, `--iterations N` bounds it
    by count (1000 when neither is given), and both stop at whichever comes first.
+   **A tool whose input is its command line** fuzzes argv instead (LESSONS #59):
+   `--argv-inventory <toml>` draws options from the C's own option letters (a
+   `[features]` table: `options`, and which `takes_value`), spelt every way
+   getopt offers them, after the fixed argv (anchor it to a fixture: `-- -a -p
+   <PID>`), with `--argv-value` for values only your fixtures make sense of and
+   `--argv-exclude` for letters that cannot be compared. Run it from an empty
+   directory.
 2. **Read verdicts, not corpora** (the token-firewall rule): the tool prints one
    line per *distinct* divergence (deduped and minimized), not per input. Use
    `--json` for machine output. Each finding is saved as `<fp>.input` (the smallest
-   reproducer) + `<fp>.diff` under `--findings-dir` — committable.
+   reproducer; `<fp>.argv`, a JSON list of words, in argv mode) + `<fp>.diff` under
+   `--findings-dir` — committable.
 3. **Triage each finding** exactly like a matrix divergence: fix the Rust, OR — if
    the C is the buggy side — record the intentional fix-of-C-defect in
    `DIVERGENCES.md`. Fuzz findings are suppressed **only by fingerprint** (an
@@ -69,7 +78,7 @@ Needs a runnable C oracle (or a golden-replay wrapper, `porting-kit/harnesses/go
   fail-closed timeout handling (LESSONS #6), and the ledger fingerprint (LESSONS #8)
   are identical to the matrix differential.
 - Determinism: a finding always reproduces — re-run with the same `--seed`, or just
-  feed the saved `<fp>.input` back through `diff_run.py`.
+  feed the saved `<fp>.input`, or the words in `<fp>.argv`, back through `diff_run.py`.
 
 ## Integrity
 Paths/flags must match `diff_fuzz.py`. If they drift, fix the reference and re-run

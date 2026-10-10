@@ -38,6 +38,7 @@ OPERATIVE_DOCS = [
     "README.md",
     "CLAUDE.md",
     "PLAYBOOK.md",
+    "MATRIX-CHECKLIST.md",
     "OPERATING-GUIDE.md",
     "SECURITY-CHECKLIST.md",
     "ARCHITECTURE-TEMPLATE.md",
