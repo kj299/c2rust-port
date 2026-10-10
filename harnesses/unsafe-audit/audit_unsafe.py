@@ -23,7 +23,9 @@ Usage:
   audit_unsafe.py PATH [PATH ...] [--window N] [--warn] [--json] [--quiet]
   audit_unsafe.py --self-test
 
-Exit: 0 = all documented (or --warn); 1 = undocumented blocks found; 2 = usage.
+Exit: 0 = all documented (or --warn), zero blocks reported as NOTHING-TO-AUDIT;
+      1 = undocumented blocks found; 2 = usage, or a PATH that does not exist
+      or is not a .rs file (never "0 blocks": LESSONS #54).
 """
 from __future__ import annotations
 
@@ -227,23 +229,42 @@ def audit_text(src: str, window: int):
     return documented, undocumented
 
 
+def unusable_paths(paths):
+    """The arguments this run cannot audit: one that does not exist, or a file
+    that is not Rust. Each is an error, never zero blocks: given a directory
+    that had been renamed, this hard gate printed `unsafe blocks: 0` and
+    exited 0 (LESSONS #54)."""
+    return [p for p in paths
+            if not (os.path.isdir(p) or (os.path.isfile(p) and p.endswith(".rs")))]
+
+
 def iter_rs_files(paths):
     for p in paths:
         if os.path.isfile(p) and p.endswith(".rs"):
             yield p
         elif os.path.isdir(p):
-            for root, _dirs, files in os.walk(p):
-                if "target" in root.split(os.sep):
-                    continue
+            for root, dirs, files in os.walk(p):
+                # Cargo's build directory, known by the tag cargo writes in it,
+                # not by its name. Skipping every path with a `target` component
+                # skipped a module directory called `target`, and every file of
+                # a checkout that lives under one (LESSONS #54).
+                dirs[:] = [d for d in dirs
+                           if not os.path.exists(os.path.join(root, d, "CACHEDIR.TAG"))]
                 for f in files:
                     if f.endswith(".rs"):
                         yield os.path.join(root, f)
 
 
 def run(paths, window, warn, as_json, quiet):
+    bad = unusable_paths(paths)
+    if bad:
+        for p in bad:
+            print(f"error: {p}: no such directory, or not a .rs file", file=sys.stderr)
+        return 2
     total_doc = total_undoc = 0
     findings = []
-    for path in sorted(set(iter_rs_files(paths))):
+    files = sorted(set(iter_rs_files(paths)))
+    for path in files:
         try:
             src = open(path, encoding="utf-8", errors="replace").read()
         except OSError as e:
@@ -261,6 +282,7 @@ def run(paths, window, warn, as_json, quiet):
         import diff_run as _D
         print(json.dumps({
             "provenance": _D.provenance_stamp("audit_unsafe"),
+            "files": len(files),
             "documented": total_doc,
             "undocumented": total_undoc,
             "findings": findings,
@@ -269,11 +291,13 @@ def run(paths, window, warn, as_json, quiet):
         for f in findings:
             print(f"UNDOCUMENTED unsafe {f['kind']}: {f['file']}:{f['line']}  (needs // SAFETY:)")
         total = total_doc + total_undoc
-        print(f"\nunsafe blocks: {total}  documented: {total_doc}  undocumented: {total_undoc}")
+        print(f"\nfiles: {len(files)}  unsafe blocks: {total}  documented: {total_doc}  "
+              f"undocumented: {total_undoc}")
         if total == 0:
             # LESSONS #18: distinguish "audited, all clean" from "found nothing
-            # to audit". Both exit 0, but only one is evidence.
-            print("NOTHING-TO-AUDIT: no unsafe blocks found in the scanned paths — "
+            # to audit". Both exit 0, but only one is evidence. The file count
+            # tells a forbid-unsafe crate from a scan of an empty directory.
+            print(f"NOTHING-TO-AUDIT: {len(files)} .rs file(s) and no unsafe block — "
                   "this is not evidence of a clean unsafe surface (a forbid-unsafe "
                   "crate, or the wrong path). Point it at the FFI/sys crate.")
 
@@ -351,6 +375,47 @@ def self_test():
     d, u = audit_text(ff, window=3)
     check("a form feed does not shift a block onto its neighbour's SAFETY comment",
           d == [(2, "block")] and u == [(3, "block")])
+    # The paths themselves (LESSONS #54, from the lsof line's entry 082): a
+    # directory that is not there, a .rs file that is not there and a file
+    # that is not Rust are each exit 2. Cargo's build directory is skipped by
+    # its tag; a module directory named `target`, and a tree under one, are not.
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        src = os.path.join(d, "src")
+        os.makedirs(os.path.join(src, "target"))
+        with open(os.path.join(src, "target", "mod.rs"), "w") as fh:
+            fh.write("unsafe { f(); }\n")
+        with open(os.path.join(src, "lib.rs"), "w") as fh:
+            fh.write("// SAFETY: ok\nunsafe { g(); }\n")
+        build = os.path.join(d, "target")
+        os.makedirs(build)
+        with open(os.path.join(build, "CACHEDIR.TAG"), "w") as fh:
+            fh.write("Signature: 8a477f597d28d172789f06886806bc55\n")
+        with open(os.path.join(build, "gen.rs"), "w") as fh:
+            fh.write("unsafe { h(); }\n")
+        notrs = os.path.join(d, "notes.txt")
+        with open(notrs, "w") as fh:
+            fh.write("unsafe { i(); }\n")
+        under = os.path.join(d, "ci", "target", "port")   # e.g. /build/target/port
+        os.makedirs(under)
+        with open(os.path.join(under, "lib.rs"), "w") as fh:
+            fh.write("unsafe { j(); }\n")
+        quiet = dict(window=3, warn=False, as_json=False, quiet=True)
+        check("a directory that is not there is exit 2, not zero blocks",
+              run([os.path.join(d, "gone")], **quiet) == 2)
+        check("a .rs file that is not there is exit 2",
+              run([os.path.join(d, "gone.rs")], **quiet) == 2)
+        check("a file that is not Rust is exit 2", run([notrs], **quiet) == 2)
+        check("a .rs file that is there is audited",
+              run([os.path.join(src, "lib.rs")], **quiet) == 0)
+        check("a module directory named `target` is audited (its block is undocumented)",
+              run([src], **quiet) == 1)
+        check("a checkout that lives under a directory named `target` is audited",
+              run([under], **quiet) == 1)
+        check("cargo's build directory, known by CACHEDIR.TAG, is skipped",
+              sorted(iter_rs_files([d])) == sorted([os.path.join(src, "lib.rs"),
+                                                    os.path.join(src, "target", "mod.rs"),
+                                                    os.path.join(under, "lib.rs")]))
     print("\nself-test:", "OK" if ok else "FAILED")
     return 0 if ok else 1
 

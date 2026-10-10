@@ -24,10 +24,10 @@ validation priorities.
 
 | Entry point | Source | Trust | Ported module |
 |---|---|---|---|
-| `cJSON_Parse` / `cJSON_ParseWithLength` / `…Opts` | any caller's byte buffer | **untrusted** | `port_core::parse` (modules 2–5, 7) |
-| `cJSON_Minify` (mutates a caller `char*` in place) | untrusted byte buffer | **untrusted** | `port_core::minify` (module 7) |
-| `cJSON_SetValuestring`, `Add*`, `Create*String/Raw` | caller-supplied C strings | **untrusted** (may be non-UTF-8, may alias) | `port_core::dom` (module 6) |
-| `cJSON_InitHooks` custom allocator | caller (operator-ish) | **semi-trusted**, but global mutable state | `port_core::alloc` (module 1) |
+| `cJSON_Parse` / `cJSON_ParseWithLength` / `…Opts` | any caller's byte buffer | **untrusted** | `cjson_core::parse` (modules 2–5, 7) |
+| `cJSON_Minify` (mutates a caller `char*` in place) | untrusted byte buffer | **untrusted** | `cjson_core::minify` (module 7) |
+| `cJSON_SetValuestring`, `Add*`, `Create*String/Raw` | caller-supplied C strings | **untrusted** (may be non-UTF-8, may alias) | `cjson_core::dom` (modules 6, 11, 12, 16) |
+| `cJSON_InitHooks` custom allocator | caller (operator-ish) | **semi-trusted**, but global mutable state | **not ported** — dropped (DIVERGENCES.md `custom-allocator-dropped`; `out-of-scope` in API-COVERAGE.md). The port uses Rust's global allocator unconditionally; there is no `alloc` module |
 | numeric locale (`localeconv`) | process environment | trusted-ish | `parse_number`/`print_number` (module 2) |
 
 ## 3. Privilege transitions
@@ -65,18 +65,22 @@ with a `#![forbid(unsafe_code)]` safe core beneath it.
   precondition, same as the C).
 - **No constant-time / side-channel guarantees** — JSON parsing is not a secret-
   dependent operation here; timing is out of scope.
-- **Custom-allocator parity is provisional:** cJSON's global mutable `global_hooks`
-  is itself a thread-safety hazard; if the port cannot offer per-call allocator
-  injection safely, dropping `cJSON_InitHooks` (with a logged divergence) is
-  preferred over reproducing shared mutable statics. Stated so reviewers don't
-  assume drop-in allocator compatibility.
+- **Custom-allocator parity is dropped** (provisional at Phase 0; decided at the
+  DOM module — DIVERGENCES.md `custom-allocator-dropped`): cJSON's global mutable
+  `global_hooks` is itself a thread-safety hazard; if the port cannot offer
+  per-call allocator injection safely, dropping `cJSON_InitHooks` (with a logged
+  divergence) is preferred over reproducing shared mutable statics. Stated so
+  reviewers don't assume drop-in allocator compatibility.
 
 ## 6. C-defect inventory (from the Phase-0 scan)
 
 See `FLAW-SCAN.md`. The grep scanner returned 17 copy-sink hits (none a live bug
-in v1.7.18); the *load-bearing* inventory is the historical CVE/security record
-from `CHANGELOG.md` — recursion depth, OOB read/write, integer overflow, UAF,
-NULL-deref — each of which the port must **preserve** (depth limit, output size)
-or **eliminate structurally** (UAF, dangling realloc, OOB, NULL-deref). Every
-confirmed fix that changes observable output becomes a `DIVERGENCES.md` entry;
+in v1.7.18) [Corrected 2026-10-10: that was the Phase-0 scan of `cJSON.c`/`cJSON.h`.
+The scan now covers all of `c/` and reports 25, and one of the 17 — cJSON.c:418,
+FLAW-SCAN.md L4, an overlapping `strcpy` — IS a live bug]; the *load-bearing*
+inventory is the historical CVE/security record from `CHANGELOG.md` — recursion
+depth, OOB read/write, integer overflow, UAF, NULL-deref — each of which the port
+must **preserve** (depth limit, output size) or **eliminate structurally** (UAF,
+dangling realloc, OOB, NULL-deref). Every confirmed fix that changes observable
+output becomes a `DIVERGENCES.md` entry;
 every historical-CVE input becomes a pinned oracle corpus seed.

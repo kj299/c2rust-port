@@ -16,10 +16,11 @@ Categories flagged (CWE in parens):
   strncpy-noterm      strncpy (may leave dst non-NUL-terminated)   (CWE-170)
   format-string       printf-family with a non-literal format      (CWE-134)
   snprintf-truncation snprintf/vsnprintf whose return is discarded  (CWE-252)
-  stack-vla-alloca    alloca / variable-length arrays              (CWE-770)
+  stack-vla-alloca    alloca (a variable-length array is NOT seen)  (CWE-770)
   int-overflow-mul    malloc(a * b), or `t = n*w; malloc(t)`       (CWE-190)
-  command-exec        system/popen/exec* with composed strings     (CWE-78)
-  toctou              access()/stat() then open()/fopen()          (CWE-367)
+  command-exec        every system/popen/exec*/posix_spawn call    (CWE-78)
+  toctou              every access()/stat()/lstat() call: a check  (CWE-367)
+                      a later open()/fopen() of the path may race
   use-after-free      free(p) then p used before reassignment      (CWE-416)
   double-free         free(p) then free(p) before reassignment     (CWE-415)
   uninitialized-read  TYPE *p; then p used before `p =` / `&p`      (CWE-457)
@@ -37,7 +38,8 @@ call split across lines — `malloc(a *\\n  b)`, `sscanf(u,\\n "%s", x)` — is 
 missed by a per-line regex.
 
 Usage:
-  scan_c_flaws.py PATH [PATH ...] [--json] [--self-test]
+  scan_c_flaws.py PATH [PATH ...] [--json] [--strict]
+  scan_c_flaws.py --self-test
 Exit: 0 always (this is an inventory, not a gate) unless --strict (then 1 if hits).
 """
 from __future__ import annotations

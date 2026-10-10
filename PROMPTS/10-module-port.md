@@ -90,7 +90,9 @@ Then run every gate; each is a hard requirement before merge:
    "fix-forward, then immediately pin" rule — winlsof often shipped the fix first
    and the test late).
 
-Advance the tracker as gates clear:
-`python3 porting-kit/harnesses/progress/progress.py set [MODULE] <gate>`.
+Advance the tracker from the gates' own `--json` reports, never by hand past
+`ported` (LESSONS #24): write each as `[MODULE].json` and run
+`python3 porting-kit/harnesses/progress/progress.py ingest --diff-json ...
+--fuzz-json ... --sanitize-json ... --unsafe-json ...`.
 
 Report the module's final gate row and any new `DIVERGENCES.md` entries.

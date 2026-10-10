@@ -96,6 +96,12 @@ MUTATIONS = [
      "why": "keep_whitespace is ignored: a layout case MATCHes whatever the spacing",
      "cmd": ["harnesses/differential/diff_run.py", "--self-test"]},
 
+    {"gate": "diff-case-keys", "file": "harnesses/differential/diff_run.py",
+     "old": "        unknown = sorted(set(case) - _CASE_KEYS)",
+     "new": "        unknown = []",
+     "why": "a misspelt case key is ignored, so the case MATCHes without the check it names",
+     "cmd": ["harnesses/differential/diff_run.py", "--self-test"]},
+
     {"gate": "lib_diff", "file": "harnesses/library-differential/lib_diff.py",
      "old": "    is_match = (not c_bad) and ret_match and out_match",
      "new": "    is_match = True",
@@ -120,6 +126,15 @@ MUTATIONS = [
      "new": "        break  # first real code line: the run is over, not documented\n"
             "    return True",
      "why": "every unsafe block counts as documented",
+     "cmd": ["harnesses/unsafe-audit/audit_unsafe.py", "--self-test"]},
+
+    # The paths themselves (LESSONS #54): given a renamed directory, this hard
+    # gate printed `unsafe blocks: 0` and passed.
+    {"gate": "unsafe-audit-paths", "file": "harnesses/unsafe-audit/audit_unsafe.py",
+     "old": "    return [p for p in paths\n"
+            '            if not (os.path.isdir(p) or (os.path.isfile(p) and p.endswith(".rs")))]',
+     "new": "    return []",
+     "why": "a missing or non-Rust path audits as zero blocks and passes",
      "cmd": ["harnesses/unsafe-audit/audit_unsafe.py", "--self-test"]},
 
     # Unsafe CONTAINED (LESSONS #46) — five verdicts, each of which lets a core
@@ -231,20 +246,25 @@ MUTATIONS = [
      "cmd": ["harnesses/oracle-sanitize/sanitize_oracle.py", "--self-test"]},
 
     {"gate": "control-coverage", "file": "harnesses/control-coverage/check_controls.py",
-     "old": "    base = os.path.basename(control)\n"
-            "    return any((control in t) or (base in t)\n"
-            "               for t in (executable_text(g) for g in gate_texts))",
-     "new": "    return True",
+     "old": "        if _runs(code, control) or _runs(code, base):\n            return True",
+     "new": "        if True:\n            return True",
      "why": "every declared control counts as wired: an unrun gate ships green",
      "cmd": ["harnesses/control-coverage/check_controls.py", "--self-test"]},
 
-    # Two more rows for control-coverage, one per verdict that was failing open
-    # (LESSONS #45) — one row would pin only the union (LESSONS #16).
+    # More rows for control-coverage, one per verdict that was failing open
+    # (LESSONS #45, #54) — one row would pin only the union (LESSONS #16).
     {"gate": "control-coverage-executable",
      "file": "harnesses/control-coverage/check_controls.py",
-     "old": "               for t in (executable_text(g) for g in gate_texts))",
-     "new": "               for t in gate_texts)",
+     "old": "        code = executable_text(text)",
+     "new": "        code = text",
      "why": "a `# TODO: wire X` comment certifies control X as RUN",
+     "cmd": ["harnesses/control-coverage/check_controls.py", "--self-test"]},
+
+    {"gate": "control-coverage-self-test",
+     "file": "harnesses/control-coverage/check_controls.py",
+     "old": '            if not _SELF_TEST.search(" " + command):',
+     "new": "            if True:",
+     "why": "a harness run only as its own self-test counts as the control",
      "cmd": ["harnesses/control-coverage/check_controls.py", "--self-test"]},
 
     {"gate": "control-coverage-unreadable",

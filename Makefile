@@ -14,7 +14,7 @@ check-kit:
 	@# copies must itself forbid unsafe in core, or the first thing a port
 	@# inherits is the gap.
 	@echo "== forbid-unsafe self-test =="; $(PY) $(H)/unsafe-audit/check_forbid_unsafe.py --self-test
-	@echo "== forbid-unsafe: the skeleton's core =="; $(PY) $(H)/unsafe-audit/check_forbid_unsafe.py skeleton/crates/core
+	@echo "== forbid-unsafe: the skeleton's portable crates =="; $(PY) $(H)/unsafe-audit/check_forbid_unsafe.py skeleton/crates/core skeleton/crates/cli
 	@echo "== normalize ==";        $(PY) $(H)/differential/normalize.py --self-test
 	@echo "== diff_run ==";         $(PY) $(H)/differential/diff_run.py --self-test
 	@echo "== golden ==";           $(PY) $(H)/golden/golden.py --self-test
@@ -24,6 +24,10 @@ check-kit:
 	@echo "== oracle-sanitize =="; $(PY) $(H)/oracle-sanitize/sanitize_oracle.py --self-test
 	@echo "== control-coverage: the shipped gate TEMPLATE must wire every control =="; \
 	  $(PY) $(H)/control-coverage/check_controls.py --controls CLAUDE.md --gate skeleton/check.sh
+	@# ...and so must the CI template a port copies: it never invoked five of the
+	@# eleven controls, and nothing here read it (LESSONS #54).
+	@echo "== control-coverage: the shipped CI TEMPLATE must wire every control =="; \
+	  $(PY) $(H)/control-coverage/check_controls.py --controls CLAUDE.md --gate $(H)/ci/porting-ci.template.yml
 	@echo "== diff-fuzz ==";        $(PY) $(H)/diff-fuzz/diff_fuzz.py --self-test
 	@echo "== probe ==";            $(PY) $(H)/probe/probe.py --self-test
 	@echo "== perf-gate ==";        $(PY) $(H)/perf/perf_gate.py --self-test
@@ -57,6 +61,7 @@ check-kit:
 	@echo "== skills integrity =="; $(PY) skills/check_skills.py
 	@echo "== gate-mutation self-test =="; $(PY) $(H)/gate-mutation/mutate_gates.py --self-test
 	@echo "== gate-mutation sweep =="; $(PY) $(H)/gate-mutation/mutate_gates.py .
+	@echo "== skeleton self-test =="; bash  $(H)/skeleton-check/check_skeleton.sh --check
 	@echo "== skeleton gate ==";    bash  $(H)/skeleton-check/check_skeleton.sh
 	@echo ""
 	@echo "check-kit: ALL HARNESSES OK"

@@ -34,7 +34,7 @@ Usage:
                 [--ledger DIVERGENCES.md] [--allow-oracle-error] [--json]
   cando_diff.py --self-test
 Exit: 0 = all match (or ledgered) and every vector baseline-valid; 1 = a
-divergence, a timeout, or a bad vector; 2 = usage.
+divergence, a timeout, a bad vector, or a LEDGER-STALE entry; 2 = usage.
 """
 from __future__ import annotations
 

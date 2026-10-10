@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Lock the cJSON oracle and prove every vector passes on the C baseline.
 # This is the Phase-2 deliverable's runnable proof: build the driver against the
-# pristine vendored source, (re)generate the corpus, and validate all 45 vectors
+# pristine vendored source, (re)generate the corpus, and validate every vector
 # against the C — a vector that "passes" only because it is wrong teaches nothing
 # (OPERATING-GUIDE §5). Fail-closed: any step nonzero aborts.
 #

@@ -7,8 +7,9 @@
    Feb 2026), a six-performer study with hard numbers. This supplies the
    *what and why, with evidence*.
 2. **An executable "porting kit"** distilled from a real completed C→Rust port
-   (winlsof — `lsof` reimplemented in Rust) plus its four self-patching
-   retrospectives. This supplies the *how*: runnable harnesses that mechanically
+   (winlsof — `lsof` reimplemented in Rust) plus the self-patching
+   retrospectives that followed it (four when this was written; `LESSONS.md` is
+   the running count). This supplies the *how*: runnable harnesses that mechanically
    enforce the plan, a proactive flaw-hunt, and a loop that improves the playbook
    after every port.
 
@@ -154,8 +155,8 @@ Two evaluation-driven additions:
 
 **`Adds:` a supply-chain gate that *enforces* the pinning.** Pinning is necessary
 but only a gate makes it hold: run `cargo audit` (no open RUSTSEC advisories) +
-`cargo deny` (licenses allow-listed, sources restricted to crates.io, no
-banned/duplicate crates) in CI. A rewrite for safety that imports unsafety through
+`cargo deny` (licenses allow-listed, sources restricted to crates.io, no wildcard
+dependencies; duplicate versions warn, and bans are yours to add) in CI. A rewrite for safety that imports unsafety through
 its dependency tree has failed. Also do the kit's **environment preflight** here:
 confirm the toolchain target actually links (an MSVC-vs-GNU mismatch cost real
 time) and that the build dir isn't a synced/locked folder (a cloud-sync lock on
@@ -244,15 +245,16 @@ the core; wire the rest as CI gates the kit ships:
   compiler-side cross-check — and make sure they are actually *enabled* (both are
   allow-by-default; a "delegated to clippy" control that clippy never runs is not a
   control).
-- **Miri + ASan/UBSan/TSan** over the unsafe/FFI layer — the UB the compiler can't
-  see. TSan specifically for threaded code (shared-resource races are the class the
+- **Miri + ASan/TSan** over the unsafe/FFI layer — the UB the compiler can't
+  see (rustc has no UB sanitizer; Miri is the UB check). TSan specifically for threaded code (shared-resource races are the class the
   liveness/hang bugs hide behind).
 - **Fuzz every parse/input entry point** (cargo-fuzz): any panic/crash on arbitrary
   bytes is a release blocker. This is the memory-safety property the rewrite claims
   — verify it on exactly the input surfaces, don't assume it.
 - **Track unsafe-op count per module** (raw-ptr deref, unsafe call, `static mut`,
   union field — TRACTOR's four categories) as a status table, so encapsulation
-  progress is a metric, not vibes.
+  progress is a metric, not vibes. Not built in this kit: `audit_unsafe.py --json`
+  reports documented and undocumented blocks, not ops by category.
 - **Scaffold observability (a trace/log switch) on day one.** In the real port it
   was added reactively, at fix #4 of a 5-commit hang; up front it makes the first
   hang diagnosable in minutes.
@@ -285,7 +287,7 @@ eliminate `static mut` via `Cell`/`RefCell`/thread-locals; run clippy fixes to a
 fixed point.
 
 **`Adds:` the divergence ledger is that "written policy," mechanized.** Option (2)
-and every security fix lands as a `- [x] <case>: <why + CWE>` entry that the Step
+and every security fix lands as a `- [x] <case> [sha256:<fingerprint>]: <why + CWE>` entry that the Step
 0.5 differential reads and suppresses — so the *decision* is enforced (unledgered
 divergence = failing CI) and *shipped* to users as release notes ("behaviors we
 deliberately changed, and why"). The security fixes over the C are a feature; say
@@ -303,10 +305,10 @@ These aren't in the TRACTOR playbook and are worth adding wholesale:
   release, current threat model.
 - **The compounding loop.** A static playbook rots. End every port with a
   retrospective that *patches this document*, backed by an append-only `LESSONS`
-  log (date, codebase, lesson, section amended). The kit has already improved
-  itself four times this way. **Meta-lesson from those passes: run the tools
-  against the real target — the gaps live in the harnesses, not the prose.** Three
-  of four self-audits found defects in the *tooling* (a noisy scanner, an unwired
+  log (date, codebase, lesson, section amended). The kit had improved itself four
+  times this way when this was written. **Meta-lesson from those passes: run the
+  tools against the real target — the gaps live in the harnesses, not the prose.**
+  Three of those first four self-audits found defects in the *tooling* (a noisy scanner, an unwired
   gate, an under-checking differential), none from re-reading the plan. A dry-run
   that doesn't execute the harnesses against the actual code is theater.
 
@@ -355,4 +357,4 @@ ones.**
 Report for TRACTOR C to Rust Translators" (Feb 2026); DARPA TRACTOR program page;
 DARPA-TRACTOR-Program/PUBLIC-Test-Corpus (Battery 01, P00_perlin_noise,
 P01_sphincs_plus, `cando`, evaluation scripts). The executable layer is generalized
-from a completed C→Rust reimplementation and its four self-patching retrospectives.*
+from a completed C→Rust reimplementation and its self-patching retrospectives.*

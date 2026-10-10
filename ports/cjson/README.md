@@ -10,13 +10,16 @@ kit did not write (`RETROSPECTIVE-kit-audit.md` §6, keystone item).
 > **Current numbers live in `progress.json` and `API-COVERAGE.md`, not here.**
 > As of module 15: **17/17 tracked modules fully gated**, and **82 of 92
 > exported symbols ported, 10 out-of-scope, 0 unported** — the api-coverage
-> ratchet is at zero. The narrative below is the port's history and its counts
-> are as-of-then; the two files above are the ones a gate reads, so they are
-> the ones to trust.
+> ratchet is at zero. [2026-10-10: module 16 (`dom-add-parent`) has landed since,
+> so read the module count from `progress.json`.] The narrative below is the
+> port's history and its counts are as-of-then; the two files above are the ones
+> a gate reads, so they are the ones to trust.
 >
 > Zero unported is a claim about **coverage**, not about verification being
 > finished: every exported symbol is now on a compared contract, which is what
-> that table measures and no more.
+> that table measures and no more. [Corrected 2026-10-10: not every one yet —
+> five `*CaseSensitive` utils symbols name driver modes no case drives, and two
+> base symbols are compared only transitively; `API-COVERAGE.md` marks each.]
 
 **Module 15 (`entry-opts`) closed the ratchet** — `cJSON_ParseWithOpts`,
 `cJSON_ParseWithLengthOpts`, `cJSON_PrintBuffered`, `cJSON_PrintPreallocated`,
@@ -110,6 +113,12 @@ whole port ran on).
 
 The `sanitized` gate stays honestly unset: miri/asan need toolchains this
 environment lacks; they ride the CI-with-sanitizers item in the kit backlog.
+[Corrected 2026-10-10: no longer unset. `check.sh` step 4b runs the kit's
+sanitizer harness (miri + ASan where a nightly toolchain exists), the
+`sanitized` rung advances only from that run's stamped report, and every module
+in `progress.json` is past it. Without nightly the step prints a loud SKIP and
+writes no report. The `sanitized` item under "Documented remainder" above is
+stale on the same point.]
 
 String values are **bytes, not `String`** — probed against the oracle: cJSON
 copies string content verbatim with no UTF-8 validation (a raw `0xFF`
@@ -120,7 +129,7 @@ unit tests and C-validated vectors.
 Run the whole port gate (also the last step of CI's `gates` job — it was its own
 `cjson-port` job until the four jobs were consolidated to cut billed minutes):
 
-    bash ports/cjson/check.sh   # oracle lock → fmt/clippy/test → diff_run 25/25 → unsafe-audit → progress ingest
+    bash ports/cjson/check.sh   # oracle lock → fmt/clippy/test → diff_run → diff-fuzz → unsafe-audit → progress ingest (every step: check.sh's header)
 
 First differential discovery, pinned in tests + vectors: **C's DBL_MAX printing
 is lossy** — the `%1.15g` form reparses as *inf* (above DBL_MAX), and
@@ -132,16 +141,16 @@ ledgerable divergence).
 | Artifact | What |
 |---|---|
 | `c/` | pristine, unmodified upstream source (the oracle's ground truth) + `PROVENANCE.md` (version, git hash, SHA-256s, license) |
-| `FLAW-SCAN.md` | Phase-0 C-flaw inventory: the 17 copy-sink hits triaged + the historical CVE record the grep scanner *can't* see (the load-bearing half) |
+| `FLAW-SCAN.md` | C-flaw inventory: the scanner's copy-sink hits triaged (re-run over all of `c/` every gate) + the historical CVE record the grep scanner *can't* see (the load-bearing half) + the live defects found by probing |
 | `PORT-PLAN.md` | module inventory, dependency graph, 7-module leaf-first port order, port shape, oracle strategy |
 | `THREAT-MODEL.md` | trust boundaries, attacker capabilities, non-goals (passes `check_threat_model.py`) |
 | `DIVERGENCES.md` | the intentional-divergence ledger — seeded with candidate divergences (trailing-garbage strictness, number formatting) and the structural-elimination list |
-| `oracle/` | `driver.c` (CLI wrapper over the C lib), `build.sh`, `gen_corpus.py`, `matrix.json` (38) + `holdout.json` (7 hidden), `run.sh` (locks the oracle end-to-end) |
-| `progress.json` | the 7-module tracker, all `not_started` |
+| `oracle/` | `driver.c` (CLI wrapper over the C lib), `build.sh`, `gen_corpus.py`, `matrix.json` + `holdout.json` (hidden), the per-module `matrix-*.json` and `probes-*.json`, `run.sh` (locks the oracle end-to-end) |
+| `progress.json` | the module tracker: every tracked module's gate rung — the live count (see the note at the top) |
 
 ### Lock/verify the oracle
 
-    bash oracle/run.sh   # build driver → gen corpus → validate all 45 vectors vs C → CVE spot-check
+    bash oracle/run.sh   # build driver → gen corpus → validate matrix.json + holdout.json vs C (prints the count) → CVE spot-check
 
 The corpus's rejection cases are the load-bearing ones: `cve-nesting-1001`
 (stack-overflow guard), `cve-lone-surrogate` (OOB-read class), and the
@@ -163,6 +172,9 @@ class is arithmetic/lifetime/recursion — so the **fuzz + differential gates ca
 the weight here**, exactly as `FLAW-SCAN.md` lays out.
 
 ## Next (on approval)
+
+[Corrected 2026-10-10: this is the Phase-0 plan, done long since — every module
+in `progress.json` stands at `unsafe_audited`; see the Status section at the top.]
 
 Copy `skeleton/` into `ports/cjson/rust/`, invoke `porting-kit-oracle` (build the
 C driver + seed the corpus with the historical-CVE regression inputs), then port

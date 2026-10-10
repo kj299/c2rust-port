@@ -4,6 +4,10 @@
 //! (`--help`, `--version`, `--format`, stdin), so `diff_run.py` can run against
 //! it out of the box.
 
+// `cli` is portable: the unsafe layer is `sys`, alone. Forbidden here as in
+// `core`, and checked the same way (LESSONS #46, #54).
+#![forbid(unsafe_code)]
+
 use std::io::Read;
 
 /// RFC 8259 JSON string escaping. `{:?}` is NOT valid JSON: Rust debug-escapes

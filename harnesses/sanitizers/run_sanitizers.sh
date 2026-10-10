@@ -20,7 +20,8 @@
 # `--check` now verifies every mode maps to a sanitizer rustc actually accepts.
 #
 # Usage:
-#   run_sanitizers.sh [miri|asan|ubsan|lsan|tsan|all] [CRATE_DIR]
+#   run_sanitizers.sh [miri|asan|ubsan|lsan|tsan|all] [CRATE_DIR] [--json FILE]
+#                     [-- CARGO-ARGS ...]
 #   run_sanitizers.sh --check      # self-test: modes are runnable + tool avail
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -56,7 +57,10 @@ ALL_MODES="miri ubsan asan lsan tsan"
 
 if [[ "${1:-}" == "--check" ]]; then
   ok=1
-  bash -n "$0" && echo "PASS  script syntax ok"
+  # `bash -n "$0" && echo PASS` could not fail this check: under `set -e` a
+  # failing command inside an `&&` list does not stop the script (LESSONS #54).
+  if bash -n "$0"; then echo "PASS  script syntax ok"
+  else echo "FAIL  this script does not parse"; ok=0; fi
   # THE check that was missing: every mode must be runnable at all. A mode whose
   # sanitizer rustc would reject is a permanently-red gate (LESSONS #22).
   bad=""

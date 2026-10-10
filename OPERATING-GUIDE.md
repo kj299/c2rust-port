@@ -21,13 +21,14 @@ driver-based + `lib_diff` ctypes, complementary); the **performance** gate is a
 harness (`perf/perf_gate.py`); C→C **preconditioning** is an invokable skill; and
 **held-back vectors + C-baseline validation** are in `golden.py`. The whole §5
 backlog is done, and the v1.0 exit test — a real adler32 C→Rust library port driven
-through every gate (`examples/adler32/`) — passes.
+through the kit's library harnesses (`examples/adler32/`) — passes.
 
 **Bottom line:** the kit now drives an executable **or** a C-ABI library port
 end-to-end through the six gates + a performance gate, substantiates its
-safety/security claims (SBOM, signing, differential fuzzing), and has been shaken
-out on a real port. The remaining maturity is *breadth* — more real ports feeding
-the compounding LESSONS loop — not a missing spine.
+safety/security claims (SBOM, differential fuzzing; release signing is a §3
+recommendation, not automated), and has been shaken out on a real port. The
+remaining maturity is *breadth* — more real ports feeding the compounding
+LESSONS loop — not a missing spine.
 
 ---
 
@@ -64,7 +65,7 @@ The kit is designed so an agent reads *verdicts, not corpora*. Lean into that:
 - **Path-scope every workflow** (LESSONS #5) so a change runs only the pipeline it
   can affect. The single biggest CI-waste fix.
 - **Tier the slow gates:** fuzz = 60s smoke per target in CI, deep run nightly;
-  Miri/ASan/UBSan on the `sys`/changed crates per-PR, full sweep nightly. Don't pay
+  Miri/ASan on the `sys`/changed crates per-PR, full sweep nightly. Don't pay
   the whole safety matrix on every push.
 - **Leaf-first order is an efficiency lever, not just correctness** — it localizes
   every failure to one definition, so you debug one thing, not a 10k-line blast
@@ -117,7 +118,7 @@ The skills are the operational surface; use them, don't re-derive their steps.
 | Phase | Skill | Cadence |
 |---|---|---|
 | Project start | `porting-kit-kickoff` | once |
-| Phase 0 vuln hunt | `porting-kit-cflaw-scan` | once (re-run per subsystem) |
+| Phase 0 vuln hunt | `porting-kit-cflaw-scan` | once, then the scan re-runs on the C every gate |
 | Phase 2 oracle | `porting-kit-oracle` | once, before any Rust |
 | Phase 4 per module | `porting-kit-module` | **repeated — the hot path** |
 | Phase 4 after matrix green | `porting-kit-diff-fuzz` | per module + nightly sweep |
@@ -194,26 +195,28 @@ audit → retrospective`.
 10. ~~Document the Windows/cross-platform caveats.~~ **Done:**
     `CROSS-PLATFORM-CAVEATS.md` — sanitizer/Miri availability by toolchain, the
     exit-hard liveness pattern, ASCII-default output, `target/` sync/AV locks, and
-    fork-based-harness caveats; referenced from README + PLAYBOOK Phase 3.
+    fork-based-harness caveats; referenced from README.
 11. ~~A `porting-kit-diff-fuzz` skill once #4 lands.~~ **Done** — `skills/porting-kit-diff-fuzz`.
 
 **The v1.0 exit test (the epic's definition of done):** drive a real tiny C-ABI
 library end-to-end through every gate. **Done** — `examples/adler32/` (`run.sh`): a
 naive-overflow C adler32 vs a correct+safe Rust cdylib, driven through scan →
 unsafe-audit → cando → lib_diff → golden (holdout+validate) → diff_run → perf →
-diff-fuzz → progress; the overflow is caught by both library differentials and
-ledgered as an intentional fix-of-C-defect. The §5 backlog and the exit test are
-both complete.
+diff-fuzz → miri (when installed) → progress; the overflow is caught by both
+library differentials and ledgered as an intentional fix-of-C-defect. The §5
+backlog and the exit test are both complete. [2026-10-10: "every gate" was
+never true of it — cargo-fuzz, supply-chain and the Phase-0 controls run in a
+port's `check.sh`, not here — and until then it set `sanitized` by hand.]
 
 **How the kit closes these:** each is a candidate for a normal port's
 `porting-kit-retrospective` pass (the compounding loop is the delivery mechanism —
 a real port will surface which of these actually bite first, and LESSONS will
 record it). Nothing here is a redesign; all are additive to the proven spine.
 
-**What's next after v1.0:** the prioritized v1.x plan lives in
-`RETROSPECTIVE-kit-v1.md` §5 — headline items: prove the kit on a real mid-size
-C port (the LESSONS delivery mechanism), gate-mutation verification of the gate
-suite itself, and running the CI for real in an Actions-enabled repo.
+**After v1.0:** the v1.x plan in `RETROSPECTIVE-kit-v1.md` §5 has been carried
+out — a real mid-size port (`ports/cjson/`), gate-mutation verification of the
+gate suite (`harnesses/gate-mutation/mutate_gates.py`), and CI running for real
+(`.github/workflows/check-kit.yml`). `LESSONS.md` records what came after.
 
 ---
 

@@ -44,6 +44,7 @@ Usage:
   probe.py gen    --transcript T.json --out GEN.rs [--glue MOD]
   probe.py verify --probes P.json --oracle BIN --transcript T.json \
                   --out GEN.rs [--glue MOD] [--timeout S]
+  probe.py coverage --probes P.json [P.json ...] [--modules a,b] [--progress progress.json]
   probe.py --self-test
 Exit: 0 = pinned/verified; 1 = drift, tamper, or nothing pinned; 2 = usage.
 """

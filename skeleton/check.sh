@@ -50,7 +50,8 @@ echo "===== 1. rust workspace (fmt / clippy / build / test) ====="
   cargo test --all --quiet )
 
 echo "===== 2. differential — Rust vs C over the ported modules ====="
-# PORT-SPECIFIC: build your oracle and point this at your matrix.
+# PORT-SPECIFIC: build your oracle and point this at your matrix, and name
+# your Rust binary (the skeleton's `cli` crate builds `port`).
 mkdir -p "$HERE/reports"
 if [ ! -x "$HERE/oracle/oracle" ] || [ ! -f "$HERE/oracle/matrix.json" ]; then
   echo "TODO: build oracle/oracle and write oracle/matrix.json, then delete this guard." >&2
@@ -71,6 +72,23 @@ mkdir -p "$HERE/reports/fuzz"
     --oracle "$HERE/oracle/oracle" --rust "$HERE/rust/target/release/driver" \
     --matrix "$HERE/oracle/matrix.json" --ledger "$HERE/DIVERGENCES.md" \
     --iterations 2000 --timeout 5 --json > "$HERE/reports/fuzz/MODULE.json"
+
+echo "===== 3b. fuzz — no panic on input (cargo-fuzz) ====="
+# In-process fuzzing of the Rust alone: the differential fuzzer above finds
+# where Rust and C disagree, this finds where Rust panics. No target is a
+# failure, not a pass (LESSONS #6). This template said every control was wired
+# and ran no cargo-fuzz until LESSONS #54. `gen_fuzz_target.sh` scaffolds one per
+# module. Toolchain-optional, but the SKIP must be loud.
+if cargo +nightly fuzz --version >/dev/null 2>&1; then
+  ( cd "$HERE/rust"
+    targets="$(cargo +nightly fuzz list)"
+    [ -n "$targets" ] || { echo "FAIL  fuzz: no cargo-fuzz targets — scaffold one per module" \
+                             "with $KIT/harnesses/fuzz/gen_fuzz_target.sh"; exit 1; }
+    for t in $targets; do cargo +nightly fuzz run "$t" -- -max_total_time=60; done )
+else
+  echo "SKIP  fuzz: no cargo-fuzz on nightly — no target ran, so \"no panic on"
+  echo "      input\" was NOT checked this run (cargo install cargo-fuzz)."
+fi
 
 echo "===== 3c. oracle-sanitize — the C DRIVER is code this port wrote ====="
 # LESSONS #40. `oracle/driver.c` is not vendored C, it is yours: it sizes
@@ -116,6 +134,10 @@ echo "===== 5. unsafe-audit ====="
 # the package is not called `core`, so nothing can infer it.
 "$PY" "$KIT/harnesses/unsafe-audit/check_forbid_unsafe.py" "$HERE/rust/crates/core"
 "$PY" "$KIT/harnesses/unsafe-audit/audit_unsafe.py" "$HERE/rust/crates"
+# ...and as a stamped report, so `unsafe_audited` is earned in step 6.
+mkdir -p "$HERE/reports/unsafe"
+"$PY" "$KIT/harnesses/unsafe-audit/audit_unsafe.py" "$HERE/rust/crates" --json \
+    > "$HERE/reports/unsafe/MODULE.json"
 
 echo "===== 5b. supply-chain — the dependency surface ====="
 if command -v cargo-audit >/dev/null 2>&1 && command -v cargo-deny >/dev/null 2>&1; then
@@ -128,11 +150,34 @@ fi
 
 echo "===== 6. progress — rungs must be EARNED from THIS run's reports ====="
 # Replay into a scratch table seeded at `ported`, so a rung that quietly stopped
-# being provable cannot coast on the committed table (LESSONS #24).
-( cd "$KIT" && "$PY" harnesses/progress/progress.py --file "$HERE/progress.json" ingest \
-    --diff-json "$HERE"/reports/*.json \
-    --fuzz-json "$HERE"/reports/fuzz/*.json \
-    --sanitize-json "$HERE"/reports/sanitize/*.json )
+# being provable cannot coast on the committed table (LESSONS #24): every module
+# must re-earn, from this run's reports alone, at least the rung the committed
+# table claims. Only then is the committed table ingested. (Until LESSONS #54
+# this comment promised the replay and the step ingested straight into the
+# committed table.)
+INGEST=(--diff-json "$HERE"/reports/*.json
+        --fuzz-json "$HERE"/reports/fuzz/*.json
+        --sanitize-json "$HERE"/reports/sanitize/*.json
+        --unsafe-json "$HERE"/reports/unsafe/*.json)
+REPLAY="$(mktemp -d)/progress-replay.json"
+"$PY" -c 'import json, sys
+mods = json.load(open(sys.argv[1]))["modules"]
+json.dump({"modules": {m: "ported" for m in mods}}, open(sys.argv[2], "w"))' \
+    "$HERE/progress.json" "$REPLAY"
+( cd "$KIT" && "$PY" harnesses/progress/progress.py --file "$REPLAY" ingest "${INGEST[@]}" >/dev/null )
+"$PY" -c 'import json, sys
+sys.path.insert(0, sys.argv[3])
+from progress import GATES
+claimed = json.load(open(sys.argv[1]))["modules"]
+earned = json.load(open(sys.argv[2]))["modules"]
+short = {m: (g, earned.get(m)) for m, g in claimed.items()
+         if GATES.index(earned.get(m, "not_started")) < GATES.index(g)}
+for m, (g, e) in sorted(short.items()):
+    print(f"REPLAY FAILED  {m}: the table claims {g}, this run earned {e}", file=sys.stderr)
+sys.exit(1 if short else 0)' \
+    "$HERE/progress.json" "$REPLAY" "$KIT/harnesses/progress"
+rm -rf "$(dirname "$REPLAY")"
+( cd "$KIT" && "$PY" harnesses/progress/progress.py --file "$HERE/progress.json" ingest "${INGEST[@]}" )
 
 echo ""
 echo "===== PORT GATE COMPLETE ====="

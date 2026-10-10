@@ -69,8 +69,9 @@ retrospective and **patch the Porting Kit** with what you learned.
    - **pin each new lesson in the smoke tests**: a lesson whose `Section
      amended` names a harness must land with the regression check in that
      harness's self-test and a `LESSONS #N` citation beside it — `make
-     check-kit` (`check_lessons_pinned.py`) hard-fails an unpinned lesson, in
-     this repo and in every port's vendored kit.
+     check-kit` (`check_lessons_pinned.py`) hard-fails a lesson whose harness
+     carries no citation (the self-test half is yours to keep), in this repo
+     and in a port's vendored kit, there with `--also-scan ..` (LESSONS #44).
 
 4. **Append to `LESSONS.md`** — one entry per lesson, in the required format
    (date, codebase, lesson, playbook section amended). If the kit already had

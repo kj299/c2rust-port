@@ -111,6 +111,19 @@ echo "===== diff-fuzz — small-input space (complements the vector suite) =====
 $PY $K/diff-fuzz/diff_fuzz.py --oracle ./adler_cli_c --rust "$CLI" \
     --matrix matrix.gen.json --seed 0 --iterations 500
 
+echo "===== sanitizers — Miri over the Rust, when nightly+miri is here ====="
+# The `sanitized` rung is earned from this report, never set by hand (LESSONS
+# #24): this script used to `set` it with no sanitizer run at all (LESSONS #54).
+# Without nightly+miri the SKIP is loud and the rung stays unearned.
+mkdir -p sf
+if cargo +nightly miri --version >/dev/null 2>&1; then
+  # absolute: the harness runs cargo from inside the crate directory
+  bash $K/sanitizers/run_sanitizers.sh miri rust --json "$PWD/sf/adler32.json"
+else
+  echo "SKIP  sanitizers: no nightly+miri — the sanitized rung is NOT earned this run,"
+  echo "      so the table below stops at fuzzed."
+fi
+
 echo "===== progress — ingest the harness --json reports to auto-advance gates ====="
 $PY $K/differential/diff_run.py --oracle ./adler_cli_c --rust "$CLI" \
     --matrix matrix.gen.json --ledger /dev/null --json > reports/adler32.json
@@ -120,16 +133,22 @@ $PY $K/unsafe-audit/audit_unsafe.py rust/src --json > reports/adler32.unsafe.jso
 mkdir -p rf ff uf && cp reports/adler32.json rf/adler32.json \
    && cp reports/adler32.fuzz.json ff/adler32.json && cp reports/adler32.unsafe.json uf/adler32.json
 $PY $K/progress/progress.py --file progress.gen.json init --modules adler32
+# `ported` is the one rung set by hand: the starting point, as check.sh seeds it.
 $PY $K/progress/progress.py --file progress.gen.json set adler32 ported
 $PY $K/progress/progress.py --file progress.gen.json ingest --diff-json rf/adler32.json
 $PY $K/progress/progress.py --file progress.gen.json ingest --fuzz-json ff/adler32.json
-$PY $K/progress/progress.py --file progress.gen.json set adler32 sanitized
+if [ -f sf/adler32.json ]; then
+  $PY $K/progress/progress.py --file progress.gen.json ingest --sanitize-json sf/adler32.json
+fi
 $PY $K/progress/progress.py --file progress.gen.json ingest --unsafe-json uf/adler32.json
 $PY $K/progress/progress.py --file progress.gen.json show
-rm -rf rf ff uf
+rm -rf rf ff sf uf
 
 echo ""
-echo "===== EXIT TEST COMPLETE — the port cleared every gate ====="
+echo "===== EXIT TEST COMPLETE — every gate this demo runs passed ====="
+echo "Not run here: cargo-fuzz, supply-chain, threat-model, api-coverage,"
+echo "control-coverage and oracle-sanitize — a port's check.sh runs those"
+echo "(skeleton/check.sh)."
 echo "The overflow was caught by BOTH library differentials and ledgered as a"
 echo "fix-of-C-defect; scan_c_flaws and diff-fuzz found nothing (the bug is"
 echo "arithmetic / large-input) — the gates divide labor, they are not redundant."

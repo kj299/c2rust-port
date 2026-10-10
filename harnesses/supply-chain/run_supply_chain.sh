@@ -2,12 +2,13 @@
 # Supply-chain gate — dependencies are part of your memory-safety story. Runs
 # cargo-audit (known RUSTSEC advisories) and cargo-deny (advisories + license +
 # source/ban policy). A vulnerable or unvetted dependency undoes a careful port.
-# (PLAYBOOK cross-cutting controls; SECURITY-CHECKLIST "supply chain".)
+# (CLAUDE.md's control table, "clean deps"; SECURITY-CHECKLIST "supply chain".)
 #
 # Usage:
 #   run_supply_chain.sh [CRATE_DIR]     # run the real gate (needs the tools)
 #   run_supply_chain.sh --check         # smoke: validate this script + config,
-#                                       # report tool availability, never fail
+#                                       # report tool availability; fails if the
+#                                       # script does not parse or the config is gone
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -21,7 +22,10 @@ have_deny_template() { test -f "$1/deny.template.toml"; }
 
 if [[ "${1:-}" == "--check" ]]; then
   ok=1
-  bash -n "$0" && echo "PASS  script syntax ok"
+  # `bash -n "$0" && echo PASS` could not fail this check: under `set -e` a
+  # failing command inside an `&&` list does not stop the script (LESSONS #54).
+  if bash -n "$0"; then echo "PASS  script syntax ok"
+  else echo "FAIL  this script does not parse"; ok=0; fi
   # Explicit failure branch: under `set -e` a bare `test -f X && echo ok`
   # exits 1 with NO message when X is missing — a silent death in check-kit.
   if have_deny_template "$HERE"; then

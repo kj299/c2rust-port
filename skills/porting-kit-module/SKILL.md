@@ -84,12 +84,13 @@ the class is predicate-defined (*every* NaN, *every* escaped key) it cannot be
 fingerprint-pinned for the fuzzer: build a corrected reference oracle for that
 mode (LESSONS #28) and keep the finite assertion in the matrix.
 
-Advance the tracker as gates clear:
-`python3 porting-kit/harnesses/progress/progress.py set <module> <gate>`
-(gates: ported → differential → fuzzed → sanitized → unsafe_audited). Or let the
-harness reports drive it — write each `--json` report as `<module>.json` and run
-`progress.py ingest --diff-json <m>.json --fuzz-json <m>.json --unsafe-json <m>.json`
-to auto-advance a module from its clean reports (exact-stem, fail-closed).
+Advance the tracker from the harness reports, never by hand past `ported`
+(LESSONS #24; gates: ported → differential → fuzzed → sanitized → unsafe_audited).
+Write each `--json` report as `<module>.json` (the sanitizer's from
+`run_sanitizers.sh ... --json`) and run
+`progress.py ingest --diff-json <m>.json --fuzz-json <m>.json --sanitize-json <m>.json --unsafe-json <m>.json`
+to auto-advance a module from its clean reports (exact-stem, fail-closed). Without
+`--sanitize-json` a module stops at `fuzzed`.
 
 For the hardest modules, consider **two candidate translations by different methods**
 and let the vector suite pick the winner (diversity beats any single method).

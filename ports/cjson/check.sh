@@ -279,14 +279,17 @@ cp "$HERE/reports/utils-pointer.json" "$HERE/reports/utils-sort.json"
 
 echo "===== 4. diff-fuzz — differential fuzzing, Rust vs C ====="
 mkdir -p "$HERE/reports/fuzz"
-# The CORRECTED oracle — the vendored C with its two known defects fixed. Built
-# once here because TWO modes now need it (LESSONS #28: a predicate-defined
+# The CORRECTED oracle — the vendored C with its known defects fixed. Built
+# once here because several modes need it (LESSONS #28: a predicate-defined
 # intentional divergence cannot be fingerprint-pinned for a fuzzer, so those
 # modes fuzz against a C that shares the port's fix and every finding is real):
 #   patch     : cJSON_Utils.c's ~0/~1 pointer decode  (utils-tilde-*)
-#   construct : cJSON.c's NaN -> int conversion       (create-number-nan-*)
+#   construct : cJSON.c's NaN -> int conversion       (construct-nan-*)
 #   set       : the same cast in cJSON_SetNumberHelper, plus its missing type
-#               check                                 (set-number-nan-*, set-*-type-confusion)
+#               check                                 (set-nan-*, set-*-type-confusion)
+#   seq       : app/ins/rep onto a non-array target   (scalar-parent-child, seq-*, place-*)
+#   opts      : cJSON_PrintPreallocated's partial write (opts-prealloc-*)
+#   parent    : the non-container parent              (scalar-parent-child, parent-*)
 # Every other mode fuzzes against the PRISTINE oracle.
 bash "$HERE/oracle/build_fixed.sh" > /dev/null
 "$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \

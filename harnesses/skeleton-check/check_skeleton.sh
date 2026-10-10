@@ -26,7 +26,10 @@ skel_present() { test -d "$1" && test -f "$1/Cargo.toml"; }
 
 if [[ "${1:-}" == "--check" ]]; then
   ok=1
-  bash -n "$0" && echo "PASS  script syntax ok"
+  # `bash -n "$0" && echo PASS` could not fail this check: under `set -e` a
+  # failing command inside an `&&` list does not stop the script (LESSONS #54).
+  if bash -n "$0"; then echo "PASS  script syntax ok"
+  else echo "FAIL  this script does not parse"; ok=0; fi
   if skel_present "$DEFAULT_SKEL"; then
     echo "PASS  skeleton dir present"
   else

@@ -23,9 +23,11 @@ workspace/
 ## Why this shape
 
 - **`forbid(unsafe_code)` on `core` is the keystone.** It converts "is the unsafe
-  contained?" from a recurring review question into a compile-time guarantee. In
-  the retrospective, `core` had **0** unsafe and the sys layer **144** — but only
-  91 documented. The split is what let the audit gate target exactly one crate.
+  contained?" from a recurring review question into a compile-time guarantee, and
+  `check_forbid_unsafe.py` fails the gate if the attribute goes (LESSONS #46). In
+  winlsof, `core` had **0** unsafe and the sys layer **131** real blocks, 51 of
+  them undocumented (LESSONS #1; the 144/91 first quoted were grep hits). The
+  split is what let the audit gate target exactly one crate.
 - **RAII is the bug-killer.** The two most leak-prone C idioms — `close(fd)` and
   drop-privilege — become `Drop` impls (`OwnedResource` in the skeleton is the
   `OwnedHandle`/`PrivilegeGuard` analog). Use-after-free, double-free, leak, and
@@ -38,7 +40,8 @@ workspace/
 
 - **`overflow-checks = true` in release.** Silent integer wraparound is a C bug
   class a safety rewrite must not reproduce; pay the small cost.
-- **`#![deny(unsafe_op_in_unsafe_fn)]` in `sys`.** Even inside an `unsafe fn`,
+- **`unsafe_op_in_unsafe_fn = "deny"`, workspace-wide** (`[workspace.lints]`,
+  so it covers `sys`). Even inside an `unsafe fn`,
   each unsafe operation needs an explicit `unsafe {}` — so every one gets a
   `// SAFETY:` and the audit harness sees it.
 - **No `unwrap()`/`expect()` on untrusted input.** Parsers return `Result`; the

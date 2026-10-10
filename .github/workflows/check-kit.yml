@@ -33,10 +33,11 @@
 #     corruption then merged with zero checks (kj299/lsof#82, #83). Markdown-only
 #     is exactly the change this gate exists to catch — the lesson-link and
 #     skills-integrity checkers read prose.
-#   * No `actions/cache`. Measured, not assumed: both Cargo.lock files contain
-#     three packages and every one is a `path` crate, so there is no registry to
-#     restore and target-caching would save seconds of compiling three tiny
-#     local crates — while adding the `uses:` this file exists to minimise.
+#   * No `actions/cache`. Measured, not assumed: every package in the three
+#     Cargo.lock files (skeleton, cJSON, adler32) is a `path` crate, so there is
+#     no registry to restore and target-caching would save seconds of compiling
+#     a few tiny local crates — while adding the `uses:` this file exists to
+#     minimise.
 name: check-kit
 
 on:
@@ -60,8 +61,8 @@ jobs:
     runs-on: ubuntu-latest
     # The default is 360 minutes. This repo's own LESSONS #1/#6 are about a
     # harness that HUNG; a hang here would quietly bill six hours of a metered
-    # private-repo quota. Observed runtime is a couple of minutes, so this is
-    # ~10x headroom and still a ceiling.
+    # private-repo quota. Observed runtime (2026-10) is 7-10 minutes, most of it
+    # check-kit's gate-mutation sweep, so this is ~3x headroom and still a ceiling.
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4

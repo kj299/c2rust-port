@@ -49,7 +49,10 @@ A module that compiles and matches the oracle is at step 2 of 6, not done.
 fails if the port's gate script never invokes one of them — three were unwired at
 the cJSON cutover, two of them "hard fail", and every one still passed the
 mutation sweep, because a sweep measures a harness's self-test, not its use
-(LESSONS #31). Adding a row here obliges every port's gate to call it.
+(LESSONS #31). Adding a row here obliges every port's gate to call it, and
+`make check-kit` holds the shipped gate and CI templates to it. A `--self-test`
+or `--check` run is not the control; a row naming only a directory (cargo-fuzz's)
+is reported as uncheckable, not verified (LESSONS #54).
 
 Smoke-test the harnesses anytime with `make check-kit` from the kit root —
 `make -C porting-kit check-kit` in a repo that vendors the kit at `porting-kit/`

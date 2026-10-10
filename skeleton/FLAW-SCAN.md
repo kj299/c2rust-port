@@ -11,7 +11,9 @@ land, and a newly-vendored source must not arrive un-triaged (LESSONS #31).
 
 State this before any finding. The scanner is a **fast grep-shaped heuristic**
 over copy sinks, format strings, integer-overflow multiplications, command
-execution, TOCTOU and stack VLAs. It cannot see logic errors, missing
+execution, TOCTOU candidates, `alloca` (not variable-length arrays), and three
+windowed local patterns: use-after-free, double-free and uninitialized read
+(`scan_c_flaws.py`'s docstring lists them). It cannot see logic errors, missing
 preconditions, type confusion, undefined behavior in arithmetic, or anything
 requiring the code to actually run.
 

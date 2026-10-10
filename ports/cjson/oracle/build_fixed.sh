@@ -7,10 +7,13 @@
 # otherwise make every affected input a (predicate-defined, unpinnable)
 # divergence against the pristine oracle — LESSONS #28:
 #   `patch`     : every ~0/~1-escaped child key       (utils-tilde-*)
-#   `construct` : every NaN element of a number array (create-number-nan-valueint)
+#   `construct` : every NaN element of a number array (construct-nan-*)
 # Both classes are infinite, so there is nothing to fingerprint-pin; the finite
 # assertion lives in the MATRIX, which still runs against the pristine oracle
 # and fails if the divergence ever stops happening (LEDGER-STALE).
+# (Not exhaustive: `set`, `seq`, `opts` and `parent` use this oracle too, and
+# make_fixed_core.py carries their corrections; check.sh step 4 lists every
+# mode with its ledger entries.)
 #
 # LESSONS #36 generalized this from cJSON_Utils.c to cJSON.c itself: the seam
 # now takes any number of corrections, and each generator asserts its pristine

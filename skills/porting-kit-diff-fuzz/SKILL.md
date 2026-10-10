@@ -22,8 +22,10 @@ Needs a runnable C oracle (or a golden-replay wrapper, `porting-kit/harnesses/go
    `python3 porting-kit/harnesses/diff-fuzz/diff_fuzz.py --oracle <c> --rust <rust>
    --seed-file corpus/* --matrix <m> --ledger DIVERGENCES.md --findings-dir fuzz-findings
    --max-time 300`
-   Inputs are fuzzed on stdin by default; fixed argv goes in `--args`. `--seed N`
-   makes the run reproducible; `--iterations N` bounds it instead of wall-clock.
+   Inputs are fuzzed on stdin by default; fixed argv goes in `--args`, or after a
+   final `--` for arguments that start with `-`. `--seed N` makes the run
+   reproducible; `--max-time` alone runs for its time, `--iterations N` bounds it
+   by count (1000 when neither is given), and both stop at whichever comes first.
 2. **Read verdicts, not corpora** (the token-firewall rule): the tool prints one
    line per *distinct* divergence (deduped and minimized), not per input. Use
    `--json` for machine output. Each finding is saved as `<fp>.input` (the smallest
@@ -32,7 +34,8 @@ Needs a runnable C oracle (or a golden-replay wrapper, `porting-kit/harnesses/go
    the C is the buggy side — record the intentional fix-of-C-defect in
    `DIVERGENCES.md`. Fuzz findings are suppressed **only by fingerprint** (an
    arbitrary input has no stable name), so the entry MUST be pinned:
-   `- [x] fuzz:<desc> [sha256:<fingerprint>]: <why + CWE>`.
+   ``- [x] `fuzz:<desc>` [sha256:<fingerprint>]: <why + CWE>`` — quote the name:
+   unquoted, every fuzz entry is named `fuzz`, and the second one stops the run.
 4. **Pin the reproducer as a matrix case** (fix-forward, then immediately pin): add
    the minimized input to the golden/matrix so `diff_run.py` covers it forever, not
    just this fuzz seed.

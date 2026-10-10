@@ -2396,3 +2396,136 @@ points.)*
   timeout sentence is tightened to make room. The PLAYBOOK grows by one line,
   to 404.
 - **Section amended:** PLAYBOOK · Phase 4 "The module port loop", step 2.
+
+---
+
+## 054. Asked about input that is missing, misspelt or empty, this kit's gates passed where the lsof line's had
+
+- **Date:** 2026-10-10
+- **Codebase:** the Porting Kit, checked against the lsof line's entries 080,
+  082 and 084 and against its own code
+- **What happened:** the lsof line's retrospective asked each gate it runs what
+  it does with input that is missing, misspelt, empty, or present only as a
+  description, and closed nine fail-opens. Its copy of a shared harness is a
+  separate file, so each fix stopped at the copy it was made in. The same
+  questions, put to this kit, found:
+  - `audit_unsafe.py`, a hard gate, given a directory that is not there,
+    printed `unsafe blocks: 0` and exited 0. It also skipped every path with a
+    `target` component, so a checkout under `/build/target/` audited nothing.
+  - `diff_run.py` ignored a case key it did not know: `keep_whitespce = true`
+    ran the case without the comparison it names, and it still MATCHed.
+  - `check_controls.py` counted `x.py --self-test` as running the control.
+  - Three `bash -n "$0" && echo PASS` checks passed a script that does not
+    parse: under `set -e`, a failing command inside `&&` does not stop it.
+  - `diff_fuzz.py --max-time` alone stopped at 1000 iterations, so the CI
+    template's nightly 1800-second sweep ran for about five seconds. A zero
+    budget fuzzed nothing and reported clean, and fixed arguments that start
+    with `-` could not be passed at all.
+  - The documented fuzz-ledger form, `- [x] fuzz:<desc> [sha256:…]`, names
+    every entry `fuzz`, so the second entry stops the run.
+  - The CI template a port copies never invoked five of the eleven controls
+    `CLAUDE.md` declares, and nothing in check-kit read it.
+
+  And three the lsof line had not met. `progress.py` refused a 0-of-0 unsafe
+  report by reading `blocks_found`, a key `audit_unsafe.py` never wrote, with a
+  default of 1, so every real report passed the guard. Its self-test was green
+  because its fixtures were dicts written by hand, and they carried the key.
+  `check_doc_flags.py`, given a root that does not exist, printed "0 checked,
+  0 drifted" and passed. `skeleton/check.sh` said it shipped with every control
+  wired and ran no cargo-fuzz, and its progress step said it replayed the
+  ingest into a scratch table while it ingested into the committed one. The
+  adler32 example set `sanitized` by hand, which LESSONS #24 rules out, and
+  then said it had cleared every gate.
+- **The rule.** For every gate, feed it a missing path, a misspelt key, an
+  empty input and a description in place of the thing, and make each one a
+  failure with a fixture. Build a fixture from the producer's real output, not
+  a dict written to suit the consumer: a fixture that carries a key the
+  producer never writes pins the bug in place. And a fix to a harness two kits
+  share is still open in the other copy: when either line closes a fail-open,
+  check the other line's copy the same day.
+- **Kit change:** `audit_unsafe.py` refuses a missing or non-Rust path (exit
+  2), counts the files it read, and skips cargo's build directory by its
+  `CACHEDIR.TAG`. `diff_run.load_matrix` refuses an unknown case key; the known
+  set includes golden's `expect_*` keys and PLAYBOOK's `mods`, and `lib_diff`'s
+  vectors, a different schema, do not come through it. `check_controls.py` does
+  not count a `--self-test` or `--check` invocation. The three `bash -n` checks
+  fail. In `diff_fuzz.py`, `--max-time` alone runs for its time, a zero budget
+  is refused, fixed arguments go after `--`, and the ledger form is
+  backtick-quoted wherever it is documented or printed, with two quoted entries
+  in the self-test. `progress.py` counts `documented`, and its fixtures come
+  from `audit_unsafe.py --json`. `check_doc_flags.py` exits 2 on a root with no
+  harness or no document. The CI template invokes every declared control and
+  drops its `ubsan` step, which ran Miri a second time. check-kit runs
+  control-coverage over the template, checks that the skeleton's `cli` forbids
+  unsafe too, and runs the skeleton gate's `--check`. `skeleton/check.sh` gains
+  a cargo-fuzz step (a loud SKIP without the tool, a failure with no target),
+  emits the unsafe report, and replays the ingest. adler32 earns `sanitized`
+  from a Miri report when Miri is installed. `mutate_gates.py` gains a row for
+  each new verdict.
+- **Section amended:** harnesses/unsafe-audit/audit_unsafe.py;
+  harnesses/differential/diff_run.py; harnesses/control-coverage/check_controls.py;
+  harnesses/sanitizers/run_sanitizers.sh; harnesses/supply-chain/run_supply_chain.sh;
+  harnesses/skeleton-check/check_skeleton.sh; harnesses/diff-fuzz/diff_fuzz.py;
+  harnesses/progress/progress.py; harnesses/doc-check/check_doc_flags.py;
+  harnesses/gate-mutation/mutate_gates.py; harnesses/ci/porting-ci.template.yml;
+  skeleton/check.sh; skeleton/crates/cli/src/main.rs; examples/adler32/run.sh;
+  Makefile · check-kit.
+
+---
+
+## 055. Three documents said every gate was wired, and none of them had run the tool that counts
+
+- **Date:** 2026-10-10
+- **Codebase:** the Porting Kit — every document, docstring, template and port
+  record checked against the code, the Makefile and CI, after the lsof line's
+  entry 080 found about 200 stale claims in its own copy
+- **What happened:** three readers took one area each and put every concrete
+  claim to the line of code, the recipe or the run that would make it true: a
+  path, a flag, a verdict word, an exit code, a count, a behaviour. About forty
+  had stopped being true, several in more than one file. "ASan/UBSan" stood in
+  seven documents, though rustc has no UB sanitizer and the `ubsan` mode has run
+  Miri since LESSONS #22. The PLAYBOOK told a porter to run `progress.py --init`,
+  a flag that does not exist, and `check_doc_flags.py` missed it because the
+  script and the flag sat on different lines. The PLAYBOOK's control table, a
+  copy of `CLAUDE.md`'s, lacked four of its controls and still called the flaw
+  scan a Phase-0 review. The cJSON manifest named driver modes that do not
+  exist, and five rows named modes that exist but that no case drives.
+
+  The worst were the claims of completeness. `CLAUDE.md` said the gates were
+  "wired into CI"; the README said the example went "through every gate"; the
+  skeleton gate said it shipped "with every control already wired". None was
+  true, and each could have been checked in one command: control-coverage over
+  the CI template reports five controls NOT RUN. The checks that read prose
+  check its shape: that a flag is defined, that a path or a lesson exists. None
+  of them checks that a sentence is true.
+- **The rule.** The lsof line's entry 080 holds here: a document that restates
+  the code is a second copy, and the copy drifts. Point at the source, state a
+  count only where a check derives it or with its date, and audit the rest
+  sentence by sentence. A claim of completeness ("every gate", "all controls",
+  "wired into CI") gets written only after running the tool that counts, and is
+  then kept true by putting that tool in check-kit.
+- **Kit change:** each claim was fixed where it stood, after checking it
+  against the code. The PLAYBOOK's control table now points at `CLAUDE.md`'s
+  and keeps only the harnesses around it, which brings the PLAYBOOK back to 400
+  lines. The README's harness table gains its four missing rows (api-coverage,
+  control-coverage, oracle-sanitize, probe). Dated corrections, not rewrites,
+  where a port record's history is now misleading. The harness docstrings that
+  named a flag, an exit code or a category the code lacks (perf_gate,
+  sanitize_oracle, run_supply_chain, run_sanitizers, check_controls, probe,
+  cando_diff, lib_diff, scan_c_flaws) say what the code does, as do comments in
+  the cJSON port's code and in this repo's workflow. `scripts/lift-to-c2rust-port.sh`
+  is deleted: the lift is done, and its `FORCE=1` would push the lsof line's
+  copy over this kit. The cJSON port's real gaps are recorded, not closed:
+  five case-sensitive utils modes no case drives, `cJSON_Parse` and
+  `cJSON_GetErrorPtr` compared only through other entry points, and no cargo-fuzz
+  target at all, so its `fuzzed` rung rests on the differential fuzzer.
+- **Section amended:** CLAUDE.md · the gates; README.md · Start here, Harnesses;
+  PLAYBOOK.md · Phase 0, Phase 3, Phase 4 step 4, Cross-cutting safety controls;
+  SECURITY-CHECKLIST.md; OPERATING-GUIDE.md §0, §2, §4, §5;
+  CROSS-PLATFORM-CAVEATS.md; ARCHITECTURE-TEMPLATE.md;
+  C-to-Rust-Playbook-Best-of-Both.md; PROMPTS/10-module-port.md;
+  PROMPTS/90-retrospective.md · step 3; skills/porting-kit-audit/SKILL.md,
+  skills/porting-kit-cflaw-scan/SKILL.md, skills/porting-kit-diff-fuzz/SKILL.md,
+  skills/porting-kit-module/SKILL.md; skeleton/FLAW-SCAN.md,
+  skeleton/DIVERGENCES.md; examples/adler32/README.md; the cJSON port's
+  README, API-COVERAGE, THREAT-MODEL, FLAW-SCAN and DIVERGENCES.

@@ -16,21 +16,27 @@ by `diff_run.compare_one`, so the stdout+exit-code verdict (LESSONS #4), the
 fail-closed timeout handling (a rust-side hang on some input is a finding, not a
 pass — LESSONS #6), and the ledger fingerprint (LESSONS #8) are exactly the same
 as the matrix differential. A divergence whose fingerprint is pinned in
-DIVERGENCES.md (`- [x] fuzz:<desc> [sha256:<hex>]: <why>`) is a known-intentional
+DIVERGENCES.md (``- [x] `fuzz:<desc>` [sha256:<hex>]: <why>``) is a known-intentional
 divergence and is suppressed — triage a fuzz finding the same way you triage a
-matrix one.
+matrix one. Quote the name: unquoted, the ledger reads every such entry as a
+case named `fuzz`, and the second one stops the run (LESSONS #54).
 
 Determinism: everything random is driven by `--seed` (default 0), so a run is
 100% reproducible and a reported finding always reproduces. The input is fuzzed
 on STDIN by default (the parse/decode surface the port must harden); fixed argv
-comes from `--args`.
+comes from `--args`, or after `--` for arguments that start with `-` (argparse
+reads `--args -v` as an option of this script).
+
+Budget: `--max-time` alone runs until the time is up; `--iterations` alone, or
+neither (1000), stops at that count; both stop at whichever comes first. A zero
+budget is refused: it fuzzes nothing and would report clean (LESSONS #54).
 
 Usage:
   diff_fuzz.py --oracle PATH --rust PATH [--seed N] [--iterations N | --max-time S]
                [--args A ...] [--seed-file F ...] [--matrix M]
                [--ledger DIVERGENCES.md] [--findings-dir DIR]
                [--timeout S] [--max-findings N] [--sort] [--mask-numbers]
-               [--ignore-exit] [--with-stderr] [--json]
+               [--ignore-exit] [--with-stderr] [--json] [-- FIXED-ARGV ...]
   diff_fuzz.py --self-test
 
 Exit: 0 = no new (unledgered) divergence; 1 = at least one finding; 2 = usage.
@@ -262,7 +268,9 @@ def _report(summary, as_json):
     if n:
         print("Triage each: fix the Rust, OR — if the C is the buggy one — pin the "
               "intentional divergence in the ledger as\n"
-              "  - [x] fuzz:<desc> [sha256:<fingerprint>]: <why + CWE>")
+              "  - [x] `fuzz:<desc>` [sha256:<fingerprint>]: <why + CWE>\n"
+              "(quote the name: unquoted, every fuzz entry is named `fuzz`, and "
+              "the second one stops the run)")
 
 
 def _self_test():
@@ -326,7 +334,10 @@ def _self_test():
         # ledger pin suppresses the whole class (reuses LESSONS #8 fingerprints):
         # every '%' input minimizes to "%", so one pin covers them all.
         led = os.path.join(d, "DIVERGENCES.md")
-        open(led, "w").write(f"- [x] fuzz:pct [sha256:{fp}]: intentional; C format bug\n")
+        # Two entries, in the quoted form the triage text prints: unquoted, both
+        # would be named `fuzz` and the second would stop load_ledger (LESSONS #54).
+        open(led, "w").write(f"- [x] `fuzz:pct` [sha256:{fp}]: intentional; C format bug\n"
+                             "- [x] `fuzz:other` [sha256:0123456789ab]: another finding\n")
         opts_l = dict(base_opts); opts_l["ledger"] = led; opts_l["max_findings"] = 5
         summary = fuzz(oracle, rust, opts_l)
         check("ledger-pinned divergence is suppressed",
@@ -373,16 +384,54 @@ def _self_test():
         check("matrix seeding picks up a `stdin_b64` case's raw bytes",
               raw in got and b"plain" in got)
 
+    # The budget (LESSONS #54, from the lsof line's entry 084). A default of
+    # 1000 iterations stopped every timed run at 1000 inputs: the CI template's
+    # nightly `--max-time 1800` ran for seconds.
+    check("--max-time alone sets no iteration cap", _budget(None, 1800) == (None, 1800))
+    check("no budget at all means 1000 iterations", _budget(None, None) == (1000, None))
+    check("--iterations alone is kept", _budget(5, None) == (5, None))
+    check("a zero or negative budget is refused",
+          all(_budget(i, t) is None for i, t in [(0, None), (None, 0), (-1, 10), (10, -1)]))
+    # Fixed arguments that start with `-` (a command-line tool's) go after `--`.
+    check("fixed arguments that start with `-` go after `--`",
+          _split_fixed(["--oracle", "o", "--", "-a", "-p", "1"])
+          == (["--oracle", "o"], ["-a", "-p", "1"]))
+    check("no `--`: nothing is fixed", _split_fixed(["--oracle", "o"]) == (["--oracle", "o"], []))
+
     print("\nself-test:", "OK" if ok else "FAILED")
     return 0 if ok else 1
 
 
+def _budget(iterations, max_time):
+    """(iterations, max_time) to run with, or None for a budget that fuzzes
+    nothing. `--max-time` alone runs for its time: a default iteration count
+    used to stop every timed run at 1000 inputs (LESSONS #54)."""
+    if iterations is None and max_time is None:
+        iterations = 1000
+    if (iterations is not None and iterations <= 0) or \
+            (max_time is not None and max_time <= 0):
+        return None
+    return iterations, max_time
+
+
+def _split_fixed(argv):
+    """(this script's arguments, the fixed argv after `--`). argparse cannot take
+    `--args -a -p 1`: it reads `-a` as an option here, so a command-line tool's
+    fixed arguments were impossible to pass."""
+    if "--" in argv:
+        i = argv.index("--")
+        return argv[:i], argv[i + 1:]
+    return argv, []
+
+
 def main(argv=None):
+    argv, fixed = _split_fixed(list(sys.argv[1:] if argv is None else argv))
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--oracle", help="C reference binary (or golden-replay wrapper)")
     ap.add_argument("--rust", help="Rust binary under test")
     ap.add_argument("--seed", type=int, default=0, help="PRNG seed (reproducible runs)")
-    ap.add_argument("--iterations", type=int, default=1000, help="max inputs to try")
+    ap.add_argument("--iterations", type=int, default=None,
+                    help="max inputs to try (1000 when no --max-time is given)")
     ap.add_argument("--max-time", type=float, default=None, help="wall-clock budget (s); stops with --iterations, whichever first")
     ap.add_argument("--args", nargs="*", default=[], help="fixed argv passed to both binaries")
     ap.add_argument("--seed-file", nargs="*", dest="seed_files", default=[], help="seed corpus files")
@@ -406,9 +455,12 @@ def main(argv=None):
         ap.print_usage(sys.stderr)
         print("error: --oracle and --rust are required (or --self-test)", file=sys.stderr)
         return 2
-    if args.max_time is None and args.iterations is None:
-        print("error: give --iterations or --max-time", file=sys.stderr)
+    budget = _budget(args.iterations, args.max_time)
+    if budget is None:
+        print("error: a zero budget fuzzes nothing, and would report clean", file=sys.stderr)
         return 2
+    args.iterations, args.max_time = budget
+    args.args = list(args.args) + fixed
 
     opts = dict(seed=args.seed, iterations=args.iterations, max_time=args.max_time,
                 args=args.args, seed_files=args.seed_files, matrix=args.matrix,

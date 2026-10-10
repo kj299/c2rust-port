@@ -1,12 +1,17 @@
-# Safety-first CI for a C-to-Rust port. Copy to .github/workflows/ci.yml and tune.
+# Safety-first CI for a C-to-Rust port. Copy to .github/workflows/porting-ci.yml
+# (the name its own path filters below watch) and tune.
 # The matrix is organized around SAFETY GATES, not OS coverage — the point of the
 # rewrite is safety, so the pipeline centers on proving it. Keep a small OS row if
 # your port is cross-platform; it is not the focus.
 #
-# Gates (each PLAYBOOK Phase 4 / cross-cutting control):
-#   build+test | clippy -D warnings | unsafe-audit (HARD FAIL) | miri |
-#   sanitizers | fuzz smoke (+ nightly deep) | supply-chain (audit + deny) |
-#   cargo-vet | SBOM | secret-scan (gitleaks) | differential (+ diff-fuzz)
+# Gates (PLAYBOOK Phase 4 and CLAUDE.md's control table). Every control CLAUDE.md
+# declares is invoked below, and the kit's `make check-kit` runs control-coverage
+# over this file, so a control added there and not wired here fails the kit
+# (LESSONS #54):
+#   build+test | clippy -D warnings | unsafe contained + documented (HARD FAIL) |
+#   threat model + C-flaw scan + API coverage + control coverage | miri | asan |
+#   fuzz smoke (+ nightly deep) | supply-chain (audit + deny) | cargo-vet | SBOM |
+#   secret-scan (gitleaks) | differential (+ diff-fuzz, oracle-sanitize, perf)
 #
 # Supply-chain hygiene baked in (OPERATING-GUIDE §3): every `uses:` is pinned by
 # commit SHA (a tag is mutable supply chain) with the human version in a trailing
@@ -80,11 +85,14 @@ jobs:
         with: { persist-credentials: false }
       - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
         with: { python-version: "3.11" }
-      # Fails the build if ANY `unsafe {}` block lacks a // SAFETY: comment.
+      # Contained first: fails unless `core` forbids `unsafe_code` on every target
+      # root, in a form rustc applies (LESSONS #46). Name each crate that must.
+      - run: python3 porting-kit/harnesses/unsafe-audit/check_forbid_unsafe.py crates/core
+      # Then documented: fails if ANY `unsafe {}` block lacks a // SAFETY: comment.
       - run: python3 porting-kit/harnesses/unsafe-audit/audit_unsafe.py crates/
 
-  threat-model:
-    name: threat-model (must be filled in, not the shipped template)
+  phase-0-controls:
+    name: threat model, C-flaw scan, API coverage, control coverage
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -96,6 +104,22 @@ jobs:
       # missing file, a missing required section, or a leftover <placeholder> —
       # so a port cannot cut over still carrying the skeleton's blank.
       - run: python3 porting-kit/harnesses/threat-model/check_threat_model.py THREAT-MODEL.md
+      # Re-run the flaw scan on the C actually ported, every run, not once at
+      # Phase 0: a source added later would arrive un-triaged (LESSONS #31). On
+      # the C, not `--self-test`, which runs the scanner on its own fixtures
+      # (LESSONS #54). Point it at the C sources the port reads.
+      - run: python3 porting-kit/harnesses/c-flaw-scan/scan_c_flaws.py c/
+      # Every exported symbol accounted for (LESSONS #34/#35): one --header per
+      # public header, all in one run against one manifest.
+      - run: >
+          python3 porting-kit/harnesses/api-coverage/check_api.py
+          --header c/<lib>.h --manifest API-COVERAGE.md
+      # The gate above the gates: every control CLAUDE.md declares is invoked
+      # by this workflow (LESSONS #31). It reads this file, so dropping a step
+      # above turns it red.
+      - run: >
+          python3 porting-kit/harnesses/control-coverage/check_controls.py
+          --controls porting-kit/CLAUDE.md --gate .github/workflows/porting-ci.yml
 
   miri:
     name: miri (UB in unsafe)
@@ -111,20 +135,21 @@ jobs:
       - run: cargo +nightly miri test
 
   sanitizers:
-    name: sanitizers (asan + ubsan)
+    name: sanitizers (asan)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with: { persist-credentials: false }
-      # rust-src is REQUIRED: run_sanitizers.sh uses `-Zbuild-std`, which
-      # rebuilds the standard library from source; without the component the
-      # job fails on first use (and an always-red gate gets deleted, not fixed).
+      # Nightly for -Zsanitizer. run_sanitizers.sh does not rebuild std (LESSONS
+      # #22 dropped -Zbuild-std); rust-src is kept for a port that adds it to get
+      # an instrumented std, which fails on first use without the component.
       - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master
         with: { toolchain: nightly, components: rust-src }
       # Like miri: whole workspace per-PR here; scope to changed crates on PR and
       # keep the full sweep nightly once the tree is large enough to matter.
+      # rustc has no UB sanitizer: the harness's `ubsan` mode runs Miri, which
+      # the miri job above already does. ASan is the one for the FFI layer.
       - run: bash porting-kit/harnesses/sanitizers/run_sanitizers.sh asan .
-      - run: bash porting-kit/harnesses/sanitizers/run_sanitizers.sh ubsan .
 
   fuzz:
     name: fuzz (60s smoke per-PR; deep nightly)
@@ -237,10 +262,19 @@ jobs:
             --oracle ./c-oracle --rust ./target/release/<binary> \
             --matrix porting-kit/harnesses/differential/input-matrix.example.toml \
             --ledger DIVERGENCES.md --findings-dir fuzz-findings $FUZZ
-          # Performance gate: fail a case >1.3x the C median (a perf bug, not the
-          # cost of Rust). Give matrix cases a real workload or they read UNMEASURABLE.
-          python3 porting-kit/harnesses/perf/perf_gate.py \
+          # Performance gate: a case >1.3x the C median is a perf bug, not the
+          # cost of Rust. Give matrix cases a real workload or they read
+          # UNMEASURABLE. `--warn`: advisory on shared runners, whose timing
+          # noise perf_gate.py itself warns about; drop it on a dedicated runner.
+          python3 porting-kit/harnesses/perf/perf_gate.py --warn \
             --oracle ./c-oracle --rust ./target/release/<binary> \
+            --matrix porting-kit/harnesses/differential/input-matrix.example.toml
+          # The C driver is code this port wrote (LESSONS #40): drive every case
+          # through a sanitized twin of the oracle (same sources, plus
+          # -fsanitize=address,undefined); a memory error there changes no stdout.
+          # ./build-c-oracle-asan.sh   # your C build, sanitized
+          python3 porting-kit/harnesses/oracle-sanitize/sanitize_oracle.py \
+            --oracle ./c-oracle-asan \
             --matrix porting-kit/harnesses/differential/input-matrix.example.toml
           # For a C-ABI LIBRARY port, run a function-level differential instead of the
           # whole-program one above — either main's driver-based cando:

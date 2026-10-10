@@ -74,7 +74,7 @@ Usage:
               [--c-symbols FILE] [--rust-symbols FILE] [--timeout SEC] [--json]
   lib_diff.py --self-test
 Exit: 0 = all MATCH or all divergences ledgered; 1 = an unexplained DIVERGE, a
-CRASH, a TIMEOUT, or a call ERROR.
+CRASH, a TIMEOUT, a call ERROR, or a LEDGER-STALE entry.
 """
 from __future__ import annotations
 
