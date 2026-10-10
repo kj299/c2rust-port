@@ -67,8 +67,9 @@ slice copies with checked lengths). Grouped by why the C is (or isn't) currently
   checks above it*. Rust: `Option<&str>` + owned `String` reassignment; both the
   length dance and the NULL check vanish.
 
-**None of the 17 is a live bug in v1.7.18.** Each is a place where C safety rests
-on a manual invariant; the port's value is making that invariant structural.
+**None of the 17 is a live bug in v1.7.18.** [Corrected 2026-10-10: one is — the
+cJSON.c:418 `strcpy` is L4 below, an overlapping copy.] Each is a place where C
+safety rests on a manual invariant; the port's value is making that invariant structural.
 Every one that produces byte-identical output needs **no** `DIVERGENCES.md` entry;
 any that changes output (e.g. number formatting) gets one.
 
@@ -91,7 +92,8 @@ over **all** of `c/` on every gate run, and `control-coverage` fails if it doesn
   `/` + encoded key + target + NUL. Both are **exact-fit** manual sizing (the `20`
   is `log10(2^64)`), correct but with zero slack — one more byte in the format
   string would be an overflow. Not reached by the port's surface anyway
-  (`FindPointerFromObjectTo` is not ported).
+  (`FindPointerFromObjectTo` is not ported). [Corrected 2026-10-10: it is now —
+  driver mode `findptr`, see `API-COVERAGE.md`.]
 - **Patch-path `sprintf` (:1122, :1188, :1203, :1248)** — `create_patches` /
   `compose_patch`, the code module 9 **does** port. Same exact-fit pattern:
   `malloc(path_len + suffix_len + sizeof("/"))` for `"%s/"` + encoded suffix, and
@@ -121,8 +123,8 @@ only contains what a regex can see is measuring the regex.
 
 | # | Where | Class | Status |
 |---|---|---|---|
-| L1 | `cJSON_CreateNumber` (cJSON.c:2471) | **CWE-758**, reliance on undefined behavior: `(int)num` on a NaN. C17 6.3.1.4p1 — and target-dependent in fact (INT_MIN on x86-64, 0 on AArch64), not merely in theory | **Found + ledgered**, module 11. Port takes the defined answer (0). `DIVERGENCES.md create-number-nan-valueint`, 5 pinned rows |
-| L2 | `cJSON_DetachItemViaPointer` (cJSON.c:2231) | **CWE-476**, NULL-pointer WRITE. No check that `item` is a child of `parent`; an empty parent plus a last-of-another-list item writes through `parent->child` | **Found + reproduced** (`spikes/detach_null_write.c`, ASan SEGV). Not yet ported — see `MUTATION-API-SPIKE.md` |
+| L1 | `cJSON_CreateNumber` (cJSON.c:2471) | **CWE-758**, reliance on undefined behavior: `(int)num` on a NaN. C17 6.3.1.4p1 — and target-dependent in fact (INT_MIN on x86-64, 0 on AArch64), not merely in theory | **Found + ledgered**, module 11. Port takes the defined answer (0). `DIVERGENCES.md construct-nan-*`, 5 pinned rows |
+| L2 | `cJSON_DetachItemViaPointer` (cJSON.c:2231) | **CWE-476**, NULL-pointer WRITE. No check that `item` is a child of `parent`; an empty parent plus a last-of-another-list item writes through `parent->child` | **Found + reproduced** (`spikes/detach_null_write.c`, ASan SEGV). Not ported: a recorded **out-of-scope** refusal (`API-COVERAGE.md`) — see `MUTATION-API-SPIKE.md` |
 | L3 | same | **CWE-787**-adjacent silent state corruption: the same write splices a pointer from one document's list into another's last-item cache. No error; the damage appears on a *later, unrelated* call, which then appends to the wrong document | **Found + reproduced** (`spikes/detach_cross_document.c`, `detach_corruption_cashes_in.c`). Drives the mutation module's design |
 | L4 | `cJSON_SetValuestring` (cJSON.c:418) | **CWE-758**, reliance on undefined behavior: an OVERLAPPING `strcpy`. The "new is no longer than old" fast path is `strcpy(object->valuestring, valuestring)` with nothing stopping `valuestring` pointing into that same buffer — `cJSON_SetValuestring(item, item->valuestring + 2)` is a plausible in-place prefix strip, and C17 7.24.2.3 makes overlapping copies undefined | **Found + reproduced** (`spikes/setvaluestring_alias.c`, ASan `strcpy-param-overlap`). Port ships module 12: the signature takes `&mut Value` plus a separate slice, so the aliasing is a compile error. `DIVERGENCES.md`, "Structural eliminations" |
 | L5 | `cJSON_SetNumberHelper` (cJSON.c:384) | **CWE-843**, type confusion: writes `valueint`/`valuedouble` with **no type check**, leaving a `cJSON_String` node that carries a number. Public struct fields, so it is observable — and it outlives the call. Plus **CWE-476**: the exported symbol has no NULL check (only the `cJSON_SetNumberValue` macro does), and **CWE-758** again, the same `(int)NaN` cast as L1 | **Found + ledgered**, module 12. Port makes the state unrepresentable. `DIVERGENCES.md set-*-type-confusion` (6 pinned rows) and `set-nan-*` (4 pinned rows); the NULL-deref is a structural elimination |
@@ -147,7 +149,9 @@ Phase 0 concluded **preserve-and-harden, not fix-a-live-bug**, and that was an
 accurate reading *of what Phase 0 could see*. Four modules later it is no longer
 true: L1, L4 and L5 are live UB / type-confusion defects the port deliberately
 diverges from or designs out, and L2/L3 are live memory-safety defects in code
-the port has not reached yet. The correction matters more than the conclusion
+the port has not reached yet. [Corrected 2026-10-10: reached since, and refused —
+`cJSON_DetachItemViaPointer` is a recorded out-of-scope entry in `API-COVERAGE.md`,
+so the port never exposes it.] The correction matters more than the conclusion
 did — **"no live bugs" was a statement about the scan's reach, and it survived as
 a statement about the library** until something actually exercised the code.
 

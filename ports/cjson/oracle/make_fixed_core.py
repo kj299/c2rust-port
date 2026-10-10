@@ -32,7 +32,7 @@ source, compiled from the same C, answers differently per target.
 
 The port takes Rust's `as` cast, which is *defined* to saturate and to map NaN
 to 0 — i.e. the port picks the defined answer, which happens to be the one the C
-already gives on AArch64. DIVERGENCES.md `create-number-nan-valueint` records
+already gives on AArch64. DIVERGENCES.md `construct-nan-*` records
 that decision, and `matrix-construct.json` pins it against the PRISTINE oracle
 so the divergence is asserted, not assumed.
 
@@ -560,7 +560,7 @@ def main():
         " * Changes: cJSON_CreateNumber's and cJSON_SetNumberHelper's NaN->int\n"
         " * conversions, cJSON_SetNumberHelper's missing type check, and\n"
         " * cJSON_PrintPreallocated's partial write on failure\n"
-        " * (DIVERGENCES.md create-number-nan-valueint, set-number-nan-valueint,\n"
+        " * (DIVERGENCES.md construct-nan-*, set-nan-*,\n"
         " * set-*-type-confusion, opts-prealloc-*). */\n"
     )
     open(OUT, "w", encoding="utf-8").write(banner + text)

@@ -15,10 +15,14 @@ oracle is at gate 2 of 6, not done.
    the rest of this list is even being executed):
    `python3 porting-kit/harnesses/control-coverage/check_controls.py --controls
    porting-kit/CLAUDE.md --gate <port>/check.sh` → must be 0 unwired.
-   At the cJSON cutover three of six controls below — supply-chain, c-flaw-scan
-   and threat-model, two of them "hard fail" — were in this list and in the
-   mutation sweep, yet the port's gate script never called any of them
+   At the cJSON cutover three of the six script-backed controls — supply-chain,
+   c-flaw-scan and threat-model, two of them "hard fail" — were declared and in
+   the mutation sweep, yet the port's gate script never called any of them
    (LESSONS #31). Reading a gate script cannot show you an absence; ask the tool.
+   Then the Phase-0 controls, re-run on what is ported now:
+   `python3 porting-kit/harnesses/threat-model/check_threat_model.py THREAT-MODEL.md`
+   (hard fail) and `python3 porting-kit/harnesses/c-flaw-scan/scan_c_flaws.py <c-src-dirs>`
+   — a hit the committed flaw record lacks is new C to triage.
    Then: `python3 porting-kit/harnesses/api-coverage/check_api.py --header <c.h>
    [--header <c2.h> ...] --manifest API-COVERAGE.md` → every exported symbol
    `ported`, or `unported`/`out-of-scope` with a written reason and within the
@@ -42,12 +46,16 @@ oracle is at gate 2 of 6, not done.
    gate catches.) Plus `cargo clippy --all-targets -- -D warnings -D
    clippy::missing_safety_doc -D clippy::undocumented_unsafe_blocks`.
 2. **No UB:** `bash porting-kit/harnesses/sanitizers/run_sanitizers.sh all .`
-   (Miri + ASan/UBSan; TSan for threaded code — the class that hides the hang bugs.)
+   (`all` = Miri + ASan; rustc has no UBSan, so the `ubsan` mode runs Miri. Run
+   `tsan` explicitly for threaded code — the class that hides the hang bugs.)
 3. **No panic on input:** `cargo fuzz list` then a 60s smoke per target. Any crash blocks.
 4. **Clean supply chain:** `bash porting-kit/harnesses/supply-chain/run_supply_chain.sh .`
    (`cargo audit` + `cargo deny`: no advisories, licenses allow-listed, crates.io-only.)
 5. **No silent drift:** the differential shows MATCH or a ledgered divergence
-   (`diff_run.py ... --ledger DIVERGENCES.md`).
+   (`diff_run.py ... --ledger DIVERGENCES.md`), and the C driver the port wrote
+   is memory-clean over the same cases:
+   `python3 porting-kit/harnesses/oracle-sanitize/sanitize_oracle.py --oracle <asan-oracle> --matrix <m>`
+   (LESSONS #40).
 6. **Least privilege / no secrets / signed build / current threat model** — walk the
    per-release section of `SECURITY-CHECKLIST.md`.
 7. **Performance sanity:**

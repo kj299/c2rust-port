@@ -82,7 +82,7 @@ Format:
   attacker-supplied bits until `dom-construct` did (LESSONS #26 yet again).
   `cJSON_SetNumberHelper` (cJSON.c:396) carries the same cast and is the third
   route; it landed with `dom-mutate-set` and is ledgered as
-  `set-number-nan-*` below.
+  `set-nan-*` below.
 
   Because the class is predicate-defined (*every* NaN, and 8 random bytes are a
   NaN about once in 2048), it cannot be pinned case-by-case for the FUZZER — so
@@ -352,7 +352,10 @@ the port diverges and the divergence is judged an intentional fix-of-C-defect.
   document is usually an attack or a bug). If it does, the `trailing-garbage-lax`
   vector will DIVERGE (Rust rc 1 vs C rc 0) and must be ledgered here as an
   intentional strictness improvement — OR the port matches C's laxness and no
-  entry is needed. **Decision deferred to the `entry-minify` module.**
+  entry is needed. **Decided: the port matches C's laxness** (`parse.rs`,
+  `trailing_bytes_are_lax_like_c`), so no entry — `trailing-garbage-lax` is a
+  MATCHING case in `matrix-ported.json`. [Corrected 2026-10-10: this read
+  "Decision deferred to the `entry-minify` module", which has long since closed.]
 
 - **Number re-formatting.** `print_number` uses `%1.15g`/`%1.17g` with a
   round-trip check (cJSON.c:553–620). If Rust's float formatting produces

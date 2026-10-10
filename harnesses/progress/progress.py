@@ -183,11 +183,13 @@ def _clean_unsafe(rep):
     # actually audited. A 0-of-0 report means the gate found NOTHING to check
     # (a forbid-unsafe crate, or the wrong path) — that is not evidence of a
     # clean unsafe surface and must not advance the gate (LESSONS #18).
-    # `blocks_found` is absent in pre-#18 reports; those fall back to the old
-    # rule rather than silently failing an existing port's ingest.
+    # The blocks are counted from the two fields audit_unsafe.py emits. This
+    # used to read a `blocks_found` key that the harness never wrote, with a
+    # default of 1, so every real 0-of-0 report advanced (LESSONS #54).
     if not isinstance(rep, dict) or rep.get("undocumented", 1) != 0:
         return False
-    return rep.get("blocks_found", 1) > 0
+    documented = rep.get("documented")
+    return isinstance(documented, int) and documented > 0
 
 
 def _clean_verdicts(rep):
@@ -348,9 +350,9 @@ def _self_test():
         # ingest: exact-stem matching only, and only from `sanitized`
         cmd_set(p, "handles", "sanitized")
         rep = os.path.join(d, "handles.json")
-        wdict(rep, {"undocumented": 0})
+        wdict(rep, {"documented": 3, "undocumented": 0})
         stray = os.path.join(d, "sockets-extra.json")  # substring trap
-        wdict(stray, {"undocumented": 0})
+        wdict(stray, {"documented": 3, "undocumented": 0})
         cmd_set(p, "sockets", "sanitized")
         cmd_ingest(p, [rep, stray], repo_sha=None)
         st = load(p)
@@ -439,19 +441,39 @@ def _self_test():
               and load(p3)["modules"]["codec"] == "differential")
 
         # LESSONS #18: a 0-of-0 unsafe report is NOT evidence — it must not
-        # advance `unsafe_audited`. (A pre-#18 report without the key still
-        # advances, so an existing port's ingest doesn't break.)
+        # advance `unsafe_audited`. The reports are the real harness's output,
+        # not hand-written dicts: these fixtures used to carry a `blocks_found`
+        # key that audit_unsafe.py never wrote, so the guard passed here and let
+        # every real 0-of-0 report through (LESSONS #54).
+        import subprocess
+        audit = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             "..", "unsafe-audit", "audit_unsafe.py")
+
+        def audited(src):
+            crate = tempfile.mkdtemp(dir=d)
+            with open(os.path.join(crate, "lib.rs"), "w") as fh:
+                fh.write(src)
+            out = subprocess.run([sys.executable, audit, crate, "--json"],
+                                 capture_output=True, text=True).stdout
+            rep = json.loads(out)
+            rep.pop("provenance", None)
+            return rep
+
         p5 = os.path.join(d, "p5.json")
         cmd_init(p5, ["m"])
         cmd_set(p5, "m", "sanitized")
-        wdict(pv5 := os.path.join(d, "m.json"),
-              {"undocumented": 0, "blocks_found": 0})
+        wdict(pv5 := os.path.join(d, "m.json"), audited("fn safe_only() {}\n"))
         buf = _io.StringIO()
         with contextlib.redirect_stderr(buf):
             cmd_ingest(p5, [pv5], repo_sha=None)
-        check("a 0-of-0 unsafe report does NOT advance unsafe_audited",
+        check("a 0-of-0 unsafe report (audit_unsafe.py's own) does NOT advance unsafe_audited",
               load(p5)["modules"]["m"] == "sanitized")
-        wdict(pv5, {"undocumented": 0, "blocks_found": 33})
+        wdict(pv5, {"undocumented": 0})
+        with contextlib.redirect_stderr(buf):
+            cmd_ingest(p5, [pv5], repo_sha=None)
+        check("a report with no `documented` count does NOT advance",
+              load(p5)["modules"]["m"] == "sanitized")
+        wdict(pv5, audited("// SAFETY: ok\nunsafe { f(); }\n"))
         cmd_ingest(p5, [pv5], repo_sha=None)
         check("an unsafe report that audited real blocks DOES advance",
               load(p5)["modules"]["m"] == "unsafe_audited")

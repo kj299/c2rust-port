@@ -14,8 +14,8 @@ ratio is rust_median / oracle_median per case.
 
 Measurement honesty: a case whose oracle median is below `--floor-ms` (default 3)
 is dominated by process-spawn overhead, not the work under test — its ratio is
-noise, so it is reported as UNMEASURABLE (not a pass, not a fail) and you are told
-to give it a bigger workload. Silent truncation reads as coverage; this doesn't.
+noise, so it is reported as UNMEASURABLE — a failure, never a pass — and you are
+told to give it a bigger workload. Silent truncation reads as coverage; this doesn't.
 
 Wall-clock honesty (RETROSPECTIVE-kit-audit.md §6 item 5): this gate times wall
 clock on whatever machine runs it, and a shared/noisy CI runner can push a real

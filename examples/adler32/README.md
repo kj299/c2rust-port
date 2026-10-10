@@ -27,9 +27,10 @@ recorded as an intentional fix-of-C-defect in the divergence ledger.
 | `lib_diff` | the complementary ctypes differential: same overflow, caught the same way |
 | `golden` | capture with `--validate` + `--holdout`; iteration excludes the held-out vector, `--final` runs it |
 | `diff_run` | the executable path (C CLI vs Rust CLI) |
-| `perf_gate` | 5 MB workload, Rust well under the 1.3× budget (`--floor-ms` keeps it honest) |
+| `perf_gate` | 5 MB workload, Rust well under the 1.3× budget (`--floor-ms` keeps it honest); advisory here (`--warn`) |
 | `diff-fuzz` | small-input space, 0 findings |
-| `progress` | ingests the `--json` reports to auto-advance `ported → … → unsafe_audited` |
+| `run_sanitizers miri` | Miri over the Rust crate when nightly + miri is installed; a loud SKIP otherwise |
+| `progress` | ingests the `--json` reports to auto-advance `ported → … → unsafe_audited`; without a Miri report it stops at `fuzzed` |
 
 ## The lesson it teaches
 

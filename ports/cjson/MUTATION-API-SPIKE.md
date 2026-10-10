@@ -161,7 +161,7 @@ it must be *recorded* as one, not silently absent.
 ### H5 — `cJSON_SetNumberHelper` carries the same NaN→`int` UB already ledgered
 
 Identical saturation block to `cJSON_CreateNumber` (cJSON.c:396 vs :2471).
-`DIVERGENCES.md create-number-nan-valueint` covered the construction site and
+`DIVERGENCES.md construct-nan-*` covered the construction site and
 explicitly deferred this one; `oracle/make_fixed_core.py` deliberately did **not**
 patch it, because patching code no module exercises adds an unverified branch to
 the reference oracle (LESSONS #31).

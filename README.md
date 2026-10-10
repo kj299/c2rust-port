@@ -17,14 +17,13 @@ vulnerability. Maximize safety controls.
 |---|---|
 | Understand the whole process | [`PLAYBOOK.md`](PLAYBOOK.md) (≤400 lines) |
 | Run a port well (tokens, efficiency, security, backlog) | [`OPERATING-GUIDE.md`](OPERATING-GUIDE.md) |
-| Lift this kit into its own repo over SSH (two git commands) | [`scripts/lift-to-c2rust-port.sh`](scripts/lift-to-c2rust-port.sh) |
 | Kick off a new port | paste [`PROMPTS/00-new-port-kickoff.md`](PROMPTS/00-new-port-kickoff.md) |
 | Port one module | paste [`PROMPTS/10-module-port.md`](PROMPTS/10-module-port.md) |
 | Close a port & improve the kit | paste [`PROMPTS/90-retrospective.md`](PROMPTS/90-retrospective.md) |
 | Lay out the workspace | copy [`skeleton/`](skeleton/); see [`ARCHITECTURE-TEMPLATE.md`](ARCHITECTURE-TEMPLATE.md) |
 | The control ledger | [`SECURITY-CHECKLIST.md`](SECURITY-CHECKLIST.md) |
-| See a real port through every gate | run [`examples/adler32/run.sh`](examples/adler32/run.sh) (needs cc + cargo) |
-| How the kit got to v1.0, and what's next | [`RETROSPECTIVE-kit-v1.md`](RETROSPECTIVE-kit-v1.md) (retrospective + the v1.x plan) |
+| Watch a tiny real library port go through the kit's harnesses | run [`examples/adler32/run.sh`](examples/adler32/run.sh) (needs cc + cargo; nightly + miri to earn `sanitized`) |
+| How the kit got to v1.0 | [`RETROSPECTIVE-kit-v1.md`](RETROSPECTIVE-kit-v1.md) (dated; its v1.x plan has since been carried out) |
 | Standing rules for any kit repo | [`CLAUDE.md`](CLAUDE.md) |
 
 ## Skills (invokable wrappers over the kit)
@@ -62,17 +61,21 @@ repo-root `porting-kit/`; adjust the paths inside if you vendor it elsewhere).
 | `harnesses/perf/perf_gate.py` | fail a module >1.3× the C median runtime (a perf bug, not "the cost of Rust"); NOISY when repeats disagree; `--warn` advisory mode for shared/noisy runners | CI (advisory on shared runners) |
 | `harnesses/golden/golden.py` | capture/version/replay the oracle; flag oracle nondeterminism | CI |
 | `harnesses/fuzz/gen_fuzz_target.sh` | scaffold a cargo-fuzz target per module | CI smoke + nightly |
-| `harnesses/sanitizers/run_sanitizers.sh` | Miri / ASan / UBSan / TSan over the unsafe layer | CI |
+| `harnesses/sanitizers/run_sanitizers.sh` | Miri / ASan / TSan over the unsafe layer (`ubsan` runs Miri: rustc has no UB sanitizer); `--json` feeds the `sanitized` rung | CI |
 | `harnesses/supply-chain/run_supply_chain.sh` | `cargo audit` + `cargo deny` | CI |
-| `harnesses/c-flaw-scan/scan_c_flaws.py` | find C vuln classes *before* porting | Phase 0 |
+| `harnesses/c-flaw-scan/scan_c_flaws.py` | find C vuln classes *before* porting, and re-run on the C every gate | Phase 0 + every gate |
 | `harnesses/threat-model/check_threat_model.py` | the threat model must be filled in, not the shipped blank | Phase 0 + CI |
+| `harnesses/api-coverage/check_api.py` | every exported symbol of every public header is `ported`, or recorded as out of scope with a reason | **hard-fail CI** |
+| `harnesses/control-coverage/check_controls.py` | every control `CLAUDE.md` declares is invoked by the port's gate (a `--self-test` or `--check` run is not the control) | **hard-fail CI** |
+| `harnesses/oracle-sanitize/sanitize_oracle.py` | drive every matrix case through a sanitized build of the C oracle: its driver is code the port wrote | CI |
+| `harnesses/probe/probe.py` | pin the C's bytes for a module's edge cases and generate the Rust test expectations from them; `coverage` fails a module with no probes | port gate |
 | `harnesses/progress/progress.py` | per-module status table incl. safety gates | tracking |
 | `harnesses/doc-check/check_doc_flags.py` | doc'd harness flags must exist (anti-drift) | `check-kit` |
 | `harnesses/lessons/check_lesson_refs.py` | every `LESSONS #N` citation — lists and ranges expanded — names an entry that exists; entries unique, contiguous, and in the one heading form it reads. Brought back from the lsof line, which had it for months while nothing here checked a citation at all | `check-kit` |
 | `harnesses/doc-check/check_lessons_pinned.py` | every lesson that amends a harness stays cited/pinned there; an unrecognised `Section amended (…)` spelling fails instead of dropping the entry's obligations, and `--also-scan DIR` reaches the host repo when the kit is vendored | `check-kit` |
-| `harnesses/gate-mutation/mutate_gates.py` | break each gate's verdict on purpose; its self-test must go red (self-verifying gate set). Every decision in a verdict function is also forced both ways; one the self-test misses fails unless `unpinned.jsonl` names it with a reason, and that ledger only shrinks (LESSONS #48). A ledger line is called stale only when a second run, alone, repeats the kill; one that does not is reported as UNSTABLE, with the self-test's output (LESSONS #52) | `check-kit` |
+| `harnesses/gate-mutation/mutate_gates.py` | break each gate's verdict on purpose; its self-test must go red (self-verifying gate set). Every decision in a Python verdict function is also forced both ways; one the self-test misses fails unless `unpinned.jsonl` names it with a reason, and that ledger only shrinks (LESSONS #48). A ledger line whose decision now fails its self-test is called stale only when a second run, alone, repeats the kill; one that does not is reported as UNSTABLE, with the self-test's output (LESSONS #52) | `check-kit` |
 | `harnesses/skeleton-check/check_skeleton.sh` | the skeleton passes the gates it ships (fmt/clippy/build/test) | `check-kit` (toolchain-optional) |
-| `harnesses/ci/porting-ci.template.yml` | wires all gates into GitHub Actions | — |
+| `harnesses/ci/porting-ci.template.yml` | GitHub Actions for a port: invokes every control `CLAUDE.md` declares | `check-kit` (control-coverage) |
 
 ```
 make check-kit      # smoke-test every harness (python3 + bash only, no toolchain)

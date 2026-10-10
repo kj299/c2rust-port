@@ -26,9 +26,10 @@ Fail-closed choices worth stating:
   * A binary that produces no sanitizer output on ZERO cases proves nothing
     (LESSONS #18's 0-of-0 shape). An empty case set is an error.
   * The sanitized binary must actually be sanitized: a build that silently
-    dropped `-fsanitize` would report clean forever. `--require-instrumented`
-    (default on) checks the binary for the sanitizer runtime and refuses one
-    that has none, so pointing this at the PLAIN oracle fails loudly.
+    dropped `-fsanitize` would report clean forever. By default this checks the
+    binary for the sanitizer runtime and refuses one that has none, so pointing
+    this at the PLAIN oracle fails loudly (`--no-require-instrumented` turns the
+    check off).
   * A case's exit status is ignored on purpose. Oracles legitimately exit
     nonzero (a parse failure is rc 1); the verdict is the sanitizer's, not the
     program's.

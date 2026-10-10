@@ -11,9 +11,11 @@ directive "the C may be buggy — don't re-port a CVE" (RETROSPECTIVE §9).
 ## Procedure
 1. **Scan** the C tree:
    `python3 porting-kit/harnesses/c-flaw-scan/scan_c_flaws.py <c-src-dirs>`
-   Categories: unbounded-copy (CWE-120), format-string (CWE-134),
-   int-overflow-mul (CWE-190), command-exec (CWE-78), toctou (CWE-367),
-   stack-vla-alloca (CWE-770).
+   Categories: unbounded-copy (CWE-120), strncpy-noterm (CWE-170),
+   format-string (CWE-134), snprintf-truncation (CWE-252), stack-vla-alloca
+   (CWE-770; `alloca` only), int-overflow-mul (CWE-190), command-exec (CWE-78),
+   toctou (CWE-367), use-after-free (CWE-416), double-free (CWE-415),
+   uninitialized-read (CWE-457) — the scanner's docstring is the source.
 2. **Check signal-to-noise before trusting it** (LESSONS #2 — this exact tool once
    produced 828 false format-string positives on lsof, burying ~215 real
    candidates, until it was fixed to locate the true format-position argument).

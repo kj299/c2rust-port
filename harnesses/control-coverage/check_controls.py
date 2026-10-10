@@ -35,6 +35,8 @@ Mechanics (deliberately conservative, format-driven):
     `# TODO: wire run_sanitizers.sh here` comment certified the sanitizer
     control as RUN until LESSONS #45; the vendored copy in the lsof line had
     fixed that and the fix never came back here.
+  * ...in an invocation that is not its own self-test: `x.py --self-test` and
+    `x.sh --check` run x on x's fixtures, not on the port (LESSONS #54).
   * Exemptions must be written down: `# control-coverage: exempt <path> -- <why>`
     in a gate file records a deliberate non-use with its reason. (An exemption
     IS a comment by design, so exemptions are read from the raw text.)
@@ -45,7 +47,8 @@ missing script is exactly how this would quietly pass.
 Usage:
   check_controls.py --gate PORT/check.sh [--gate ...] [--controls CLAUDE.md] [--json]
   check_controls.py --self-test
-Exit: 0 = every declared control is invoked (or exempted); 1 = one is not.
+Exit: 0 = every declared control is invoked (or exempted); 1 = one is not;
+      2 = a gate file that does not exist, or a controls doc with no table.
 """
 from __future__ import annotations
 
@@ -162,12 +165,39 @@ def executable_text(text):
     return "\n".join(keep)
 
 
+# An invocation that runs a harness on its own fixtures rather than on the port.
+_SELF_TEST = re.compile(r"\s--(?:self-test|check)\b")
+_COMMAND_END = re.compile(r"&&|\|\||;|\|")
+
+
+def _runs(code, name):
+    """Does `code` run `name` on the port: some occurrence of it with no
+    `--self-test` or `--check` after it in the same command? Every occurrence
+    counts, so a path that a self-test names first is still found where it runs
+    for real. A command ends at `&&`, `||`, `;`, `|` or the end of the line, and
+    a line continued with a backslash is one command."""
+    for line in code.replace("\\\n", " ").splitlines():
+        for m in re.finditer(re.escape(name), line):
+            command = _COMMAND_END.split(line[m.end():], maxsplit=1)[0]
+            if not _SELF_TEST.search(" " + command):
+                return True
+    return False
+
+
 def control_is_wired(control, gate_texts):
     """THE VERDICT (kept as one predicate so gate-mutation can neutralize it and
-    the self-test's negative fixture must then go red — LESSONS #25)."""
+    the self-test's negative fixture must then go red — LESSONS #25).
+
+    An invocation that names the harness only to run its `--self-test` or
+    `--check` is not the control: that runs it on its own fixtures, never on
+    the port. The lsof line's CI ran the C-flaw scanner that way, and this gate
+    called the control RUN (LESSONS #54)."""
     base = os.path.basename(control)
-    return any((control in t) or (base in t)
-               for t in (executable_text(g) for g in gate_texts))
+    for text in gate_texts:
+        code = executable_text(text)
+        if _runs(code, control) or _runs(code, base):
+            return True
+    return False
 
 
 def exemptions(gate_texts):
@@ -325,6 +355,23 @@ def _self_test():
         check_case("a real invocation after `${#arr[@]}` on the same line still counts",
                    control_is_wired("harnesses/beta/b.sh",
                                     ['n=${#arr[@]} bash harnesses/beta/b.sh "$n"']))
+        # A self-test is not a run (LESSONS #54, from the lsof line's entry
+        # 082): `--self-test` and `--check` run the harness on its own
+        # fixtures. One later on the line, or on a line the command continues
+        # onto, still marks it; a real run of the same harness elsewhere counts.
+        check_case("a control invoked only with --self-test is NOT RUN",
+                   not control_is_wired("harnesses/beta/b.sh",
+                                        ["bash harnesses/beta/b.sh --self-test\n"]))
+        check_case("...nor with --check on a continued line",
+                   not control_is_wired("harnesses/beta/b.sh",
+                                        ["bash harnesses/beta/b.sh \\\n  --check\n"]))
+        check_case("a self-test and a real run of the same control: the run counts",
+                   control_is_wired("harnesses/beta/b.sh",
+                                    ["bash harnesses/beta/b.sh --self-test\n"
+                                     "bash harnesses/beta/b.sh port/\n"]))
+        check_case("a run named first, then a self-test of another path on the line, counts",
+                   control_is_wired("harnesses/beta/b.sh",
+                                    ["bash harnesses/beta/b.sh port/ && bash x/b.sh --self-test\n"]))
 
         exempted = os.path.join(d, "exempt.sh")
         with open(exempted, "w", encoding="utf-8") as fh:

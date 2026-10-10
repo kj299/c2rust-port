@@ -1,6 +1,6 @@
 # Cross-platform caveats
 
-The kit's **harnesses** are Python + POSIX `sh` on purpose, so `make check-kit`
+The kit's **harnesses** are Python + bash on purpose, so `make check-kit`
 runs anywhere. But two things around them are NOT host-agnostic: the **safety
 tooling** (Miri, the sanitizers) assumes a Linux nightly toolchain, and the
 **ported binary's runtime** inherits the target OS's quirks. This is the field
@@ -12,14 +12,15 @@ written for Linux; the deltas below are where you adjust.
 
 The `sanitizers` gate (`harnesses/sanitizers/run_sanitizers.sh`) and the CI
 template's sanitizer/miri jobs assume `x86_64-unknown-linux-gnu` + nightly, where
-Miri/ASan/UBSan/TSan all work. Elsewhere:
+Miri/ASan/TSan all work (rustc has no UBSan; the `ubsan` mode runs Miri).
+Elsewhere:
 
 - **Miri** interprets MIR, so it is host-agnostic for **pure logic** (`core`) — but
   it **cannot execute FFI / raw syscalls**, so it does not cover the `sys` layer
-  (the OS seam) on any platform. Needs `+nightly` and `-Zbuild-std` (component
-  `rust-src`). Use it for `core` regardless of OS.
-- **ASan/UBSan** ship for the LLVM targets. On **`windows-msvc`** ASan is usable
-  (MSVC/clang ASan); **UBSan/TSan are limited or absent**. On **`windows-gnu`**
+  (the OS seam) on any platform. Needs `+nightly` and the `miri` component, which
+  builds its own std from `rust-src`. Use it for `core` regardless of OS.
+- **ASan** ships for the LLVM targets. On **`windows-msvc`** ASan is usable
+  (MSVC/clang ASan); **TSan is absent**. On **`windows-gnu`**
   sanitizer support is weaker still. Don't expect the Linux sanitizer matrix to
   run on a Windows runner.
 - **TSan** is **Linux/macOS only** (not Windows). Threaded `sys` code you'd
@@ -58,8 +59,9 @@ commits on PowerShell-5.1 / Windows-1252 breakage *in the test harness itself*).
 
 Pattern: default the tool's output to **ASCII** — the lowest common denominator of
 the target's default shell — and make UTF-8/Unicode **opt-in** (a flag or env var).
-The kit's own harnesses are ASCII-safe for exactly this reason; keep the ported
-binary the same.
+The kit's own harnesses are not ASCII-only — they print UTF-8 dashes and arrows,
+so on a Windows host whose output is redirected run them with `PYTHONUTF8=1`.
+The ported binary should not lean on that: keep ASCII its default.
 
 ## `target/` file locks on synced / scanned folders
 
@@ -71,8 +73,8 @@ denied" / "file in use" failures that masquerade as compiler bugs.
 Keep the workspace (and `target/`) **out of a synced folder** — use a local path,
 or exclude `target/` from sync **and** from AV scanning. On Windows, excluding
 `target/` from Defender real-time scanning also removes a large, silent build-time
-tax. (`LESSONS`: "pin + vendor deps so a clean-machine build never becomes a
-re-debug session" — the same spirit: make the build environment boring.)
+tax. (`OPERATING-GUIDE.md` §2: "pin + vendor deps so a clean-machine build never
+becomes a re-debug session" — the same spirit: make the build environment boring.)
 
 ## Fork-based harnesses on Windows
 
@@ -92,6 +94,6 @@ is the portable, any-signature one.
 
 ---
 
-*Referenced from `README.md` and `PLAYBOOK.md` Phase 3. When a port on a new
+*Referenced from `README.md` and `OPERATING-GUIDE.md`. When a port on a new
 platform teaches another delta, add it here and log the lesson in `LESSONS.md` —
 this doc compounds like the rest of the kit.*

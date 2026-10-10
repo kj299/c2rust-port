@@ -32,12 +32,12 @@ per-module control ledger the phases refer to.
 **Do:**
 - Enumerate the C: modules, LOC, external deps, the syscall/ioctl/FFI surface,
   global mutable state, macros, the build system. `harnesses/progress/progress.py
-  --init` seeds the module table from this.
+  init --modules a,b,c` seeds the module table from this.
 - **Scan the C for vulnerability classes** — `harnesses/c-flaw-scan/scan_c_flaws.py`
   flags the classic sinks (unchecked `memcpy`/`strcpy`/`sprintf`, `alloca`,
-  integer-overflow-before-`malloc`, `system`/`popen`, format-string,
-  `gets`, TOCTOU pairs). Every hit becomes a note on the owning module: *do not
-  port this bug — fix it, and log the fix as an intentional divergence.*
+  integer-overflow-before-`malloc`, `system`/`popen`, format-string, `gets`,
+  `access`/`stat` as TOCTOU candidates). Every hit becomes a note on the owning
+  module: *do not port this bug — fix it, and log the fix as an intentional divergence.*
   A scanner is only useful if it is *trusted*: tune it for signal-to-noise
   against the real target before relying on it — a check that cries wolf gets
   muted, and the real flaws drown (LESSONS #2: the format-string check once
@@ -52,7 +52,7 @@ per-module control ledger the phases refer to.
   no one wrote down.
 - Write a one-page **threat model**: trust boundaries (untrusted input, privilege
   transitions, IPC, parsing of external data), and what "secure" means for this
-  tool. `SECURITY-CHECKLIST.md` has the template.
+  tool. `skeleton/THREAT-MODEL.md` is the template.
 
 **Entry criteria:** access to the C source and its build.
 **Exit criteria:** module inventory table exists; C-flaw scan run and triaged;
@@ -124,7 +124,7 @@ winlsof's phase order was sound; its one miss was not spiking the hang first.
   and it runs in a shell with its own encoding/quoting model that *will* bite —
   winlsof spent six commits on PowerShell-5.1 / Windows-1252 breakage in the
   harness itself. Two defenses: write kit-level harnesses in a portable language
-  (these are Python + POSIX sh on purpose, not the target's shell), and pin the
+  (these are Python + bash on purpose, not the target's shell), and pin the
   tool's default output to the lowest-common-denominator encoding of the target's
   default shell (winlsof: ASCII default, UTF-8 opt-in). **A process-driving harness
   must also be hermetic** (LESSONS #11): it controls the child's stdin/env/cwd and
@@ -188,8 +188,8 @@ The invariant it encodes:
   (close/free/drop-privilege on `Drop`). This kills use-after-free, leak, and
   privilege-held-too-long by construction.
 - **`cli` crate:** thin; parse → build request → call core → render.
-- **Scaffold observability on day one:** a `TRACE` env-gated phase logger. Do not
-  wait for the first hang to add it.
+- **Then scaffold observability on day one** (the skeleton does not ship it): a
+  `TRACE` env-gated phase logger. Do not wait for the first hang to add it.
 
 **Environment preflight** (LESSONS #1): before the loop, confirm the toolchain
 target actually links here (winlsof lost time to an MSVC-vs-GNU linker mismatch)
@@ -204,9 +204,9 @@ preflight clean; **the skeleton/workspace passes the gates it configures** — a
 starting point that fails its own `cargo fmt --check` / `clippy -D warnings` makes
 every module that copies it start red (LESSONS #9; `harnesses/skeleton-check`).
 **Artifacts:** the workspace; CI config from `harnesses/ci/porting-ci.template.yml`.
-**lsof failure modes this prevents:** scattered `unsafe` (winlsof kept 0 in core /
-144 in the sys layer — but only 91 documented; the gate makes the gap a build
-failure). Tracing added reactively at hang-fix step 4 of 5.
+**lsof failure modes this prevents:** scattered `unsafe` (winlsof kept 0 in core;
+its sys layer had 131 real blocks, 51 undocumented — LESSONS #1; the gate makes
+the gap a build failure). Tracing added reactively at hang-fix step 4 of 5.
 
 ---
 
@@ -307,8 +307,8 @@ Then the loop — each step is a CI-enforced gate:
    and re-derive them; keep a per-correction table of routes and the mode that
    exercises each.
 4. **Sanitize** (`harnesses/sanitizers/run_sanitizers.sh`): Miri over the pure
-   logic and, for the `sys` layer, ASan/UBSan (and TSan if threaded). winlsof's
-   worker-thread hang fix is exactly the class TSan/Miri reasoning catches.
+   logic and ASan (TSan if threaded) for the `sys` layer; rustc has no UBSan, so
+   `ubsan` runs Miri. winlsof's worker-thread hang is the class TSan/Miri catch.
 5. **Unsafe-audit** (`harnesses/unsafe-audit/audit_unsafe.py`): every `unsafe`
    block has a `// SAFETY:` justifying its invariants — **hard fail** otherwise.
 6. **Review & merge.** Update the `progress` table (the module advances
@@ -368,19 +368,15 @@ kept both trees side by side — preserve that discipline.
 
 ## Cross-cutting safety controls (apply continuously)
 
+The non-negotiable set is `CLAUDE.md`'s control table, and `control-coverage`
+holds every port's gate to it; it is not restated here. Around it:
+
 | Control | Harness / mechanism | Gate |
 |---|---|---|
-| No `unsafe` in pure logic | `#![forbid(unsafe_code)]` on `core` | compile |
-| Every `unsafe` justified | `unsafe-audit/audit_unsafe.py` | **hard-fail CI** |
-| No UB at the FFI boundary | `sanitizers/run_sanitizers.sh` (Miri, ASan/UBSan/TSan) | CI |
-| No panics on untrusted input | `fuzz/` (`cargo-fuzz`) | CI smoke + nightly deep |
-| No vulnerable/untrusted deps | `supply-chain/run_supply_chain.sh` (`cargo audit`,`cargo deny`) | CI |
-| No silent behavior drift | `differential/diff_run.py` + `DIVERGENCES.md` | CI |
 | No drift in a library's fns | `cando/cando_diff.py` (function-level differential) | CI (library ports) |
 | No semantic drift off-matrix | `diff-fuzz/diff_fuzz.py` (differential fuzzing) | CI + nightly |
-| No perf regression | `perf/perf_gate.py` (fail >1.3x C median) | CI |
+| No perf regression | `perf/perf_gate.py` (>1.3x C median) | CI (advisory on shared runners) |
 | Lints as errors | `clippy -D warnings` (+ overflow/cast lints) | CI |
-| Don't re-port a C vuln | `c-flaw-scan/scan_c_flaws.py` at Phase 0 | review |
 
 **Gates fail closed.** A gate that finds *nothing to check* must fail, not pass:
 no fuzz targets, both sides of a differential timing out, a golden captured from

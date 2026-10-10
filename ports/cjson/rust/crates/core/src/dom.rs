@@ -27,7 +27,7 @@ use crate::value::{Number, Value};
 /// construction so a built number prints like a parsed one.
 ///
 /// **INTENTIONAL DIVERGENCE for NaN** (DIVERGENCES.md
-/// `create-number-nan-valueint`). Every comparison with a NaN is false, so a NaN
+/// `construct-nan-*`). Every comparison with a NaN is false, so a NaN
 /// falls past both saturation guards and reaches the cast. In C that cast is
 /// `(int)num` on a NaN — *undefined behavior* (C17 6.3.1.4p1), and undefined in
 /// a way that actually differs per target: x86-64's `cvttsd2si` yields INT_MIN,
@@ -470,7 +470,7 @@ pub fn set_valuestring<'a>(v: &'a mut Value, s: Option<&[u8]>) -> Option<&'a [u8
 /// past both of the C's saturation guards into `(int)number`, which is UB
 /// (C17 6.3.1.4p1) and answers INT_MIN on x86-64 and 0 on AArch64. Sharing
 /// [`number`] is what gives the port the defined answer here for free —
-/// DIVERGENCES.md `set-number-nan-valueint`.
+/// DIVERGENCES.md `set-nan-*`.
 ///
 /// **STRUCTURAL ELIMINATION: the missing NULL check.** The exported symbol
 /// dereferences `object` immediately; only the macro guards it, so a caller who
@@ -1023,7 +1023,7 @@ mod tests {
     }
 
     /// The intentional divergence, pinned where it is made
-    /// (DIVERGENCES.md `create-number-nan-valueint`). The C's `(int)NaN` is
+    /// (DIVERGENCES.md `construct-nan-*`). The C's `(int)NaN` is
     /// undefined and answers INT_MIN on x86-64, 0 on AArch64; the port always
     /// answers 0.
     #[test]

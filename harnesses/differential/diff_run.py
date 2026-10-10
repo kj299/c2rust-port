@@ -26,6 +26,11 @@ Matrix (TOML or JSON): a list of cases, each with a name and argv, e.g.
   # optional: stdin = "...", env = {FOO="bar"}, timeout = 10,
   #           keep_whitespace = true
 
+A case may carry only the keys some harness reads: the above, `stdin_b64`,
+golden.py's `expect_rc` / `expect_contains` / `expect_absent`, and `mods`
+(PLAYBOOK Phase 4). Any other key is refused, since a misspelt one would be
+ignored and the case would MATCH without the check it names (LESSONS #54).
+
 Output is normalized before it is compared: masking rules, and runs of blanks
 collapsed with trailing ones stripped. That collapse is what lets content be
 compared at all across two formatters, and it makes LAYOUT invisible — a column
@@ -112,11 +117,32 @@ def _validate_matrix(cases):
     return cases
 
 
+# Every key a matrix case may carry, across every harness that loads a matrix
+# through load_matrix: this runner, golden.py (`expect_*`), diff_fuzz.py (stdin
+# seeds), and the per-module `mods` tag of PLAYBOOK Phase 4 (LESSONS #19). A key
+# outside this set is refused rather than ignored: `keep_whitespce = true` would
+# otherwise run the case without the comparison it names and still MATCH, and
+# nothing would say so (LESSONS #54). lib_diff.py's vectors have their own
+# schema and do not come through here.
+_CASE_KEYS = frozenset({"name", "args", "stdin", "stdin_b64", "env", "timeout",
+                        "keep_whitespace", "expect_rc", "expect_contains",
+                        "expect_absent", "mods"})
+
+
+def _check_case_keys(path, cases):
+    """Refuse a case key no harness reads (see _CASE_KEYS)."""
+    for case in cases:
+        unknown = sorted(set(case) - _CASE_KEYS)
+        if unknown:
+            sys.exit(f"error: matrix {path!r}: case {case.get('name')!r} has unknown "
+                     f"key(s) {unknown}: a misspelt key is ignored by every runner, so "
+                     f"it is refused here (known: {sorted(_CASE_KEYS)})")
+
+
 def load_matrix(path, allow_empty=False):
     if path.endswith(".json"):
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
-        cases = data["case"] if isinstance(data, dict) and "case" in data else data
     else:
         try:
             import tomllib
@@ -124,7 +150,13 @@ def load_matrix(path, allow_empty=False):
             sys.exit("error: TOML matrix needs Python 3.11+ (tomllib); use a .json matrix instead")
         with open(path, "rb") as f:
             data = tomllib.load(f)
-        cases = data.get("case", data if isinstance(data, list) else [])
+    # `{"case": [...]}` / `[[case]]`, or (JSON) a bare list. A table without a
+    # `case` key is a mis-keyed matrix and loads as zero cases, refused below:
+    # the JSON branch used to iterate such a table's KEYS and die in a traceback.
+    cases = data.get("case", []) if isinstance(data, dict) else data
+    if not isinstance(cases, list) or not all(isinstance(c, dict) for c in cases):
+        sys.exit(f"error: matrix {path!r}: every case must be a table/object "
+                 "(`[[case]]`, or a JSON list of objects)")
     # A differential over ZERO cases is a misconfiguration (a mis-keyed matrix —
     # `[[cases]]` for `[[case]]` — an empty file, or a glob that matched nothing),
     # not a pass: it would report "0 cases, 0 divergences" and exit 0 over a
@@ -134,6 +166,7 @@ def load_matrix(path, allow_empty=False):
         sys.exit(f"error: matrix {path!r} loaded 0 cases — empty, mis-keyed "
                  "(expected `[[case]]` / a top-level list or {\"case\": [...]}), or a "
                  "glob that matched nothing. A differential over 0 cases cannot pass.")
+    _check_case_keys(path, cases)
     return _validate_matrix(cases)
 
 
@@ -630,6 +663,35 @@ def _self_test():
         open(good, "w").write('[{"name": "plain", "args": [], "stdin": "x"}]')
         check("a plain case with `stdin` (and no `stdin_b64`) loads",
               [c["name"] for c in load_matrix(good)] == ["plain"])
+        # A misspelt key is refused, not ignored: ignored, the case loses the
+        # check it asked for and still MATCHes (LESSONS #54).
+        typo = os.path.join(d, "t.json")
+        open(typo, "w").write('[{"name": "x", "args": [], "keep_whitespce": true}]')
+        check("a misspelt key (`keep_whitespce`) is refused", _exits(lambda: load_matrix(typo)))
+        every = os.path.join(d, "e.json")
+        open(every, "w").write(json.dumps([
+            {"name": "a", "args": [], "stdin": "x", "env": {}, "timeout": 5,
+             "keep_whitespace": True, "expect_rc": 0, "expect_contains": "x",
+             "expect_absent": "y", "mods": ["m"]},
+            {"name": "b", "args": [], "stdin_b64": "eA=="}]))
+        check("every key a harness reads is accepted",
+              [c["name"] for c in load_matrix(every)] == ["a", "b"])
+        # The shapes a matrix comes in, and the mis-keyed one: a JSON table
+        # without `case` used to be iterated by its KEYS and die in a traceback.
+        wrapped = os.path.join(d, "w.json")
+        open(wrapped, "w").write('{"case": [{"name": "w", "args": []}]}')
+        check("a JSON `{\"case\": [...]}` matrix loads",
+              [c["name"] for c in load_matrix(wrapped)] == ["w"])
+        toml_m = os.path.join(d, "m.toml")
+        open(toml_m, "w").write('[[case]]\nname = "t"\nargs = []\n')
+        check("a TOML `[[case]]` matrix loads", [c["name"] for c in load_matrix(toml_m)] == ["t"])
+        for label, text in [("a JSON table with no `case` key (`cases`)",
+                             '{"cases": [{"name": "x", "args": []}]}'),
+                            ("a case that is not an object", '["x"]'),
+                            ("a `case` that is not a list", '{"case": 5}')]:
+            bad = os.path.join(d, "s.json")
+            open(bad, "w").write(text)
+            check(f"{label} is refused, not a traceback", _exits(lambda: load_matrix(bad)))
 
     # hostile case names must be rejected, not become corpus file paths
     with tempfile.TemporaryDirectory() as d:
