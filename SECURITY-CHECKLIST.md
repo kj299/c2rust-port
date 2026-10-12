@@ -26,6 +26,11 @@ to safety and security" — this is that list.
 - [ ] **No UB.** Miri passes on the pure logic; ASan passes over the FFI layer;
       TSan if the module shares state across threads (winlsof's hang class).
       rustc has no UB sanitizer: the harness's `ubsan` mode runs Miri.
+- [ ] **Bounded cost on hostile input.** A routine that runs on data a user can
+      choose (a file name, a link, a nesting depth, a length) is measured for time
+      and memory on the worst such input at each place it runs. It runs only where
+      its answer is used, and what it keeps is bounded by size, not only by
+      count. A faithful port of the C brings the C's costs with it (LESSONS #57).
 - [ ] **Integer safety.** `overflow-checks = true`; size math uses
       `checked_*`/`saturating_*`; no `as` truncation on lengths/offsets from
       input. (Closes the C `malloc(a*b)` overflow class.)
@@ -33,6 +38,10 @@ to safety and security" — this is that list.
       Buffer "call-twice-for-size" idioms use a growing `Vec` with checks.
 - [ ] **Differential-clean.** `diff_run.py` shows MATCH or a ledgered divergence;
       no unexplained drift.
+- [ ] **The cases check something.** The rules the change wrote are mutated, the
+      mutants committed beside the cases, and every one is KILLED by
+      `port-mutation/mutate_port.py`; `--check-clean` shows none is left in the
+      tree (LESSONS #58).
 - [ ] **C flaws closed.** Every `scan_c_flaws.py` hit in this module is either
       not-applicable (documented) or fixed → `DIVERGENCES.md` entry with CWE.
 - [ ] **No performance cliff.** Where the C baseline runs, `perf_gate.py` shows the

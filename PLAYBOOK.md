@@ -239,6 +239,11 @@ check** — is there an adjacent, reachable goal? (winlsof's ETW spike couldn't 
 the "real FD" but pivoted to extending `-i` to raw/ICMP/AF_UNIX, which shipped).
 A closed sub-goal must not kill the shippable one beside it.
 
+**Before the loop, measure the C** (LESSONS #60). For each rule the module must
+get right, run the C on the inputs that tell the readings apart, as each user it
+serves, and write down what it does before writing the Rust. In the lsof line,
+every rule found wrong after merging was one reasoned about rather than measured.
+
 Then the loop — each step is a CI-enforced gate:
 
 1. **Port** into `core` (or a safe wrapper in `sys`). Translate C idioms to Rust:
@@ -269,15 +274,16 @@ Then the loop — each step is a CI-enforced gate:
    a design smell (an unbounded blocking call on the hot path): winlsof's fix
    *avoided* the blocking call rather than wrapping it.
 
-   **Before writing the mode, ask what state the C keeps that no output depends
-   on** (LESSONS #39) — a last-item cache, a length beside a pointer, a memoized
-   count, a free list, a dirty flag. A value-comparing differential never reads
-   any of it, so the mode must contain the operation that *consumes* it, or the
-   gate goes green over a field nothing touched. If the mode is multi-step, emit
-   the descriptor after every step: a corruption at step 2 that step 5 masks is
-   invisible to a final-state comparison. **A fallback is a feature of its own**
-   (LESSONS #53): give each fallback, exemption or second matching rule a case
-   where it must fire, and one where another input must not reach it.
+   A green run says nothing about inputs the matrix lacks (LESSONS #6), so the
+   matrix is designed: the state the C keeps that no output reads (LESSONS #39),
+   a fallback's own input (LESSONS #53), empty list items, every spelling of a
+   path (a case's `cwd`), a silent case silent for the right reason, and a
+   fixture's effect on every other case (LESSONS #56). The checklist, with the
+   failure behind each, is [`MATRIX-CHECKLIST.md`](MATRIX-CHECKLIST.md). Then
+   **mutate the rules you just wrote** (LESSONS #58): one plausible wrong version
+   of each, committed as a mutants file and run with
+   `harnesses/port-mutation/mutate_port.py`. A mutant no case kills is a case
+   that checks nothing.
 3. **Fuzz** the module's parse/input surface (`harnesses/fuzz/gen_fuzz_target.sh`
    scaffolds a `cargo-fuzz` target). Any crash/panic on untrusted input is a
    release blocker. Where a C oracle exists, also run **differential fuzzing**
@@ -285,34 +291,24 @@ Then the loop — each step is a CI-enforced gate:
    *crash*; diff-fuzz proves it doesn't silently *disagree* with the C on inputs
    the fixed matrix never had. Each divergence is minimized to a committable
    reproducer and triaged like any other (fix the Rust, or ledger-pin the
-   intentional fix-of-C-defect by fingerprint).
-
-   A *predicate-defined* divergence — one that fires for a whole class of inputs
-   rather than a nameable few — has no finite fingerprint set, so it needs a
-   **corrected reference oracle**: a patched copy of the C that shares the
-   port's decision, with the class asserted finitely against the PRISTINE oracle
-   in the matrix (LESSONS #28). **Then measure how wide that patch is**
-   (LESSONS #42): it is code you wrote against the subject under test, and if it
-   suppresses more than the ledgered class it suppresses real findings
-   invisibly — a clean report is this control's failure mode. So fuzz the same
-   mode against the pristine oracle too and classify every finding
-   **mechanically**, not by reading the first few hunks (which are the common
-   case by construction). Record both runs side by side.
-
-   That measures WIDTH; **completeness** is separate and has no control
-   (LESSONS #43) — a route no mode calls yields zero findings against *both*
-   oracles, so a clean width check cannot distinguish a complete correction
-   from a badly incomplete one. When a change puts a new entry point on the
-   contract, enumerate by **call graph** which existing corrections it reaches
-   and re-derive them; keep a per-correction table of routes and the mode that
-   exercises each.
+   intentional fix-of-C-defect by fingerprint). For a command-line tool, fuzz
+   argv from the C's own option letters (LESSONS #59). A divergence that fires
+   for a whole class of inputs needs a **corrected reference oracle**
+   (LESSONS #28), and then a measure of how wide the correction is and which
+   routes reach it (LESSONS #42, #43): the procedure is in
+   [`MATRIX-CHECKLIST.md`](MATRIX-CHECKLIST.md).
 4. **Sanitize** (`harnesses/sanitizers/run_sanitizers.sh`): Miri over the pure
    logic and ASan (TSan if threaded) for the `sys` layer; rustc has no UBSan, so
    `ubsan` runs Miri. winlsof's worker-thread hang is the class TSan/Miri catch.
 5. **Unsafe-audit** (`harnesses/unsafe-audit/audit_unsafe.py`): every `unsafe`
    block has a `// SAFETY:` justifying its invariants — **hard fail** otherwise.
-6. **Review & merge.** Update the `progress` table (the module advances
-   ported → differential-passing → fuzzed → sanitized → unsafe-audited).
+6. **Review, then merge.** The review is a second reader — a person, or an
+   agent with no stake in the change — asked to find what it got wrong and to
+   measure each suspicion against the C (LESSONS #60). Each finding becomes a
+   ledger row before the merge, fixed or not. Then the `progress` table advances
+   from the gates' reports (`ported` → `differential` → `fuzzed` → `sanitized` →
+   `unsafe_audited`). A module at `unsafe_audited` has cleared its gates, not
+   matched the C: its open ledger rows are the work that remains.
 
 **Entry criteria:** skeleton + oracle — and, per module, a **probe transcript**
 pinned via `harnesses/probe/probe.py` (LESSONS #17 mechanized as #21): write the

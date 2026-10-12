@@ -52,7 +52,11 @@ Then run every gate; each is a hard requirement before merge:
    `python3 porting-kit/harnesses/differential/diff_run.py --oracle <c> --rust
    <rust> --matrix <m> --ledger DIVERGENCES.md`. A divergence is a TRIAGE: fix the
    Rust, OR — if the C was wrong — record the intentional fix in `DIVERGENCES.md`
-   (`- [x] <case>: <why + CWE>`). Never silently match a C bug. **If the fix
+   with the divergence's fingerprint, which the runner prints
+   (`- [x] <case> [sha256:<12 hex>]: <why + CWE>`; unpinned, the entry suppresses
+   the case by name whatever it prints next, LESSONS #8). Never silently match a
+   C bug. Then mutate the rules you wrote, as a committed mutants file run with
+   `porting-kit/harnesses/port-mutation/mutate_port.py` (LESSONS #58). **If the fix
    applies to a whole input CLASS (a predicate: "any ~-escaped Patch key"),
    differential FUZZING against the pristine oracle rediscovers the intentional
    divergence forever — an infinite class has no finite set of fingerprints to

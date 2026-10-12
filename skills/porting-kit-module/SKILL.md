@@ -61,6 +61,20 @@ reference.
    operation that consumes each such field and put it in the mode; if the mode is
    multi-step, emit the descriptor after **every** step, since a corruption at
    step 2 that step 5 masks is invisible to a final-state comparison.
+
+   Then **mutate the rules you just wrote**, one mutant per rule, as data: a
+   mutants file committed with the change, run with
+   `python3 porting-kit/harnesses/port-mutation/mutate_port.py <mutants.toml>`. Every
+   mutant must be KILLED; a survivor is a case that checks nothing. The file is
+   the kill table: anyone can run it again (LESSONS #58).
+   A run killed outright (SIGKILL, a container restart) leaves a journal, and
+   the next run refuses and names the mutant it left; undo it with
+   `python3 porting-kit/harnesses/port-mutation/mutate_port.py --restore <mutants.toml>`.
+   The proof that no mutant is left in the tree is
+   `python3 porting-kit/harnesses/port-mutation/mutate_port.py --check-clean <mutants.toml>`,
+   never a hand-written check. It covers every mutant that read CLEAN on the
+   tree it was written against: one it calls AMBIGUOUS (its own edit re-forms
+   its `old`) cannot be seen left in place, so widen its `old`.
 3. **Fuzz** the input surface:
    `bash porting-kit/harnesses/fuzz/gen_fuzz_target.sh <module> --crate <crate>`
    then `cargo fuzz run <module> -- -max_total_time=60`. Any panic/crash blocks.

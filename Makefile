@@ -29,6 +29,7 @@ check-kit:
 	@echo "== control-coverage: the shipped CI TEMPLATE must wire every control =="; \
 	  $(PY) $(H)/control-coverage/check_controls.py --controls CLAUDE.md --gate $(H)/ci/porting-ci.template.yml
 	@echo "== diff-fuzz ==";        $(PY) $(H)/diff-fuzz/diff_fuzz.py --self-test
+	@echo "== port-mutation ==";   $(PY) $(H)/port-mutation/mutate_port.py --self-test
 	@echo "== probe ==";            $(PY) $(H)/probe/probe.py --self-test
 	@echo "== perf-gate ==";        $(PY) $(H)/perf/perf_gate.py --self-test
 	@echo "== cando ==";            $(PY) $(H)/cando/cando_diff.py --self-test

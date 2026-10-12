@@ -240,7 +240,9 @@ jobs:
       - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
         with: { python-version: "3.11" }
       # Build both, then diff over the input matrix. If the C reference can't run
-      # here, replace --oracle with the golden-replay wrapper (harnesses/golden).
+      # here, diff_run alone can take the golden-replay wrapper (harnesses/golden):
+      # a replay answers the matrix's captured cases, so diff-fuzz (generated
+      # inputs), perf_gate and oracle-sanitize still need the live C (LESSONS #59).
       # For a C-ABI LIBRARY (not an executable) use harnesses/library-differential
       # /lib_diff.py instead — same ledger, per-function return + output-buffer diff.
       - run: |

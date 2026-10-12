@@ -12,8 +12,8 @@
 #
 # Every line was triaged on 2026-09-26 (LESSONS #50). Of the 144 in the first
 # baseline, 104 were pinned by fixtures and 7 went with code that was fixed or
-# removed. The 33 left, and one decision added since, say which of three kinds
-# each is, and why:
+# removed. The 33 left, and the three decisions added since, say which of three
+# kinds each is, and why:
 #   equivalent:  forcing it cannot change what the harness does.
 #   report:      it changes only what a person reads; the verdict, the exit code
 #                and every field another tool reads are the same.
@@ -35,12 +35,14 @@
 {"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "o_e, r_e = (norm(o_err), norm(r_err)) if with_stderr else (\"\", \"\")", "expr": "with_stderr", "to": "True", "why": "equivalent: stderr is only compared through stderr_match, which is True whenever with_stderr is off, so normalizing it anyway changes nothing"}
 {"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "pin = known.get(name) if name in known else None", "expr": "name in known", "to": "True", "why": "equivalent: known.get(name) already returns None for a name the ledger does not hold"}
 {"file": "harnesses/differential/diff_run.py", "func": "compare_one", "line": "stderr_match = (not with_stderr) or o_e == r_e", "expr": "not with_stderr", "to": "False", "why": "equivalent: with --with-stderr off, both stderr texts are \"\", so `o_e == r_e` holds and stderr_match is True either way"}
+{"file": "harnesses/differential/diff_run.py", "func": "run_one", "line": "if not os.path.isabs(binary) and any(", "expr": "not os.path.isabs(binary)", "to": "True", "why": "equivalent: forced True, an absolute binary goes through os.path.abspath, which returns the same path"}
 {"file": "harnesses/doc-check/check_doc_flags.py", "func": "run", "line": "if script not in sources:", "expr": "script not in sources", "to": "True", "why": "equivalent: a read cache; forced True, the same script is read again and gives the same text"}
-{"file": "harnesses/lessons/check_lesson_refs.py", "func": "run", "line": "if err is not None:", "expr": "err is not None", "to": "False", "why": "report: forced False, a malformed citation is still a problem, reported as `LESSONS #None — no such entry` instead of its parse error, and counted as a citation"}
+{"file": "harnesses/lessons/check_lesson_refs.py", "func": "run", "line": "if err is not None:", "expr": "err is not None", "to": "False", "why": "report: forced False, a malformed citation is still a problem, reported as `LESSONS #None \u2014 no such entry` instead of its parse error, and counted as a citation"}
 {"file": "harnesses/library-differential/lib_diff.py", "func": "compare_call", "line": "\"diff\": None if verdict == \"MATCH\" else text,", "expr": "verdict == \"MATCH\"", "to": "False", "why": "report: only whether a MATCH's JSON report includes the diff text; the verdict is already MATCH"}
 {"file": "harnesses/library-differential/lib_diff.py", "func": "compare_call", "line": "\"fingerprint\": None if clean else fp[:12],", "expr": "clean", "to": "False", "why": "report: only whether a clean verdict's report carries a fingerprint; the verdict is set above, and no tool reads a clean vector's fingerprint"}
 {"file": "harnesses/library-differential/lib_diff.py", "func": "compare_call", "line": "\"pinned\": pin is not None,", "expr": "pin is not None", "to": "False", "why": "report: only the `pinned` field of the JSON report; the ledger decision itself is made above, from `known` and the fingerprint"}
 {"file": "harnesses/library-differential/lib_diff.py", "func": "compare_call", "line": "clean = verdict in (\"MATCH\", \"LEDGER-STALE\")", "expr": "verdict in (\"MATCH\", \"LEDGER-STALE\")", "to": "False", "why": "report: only whether a clean verdict's report carries a fingerprint; the verdict is set above, and no tool reads a clean vector's fingerprint"}
+{"file": "harnesses/oracle-sanitize/sanitize_oracle.py", "func": "run_case", "line": "if not os.path.isabs(oracle) and os.sep in oracle:", "expr": "not os.path.isabs(oracle)", "to": "True", "why": "equivalent: forced True, an absolute oracle path goes through os.path.abspath, which returns the same path"}
 {"file": "harnesses/perf/perf_gate.py", "func": "measure", "line": "verdict, ratio = \"UNMEASURABLE\", (r_med / o_med if o_med else None)", "expr": "o_med", "to": "False", "why": "report: only the ratio shown for a case already UNMEASURABLE; the verdict is the same"}
 {"file": "harnesses/perf/perf_gate.py", "func": "measure", "line": "verdict, ratio = \"UNMEASURABLE\", (r_med / o_med if o_med else None)", "expr": "o_med", "to": "True", "why": "report: only the ratio shown for a case already UNMEASURABLE; forced True it divides by o_med, zero only if a spawned run takes no measurable time"}
 {"file": "harnesses/probe/probe.py", "func": "cmd_verify", "line": "if _sha256_file(a.oracle) != doc.get(\"oracle_sha256\"):", "expr": "_sha256_file(a.oracle) != doc.get(\"oracle_sha256\")", "to": "False", "why": "report: only the note that the oracle binary changed since `run`; behavior is re-run and compared either way, by design"}

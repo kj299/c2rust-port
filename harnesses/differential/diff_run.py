@@ -24,7 +24,13 @@ Matrix (TOML or JSON): a list of cases, each with a name and argv, e.g.
   name = "listen-sockets"
   args = ["-nP", "-iTCP"]
   # optional: stdin = "...", env = {FOO="bar"}, timeout = 10,
-  #           keep_whitespace = true
+  #           keep_whitespace = true, cwd = "/some/dir"
+
+`cwd` is the directory both binaries start in (relative to where this harness
+runs), for a case whose argument is a relative path: how a tool spells and
+resolves `mnt`, `./x` or `.` is behavior, and a matrix that can only name
+absolute paths cannot reach it (LESSONS #56). A `cwd` that is not a directory is
+an infra error, not a divergence.
 
 A case may carry only the keys some harness reads: the above, `stdin_b64`,
 golden.py's `expect_rc` / `expect_contains` / `expect_absent`, and `mods`
@@ -124,7 +130,7 @@ def _validate_matrix(cases):
 # otherwise run the case without the comparison it names and still MATCH, and
 # nothing would say so (LESSONS #54). lib_diff.py's vectors have their own
 # schema and do not come through here.
-_CASE_KEYS = frozenset({"name", "args", "stdin", "stdin_b64", "env", "timeout",
+_CASE_KEYS = frozenset({"name", "args", "stdin", "stdin_b64", "env", "timeout", "cwd",
                         "keep_whitespace", "expect_rc", "expect_contains",
                         "expect_absent", "mods"})
 
@@ -257,6 +263,20 @@ def run_one(binary, case, default_timeout=15):
     sides that both hang produce identical sentinels, and comparing those as if
     they were output would pass the exact hang class this harness exists to
     catch."""
+    # `cwd`: the directory both sides start in, so a relative argument (`mnt`,
+    # `./x`, `.`) means the same file to each (LESSONS #56). It must exist; a
+    # case naming one that does not is an infra error, never a verdict. A string
+    # only: `os.path.isdir` takes an integer as a file descriptor.
+    cwd = case.get("cwd")
+    if cwd is not None and not (isinstance(cwd, str) and os.path.isdir(cwd)):
+        sys.exit(f"error: case {case.get('name')!r}: cwd is not a directory: {cwd!r}")
+    # A relative path names the binary from where this harness runs, not from
+    # the case's `cwd`: `subprocess` resolves it from the new directory, so the
+    # lsof line's CI, passing `--oracle ../lsof`, found no binary once a case
+    # named a `cwd`. A bare name (no separator) is still looked up on PATH.
+    if not os.path.isabs(binary) and any(
+            sep and sep in binary for sep in (os.sep, os.altsep)):
+        binary = os.path.abspath(binary)
     argv = [binary] + [str(a) for a in case.get("args", [])]
     env = dict(os.environ)
     env.update({k: str(v) for k, v in case.get("env", {}).items()})
@@ -282,6 +302,7 @@ def run_one(binary, case, default_timeout=15):
             capture_output=True,
             timeout=case.get("timeout", default_timeout),
             env=env,
+            cwd=cwd,
         )
         # `backslashreplace`, NOT `replace`: `replace` maps EVERY invalid byte to
         # the same U+FFFD, so a C tool emitting 0xFF and a Rust tool emitting 0xFE
@@ -670,7 +691,7 @@ def _self_test():
         check("a misspelt key (`keep_whitespce`) is refused", _exits(lambda: load_matrix(typo)))
         every = os.path.join(d, "e.json")
         open(every, "w").write(json.dumps([
-            {"name": "a", "args": [], "stdin": "x", "env": {}, "timeout": 5,
+            {"name": "a", "args": [], "stdin": "x", "env": {}, "timeout": 5, "cwd": ".",
              "keep_whitespace": True, "expect_rc": 0, "expect_contains": "x",
              "expect_absent": "y", "mods": ["m"]},
             {"name": "b", "args": [], "stdin_b64": "eA=="}]))
@@ -751,6 +772,77 @@ def _self_test():
         custom = [("reqid", re.compile(r"req [a-z0-9]+"), "req <ID>")]
         res = compare(o, r, rc, ledger=None, sort=False, mask_numbers=False, rules=custom)
         check("a custom --rules entry masks the id → MATCH", res[0]["verdict"] == "MATCH")
+
+    # `cwd` (LESSONS #56): both sides start in the case's directory, so a
+    # relative argument means the same file to each; `pwd -P` prints where it
+    # started. A directory that is not there, or a `cwd` that is not a string,
+    # is an infra error. And a binary named by a relative path is still the one
+    # beside the harness, wherever the case starts.
+    pwd_bin = "/bin/pwd" if os.path.exists("/bin/pwd") else "pwd"
+    with tempfile.TemporaryDirectory() as cwd_dir:
+        out, rc, _to, _e = run_one(pwd_bin, {"name": "cwd", "args": ["-P"], "cwd": cwd_dir})
+        check("a case's `cwd` is where the binary starts",
+              out.strip() == os.path.realpath(cwd_dir) and rc == 0)
+    def exit_message(fn):
+        try:
+            fn()
+        except SystemExit as e:
+            return str(e.code)
+        return None
+
+    gone = exit_message(lambda: run_one(pwd_bin, {"name": "gone", "args": [],
+                                                  "cwd": "/nonexistent-diff-run-cwd"}))
+    check("a `cwd` that is not a directory is an infra error naming it, not a verdict",
+          gone is not None and "cwd" in gone)
+    with tempfile.TemporaryDirectory() as fd_dir:
+        dir_fd = os.open(fd_dir, os.O_RDONLY)
+        try:
+            refused = exit_message(lambda: run_one(pwd_bin, {"name": "fd", "args": [],
+                                                             "cwd": dir_fd}))
+        finally:
+            os.close(dir_fd)
+    check("a `cwd` that is not a string is refused, even a descriptor of a directory",
+          refused is not None and "cwd" in refused)
+    with tempfile.TemporaryDirectory() as cwd_dir:
+        out, rc, _to, _e = run_one("pwd", {"name": "bare", "args": ["-P"], "cwd": cwd_dir})
+        check("a bare binary name is looked up on PATH, from any `cwd`",
+              rc == 0 and out.strip() == os.path.realpath(cwd_dir))
+    # stdin: a string is fed as UTF-8, and a case with none reads EOF, never the
+    # harness's own stdin (the hostile-host rule, LESSONS #11).
+    import shutil
+    cat_bin = shutil.which("cat") or "/bin/cat"
+    out, rc, _to, _e = run_one(cat_bin, {"name": "s", "args": [], "stdin": "hello"})
+    check("a case's `stdin` string reaches the binary", out == "hello" and rc == 0)
+    rfd, wfd = os.pipe()
+    os.write(wfd, b"LEAKED\n")
+    os.close(wfd)
+    saved = os.dup(0)
+    try:
+        os.dup2(rfd, 0)
+        out, rc, _to, _e = run_one(cat_bin, {"name": "hermetic", "args": [], "timeout": 5})
+    finally:
+        os.dup2(saved, 0)
+        os.close(saved)
+        os.close(rfd)
+    check("a case with no stdin reads EOF, never the harness's own stdin",
+          out == "" and rc == 0)
+    here = os.getcwd()
+    with tempfile.TemporaryDirectory() as home, tempfile.TemporaryDirectory() as away:
+        os.makedirs(os.path.join(home, "bin"))
+        script = os.path.join(home, "bin", "pwd-here")
+        with open(script, "w") as f:
+            f.write("#!/bin/sh\nexec pwd -P\n")
+        os.chmod(script, 0o755)
+        try:
+            os.chdir(home)
+            out, rc, _to, _e = run_one(os.path.join("bin", "pwd-here"),
+                                       {"name": "rel-bin", "args": [], "cwd": away})
+        except SystemExit:
+            out, rc = "", None
+        finally:
+            os.chdir(here)
+        check("a relative binary path is resolved from the harness, not the case's `cwd`",
+              rc == 0 and out.strip() == os.path.realpath(away))
 
     print("\nself-test:", "OK" if ok else "FAILED")
     return 0 if ok else 1
