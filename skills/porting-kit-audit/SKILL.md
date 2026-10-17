@@ -24,9 +24,12 @@ oracle is at gate 2 of 6, not done.
    (hard fail) and `python3 porting-kit/harnesses/c-flaw-scan/scan_c_flaws.py <c-src-dirs>`
    — a hit the committed flaw record lacks is new C to triage.
    Then: `python3 porting-kit/harnesses/api-coverage/check_api.py --header <c.h>
-   [--header <c2.h> ...] --manifest API-COVERAGE.md` → every exported symbol
-   `ported`, or `unported`/`out-of-scope` with a written reason and within the
-   ceiling the manifest declares. cJSON module 9 passed six gates, a 25k fuzz
+   [--header <c2.h> ...] --manifest API-COVERAGE.md [--matrix <m.json> ...]` →
+   every exported symbol `ported`, or `unported`/`out-of-scope` with a written
+   reason and within the ceiling the manifest declares; with one `--matrix` per
+   matrix file, every "driver mode `X`" a `ported` row names is run by a case
+   (LESSONS #61: five cJSON rows named modes nothing ran for seven weeks).
+   cJSON module 9 passed six gates, a 25k fuzz
    sweep and a retrospective with 2 of 14 public symbols unported, because
    LESSONS #26 said to check this in prose and nothing enforced it (LESSONS #34).
    **Pass EVERY public header in one invocation** and check the report's scope

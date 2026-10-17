@@ -2702,3 +2702,115 @@ points.)*
   their detail, which moved to `MATRIX-CHECKLIST.md`, so the PLAYBOOK stays under
   the ~400 lines `CLAUDE.md` asks.
 - **Section amended:** PLAYBOOK · Phase 4 (before the loop; step 6).
+
+---
+
+## 061. A row said a mode gated the symbol, and no case ran the mode
+
+- **Date:** 2026-10-17
+- **Codebase:** the cJSON port, closing the coverage gaps its `API-COVERAGE.md`
+  recorded on 2026-10-10
+- **What happened:** five `*CaseSensitive` utils rows had read "driver mode
+  `ptr-cs`" (and four like it) since module 9 landed on 2026-08-30. Both drivers
+  implemented those modes; no case, probe or fuzz run invoked any of them. Two
+  base rows, `cJSON_Parse` and `cJSON_GetErrorPtr`, were `ported` on transitive
+  arguments: `cJSON_Parse`'s C body is `cJSON_ParseWithOpts(v, 0, 0)`, and that
+  was compared. Once cases ran them, the first `patch-cs` input with a
+  differently-cased key diverged: the C detaches the LEAF key case-insensitively
+  under the case-sensitive entry point (now ledgered as a fix,
+  `utils-cs-detach-*`), and the port had differed there, unexamined, since
+  module 9. The transitive argument was right for the core's
+  `parse_with_opts` and wrong for the cdylib's `cJSON_Parse`, which never called
+  it and parsed `strlen` bytes where the C parses `strlen + 1`; a BOM plus one
+  digit tells them apart, and only an ABI vector over the export saw it. And the
+  cdylib did not export `cJSON_GetErrorPtr` at all; comparing it found the C
+  handing back a stale pointer, into the previous call's buffer, after
+  `cJSON_Parse(NULL)` (now ledgered as a fix, `errptr-null-input-resets`).
+- **The rule.** A coverage row is a claim about a call path. Check that a case
+  runs the path it names, in every implementation of the entry point the port
+  ships. A flag variant is a mode of its own: put each input under both values
+  of the flag.
+- **Kit change:** `check_api.py --matrix` (one per matrix file): every driver
+  mode a `ported` row names must be the first argv word of some case, or the row
+  fails UNDRIVEN; matrices it cannot read, or that hold no case, are exit 2. A
+  verdict of its own (`mode_is_driven`) with a gate-mutation row, and ten
+  fixtures, the first of which caught the check's own fail-open: the manifest
+  parser strips a cell's closing backtick, and a pattern requiring it matched
+  nothing and passed every row. Run on the port's manifest and matrices as they
+  stood before this change, it names exactly the five modes. The cJSON gate
+  passes every matrix; the CI template and the audit skill show the flag, the
+  skeleton says when to add it, and MATRIX-CHECKLIST carries both halves of the
+  rule. The same change closes the port's third recorded gap: `rust/fuzz/`
+  gives CLAUDE.md's "no panic on input" control its first cargo-fuzz targets
+  (`check.sh` step 4c, fail-closed where cargo-fuzz exists, a loud SKIP where
+  not; CI installs it).
+- **Section amended:** harnesses/api-coverage/check_api.py;
+  harnesses/gate-mutation/mutate_gates.py; harnesses/ci/porting-ci.template.yml
+  · api-coverage step; skeleton/check.sh; ports/cjson/check.sh;
+  MATRIX-CHECKLIST.md; skills/porting-kit-audit/SKILL.md; README · harness
+  table.
+
+---
+
+## 062. The new cases were new seeds, and they reached bugs older than the change
+
+- **Date:** 2026-10-17
+- **Codebase:** the cJSON port, the same change as LESSONS #61
+- **What happened:** the cases written for the `-cs` modes — key pairs like
+  `a`/`A`, and duplicated keys — went into `matrix-utils.json`, which seeds
+  diff-fuzz for every utils mode. The first high-budget sweep with them found
+  port bugs in the case-INsensitive modes as well. `compare_json` checked a
+  container's length before walking its pairs; the C walks first, sorting each
+  nested object in place as it goes, and `patch`'s `test` prints the document it
+  sorted. `generate_merge_patch` compared CLONES, so the C's in-place sort, which
+  its recursion then sorts again, was lost, and `sort_list` is unstable — a tie
+  takes the second run — so tied keys swapped twice in the C and once in the
+  port (29 distinct findings in the first `genmerge-cs` sweep, every one gone
+  after the two fixes). Both had been there since module 9, through its ~25 000
+  input hardening sweep (LESSONS #33), whose seeds held no tied keys. A third
+  difference had never been decided: the port's `add` replaced every duplicate
+  of its key where the C replaces one, and the C's answer leaves the old value
+  first, where every first-match lookup still finds it. It is kept and
+  ledgered (`utils-add-dup-key*`).
+- **The rule.** A case is also a seed for every mode fuzzed from its matrix.
+  After adding cases, re-sweep every mode that matrix seeds, not only the mode
+  the cases were written for. And where a C function has side effects, the
+  order of its early returns is part of what it does.
+- **Kit change:** MATRIX-CHECKLIST's "Where the matrix runs out" says when to
+  re-sweep. Not mechanized: what a seed reaches cannot be known in advance, so
+  the rule is about when to look, and the sweep records in `API-COVERAGE.md`
+  are where it shows.
+- **Section amended:** MATRIX-CHECKLIST.md · Where the matrix runs out.
+
+---
+
+## 063. The ABI vectors compared lengths, because no vector passed the buffer's size
+
+- **Date:** 2026-10-17
+- **Codebase:** the cJSON port's ABI vectors (`ffi/vectors.json`), and
+  `lib_diff.py`
+- **What happened:** every shim the cJSON ABI vectors call takes
+  `(…, char *out, int out_size)`, and a `lib_diff` `outbuf` is one pointer
+  argument. None of the 26 vectors written for those shims passed `out_size`, so
+  ctypes called each with one argument fewer than its C signature, and the
+  callee read `out_size` from whatever its register held. When that was not a
+  usable size nothing was written, both libraries' buffers stayed zero, and the
+  output "matched" — measured, in 54 of 78 calls. The return value, the
+  printed length, was still compared, so a port bug that changed the printed
+  bytes but not how many there were would have passed. It came to light only
+  because the 13 new `parse-*` vectors copied the shape, and their one ledgered
+  row's fingerprint flipped between runs, as the garbage did or did not let the
+  shim write.
+- **The rule.** A compared output that neither side wrote compared nothing:
+  make "writes nothing" something a vector declares, and fail it otherwise.
+  ctypes cannot see a C function's arity, so pass every argument the signature
+  has.
+- **Kit change:** `lib_diff.py`'s verdict VACUOUS: an `outbuf` neither side
+  wrote fails unless the vector declares `"untouched": true`, and a declared
+  vector that writes fails too. It is decided before the ledger, so a ledger
+  entry cannot excuse it. Ten fixtures, one a real `memset` call, and a
+  gate-mutation row. Run on the cJSON vectors as they stood before this change,
+  it flags 18. The cJSON vectors now pass `out_size`, and the two whose
+  contract is to write nothing (a document that does not parse) declare it.
+- **Section amended:** harnesses/library-differential/lib_diff.py;
+  harnesses/gate-mutation/mutate_gates.py; README · harness table.

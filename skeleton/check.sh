@@ -39,6 +39,9 @@ echo "===== 0b. Phase-0 controls — re-run against the C actually ported ====="
 # how the cJSON port stayed green with 35 base-library entry points ungated:
 # scoping the checker narrowly moves the hole into the checker. Set
 # --export-macro to your library's export marker if it is not CJSON_PUBLIC.
+# Once oracle/matrix*.json exist, add `--matrix <file>` per matrix: a `ported`
+# row naming a driver mode no case runs then FAILS instead of passing as a
+# claim (LESSONS #61; ports/cjson/check.sh shows the loop that builds them).
 "$PY" "$KIT/harnesses/api-coverage/check_api.py" \
     --header "$HERE/c/lib.h" --manifest "$HERE/API-COVERAGE.md"
 

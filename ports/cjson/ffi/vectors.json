@@ -18,6 +18,10 @@
         "type": "outbuf",
         "size": 256,
         "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 256
       }
     ]
   },
@@ -34,6 +38,10 @@
         "type": "outbuf",
         "size": 256,
         "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 256
       }
     ]
   },
@@ -50,6 +58,10 @@
         "type": "outbuf",
         "size": 256,
         "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 256
       }
     ]
   },
@@ -66,6 +78,10 @@
         "type": "outbuf",
         "size": 256,
         "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 256
       }
     ]
   },
@@ -82,6 +98,10 @@
         "type": "outbuf",
         "size": 256,
         "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 256
       }
     ]
   },
@@ -98,8 +118,13 @@
         "type": "outbuf",
         "size": 64,
         "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 64
       }
-    ]
+    ],
+    "untouched": true
   },
   {
     "name": "rt-empty",
@@ -114,8 +139,13 @@
         "type": "outbuf",
         "size": 64,
         "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 64
       }
-    ]
+    ],
+    "untouched": true
   },
   {
     "name": "rt-truncation",
@@ -130,6 +160,10 @@
         "type": "outbuf",
         "size": 8,
         "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 8
       }
     ]
   },
@@ -146,6 +180,10 @@
         "type": "outbuf",
         "size": 256,
         "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 256
       }
     ]
   },
@@ -162,6 +200,10 @@
         "type": "outbuf",
         "size": 256,
         "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 256
       }
     ]
   },
@@ -230,6 +272,10 @@
         "type": "outbuf",
         "size": 256,
         "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 256
       }
     ]
   },
@@ -246,6 +292,10 @@
         "type": "outbuf",
         "size": 256,
         "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 256
       }
     ]
   },
@@ -262,6 +312,10 @@
         "type": "outbuf",
         "size": 256,
         "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 256
       }
     ]
   },
@@ -278,6 +332,10 @@
         "type": "outbuf",
         "size": 256,
         "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 256
       }
     ]
   },
@@ -294,6 +352,10 @@
         "type": "outbuf",
         "size": 256,
         "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 256
       }
     ]
   },
@@ -310,6 +372,10 @@
         "type": "outbuf",
         "size": 256,
         "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 256
       }
     ]
   },
@@ -326,6 +392,10 @@
         "type": "outbuf",
         "size": 256,
         "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 256
       }
     ]
   },
@@ -342,6 +412,10 @@
         "type": "outbuf",
         "size": 256,
         "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 256
       }
     ]
   },
@@ -362,6 +436,10 @@
         "type": "outbuf",
         "size": 256,
         "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 256
       }
     ]
   },
@@ -382,6 +460,10 @@
         "type": "outbuf",
         "size": 256,
         "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 256
       }
     ]
   },
@@ -402,6 +484,10 @@
         "type": "outbuf",
         "size": 256,
         "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 256
       }
     ]
   },
@@ -422,6 +508,10 @@
         "type": "outbuf",
         "size": 256,
         "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 256
       }
     ]
   },
@@ -442,6 +532,10 @@
         "type": "outbuf",
         "size": 256,
         "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 256
       }
     ]
   },
@@ -462,6 +556,10 @@
         "type": "outbuf",
         "size": 256,
         "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 256
       }
     ]
   },
@@ -482,6 +580,10 @@
         "type": "outbuf",
         "size": 256,
         "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 256
       }
     ]
   },
@@ -502,6 +604,426 @@
         "type": "outbuf",
         "size": 256,
         "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 256
+      }
+    ]
+  },
+  {
+    "name": "parse-bom-terminator",
+    "function": "cjson_parse_seq",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "\ufeff1"
+      },
+      {
+        "type": "cstr",
+        "value": "\ufeff"
+      },
+      {
+        "type": "int",
+        "value": 0
+      },
+      {
+        "type": "int",
+        "value": 0
+      },
+      {
+        "type": "outbuf",
+        "size": 512,
+        "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 512
+      }
+    ]
+  },
+  {
+    "name": "parse-err-offsets",
+    "function": "cjson_parse_seq",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "[1,"
+      },
+      {
+        "type": "cstr",
+        "value": "{bad"
+      },
+      {
+        "type": "int",
+        "value": 0
+      },
+      {
+        "type": "int",
+        "value": 0
+      },
+      {
+        "type": "outbuf",
+        "size": 512,
+        "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 512
+      }
+    ]
+  },
+  {
+    "name": "parse-err-reset-by-success",
+    "function": "cjson_parse_seq",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "[1,"
+      },
+      {
+        "type": "cstr",
+        "value": "{\"k\":[true,null]}"
+      },
+      {
+        "type": "int",
+        "value": 0
+      },
+      {
+        "type": "int",
+        "value": 0
+      },
+      {
+        "type": "outbuf",
+        "size": 512,
+        "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 512
+      }
+    ]
+  },
+  {
+    "name": "parse-err-empty-and-blank",
+    "function": "cjson_parse_seq",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": ""
+      },
+      {
+        "type": "cstr",
+        "value": " \t"
+      },
+      {
+        "type": "int",
+        "value": 0
+      },
+      {
+        "type": "int",
+        "value": 0
+      },
+      {
+        "type": "outbuf",
+        "size": 512,
+        "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 512
+      }
+    ]
+  },
+  {
+    "name": "parse-trailing-bytes-ok",
+    "function": "cjson_parse_seq",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "1 x"
+      },
+      {
+        "type": "cstr",
+        "value": "{\"a\":1}}"
+      },
+      {
+        "type": "int",
+        "value": 0
+      },
+      {
+        "type": "int",
+        "value": 0
+      },
+      {
+        "type": "outbuf",
+        "size": 512,
+        "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 512
+      }
+    ]
+  },
+  {
+    "name": "parse-nesting-1001",
+    "function": "cjson_parse_seq",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]"
+      },
+      {
+        "type": "cstr",
+        "value": "[[1]"
+      },
+      {
+        "type": "int",
+        "value": 0
+      },
+      {
+        "type": "int",
+        "value": 0
+      },
+      {
+        "type": "outbuf",
+        "size": 512,
+        "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 512
+      }
+    ]
+  },
+  {
+    "name": "parse-null-after-success",
+    "function": "cjson_parse_seq",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "1"
+      },
+      {
+        "type": "cstr",
+        "value": ""
+      },
+      {
+        "type": "int",
+        "value": 1
+      },
+      {
+        "type": "int",
+        "value": 0
+      },
+      {
+        "type": "outbuf",
+        "size": 512,
+        "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 512
+      }
+    ]
+  },
+  {
+    "name": "errptr-null-input-resets",
+    "function": "cjson_parse_seq",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "[1,"
+      },
+      {
+        "type": "cstr",
+        "value": ""
+      },
+      {
+        "type": "int",
+        "value": 1
+      },
+      {
+        "type": "int",
+        "value": 0
+      },
+      {
+        "type": "outbuf",
+        "size": 512,
+        "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 512
+      }
+    ]
+  },
+  {
+    "name": "parse-len-bom-no-terminator",
+    "function": "cjson_parse_seq",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "\ufeff1"
+      },
+      {
+        "type": "cstr",
+        "value": "\ufeff12"
+      },
+      {
+        "type": "int",
+        "value": 0
+      },
+      {
+        "type": "int",
+        "value": 1
+      },
+      {
+        "type": "outbuf",
+        "size": 512,
+        "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 512
+      }
+    ]
+  },
+  {
+    "name": "parse-len-err-offsets",
+    "function": "cjson_parse_seq",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "[1,"
+      },
+      {
+        "type": "cstr",
+        "value": "{bad"
+      },
+      {
+        "type": "int",
+        "value": 0
+      },
+      {
+        "type": "int",
+        "value": 1
+      },
+      {
+        "type": "outbuf",
+        "size": 512,
+        "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 512
+      }
+    ]
+  },
+  {
+    "name": "parse-len-err-reset-by-success",
+    "function": "cjson_parse_seq",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "[1,"
+      },
+      {
+        "type": "cstr",
+        "value": "{\"k\":[true,null]}"
+      },
+      {
+        "type": "int",
+        "value": 0
+      },
+      {
+        "type": "int",
+        "value": 1
+      },
+      {
+        "type": "outbuf",
+        "size": 512,
+        "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 512
+      }
+    ]
+  },
+  {
+    "name": "parse-len-err-empty",
+    "function": "cjson_parse_seq",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": ""
+      },
+      {
+        "type": "cstr",
+        "value": " \t"
+      },
+      {
+        "type": "int",
+        "value": 0
+      },
+      {
+        "type": "int",
+        "value": 1
+      },
+      {
+        "type": "outbuf",
+        "size": 512,
+        "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 512
+      }
+    ]
+  },
+  {
+    "name": "parse-len-null-resets-in-c-too",
+    "function": "cjson_parse_seq",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "[1,"
+      },
+      {
+        "type": "cstr",
+        "value": ""
+      },
+      {
+        "type": "int",
+        "value": 1
+      },
+      {
+        "type": "int",
+        "value": 1
+      },
+      {
+        "type": "outbuf",
+        "size": 512,
+        "id": "out"
+      },
+      {
+        "type": "int",
+        "value": 512
       }
     ]
   }

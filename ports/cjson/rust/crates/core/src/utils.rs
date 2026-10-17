@@ -326,6 +326,13 @@ fn nul_trunc(s: &[u8]) -> &[u8] {
 /// double; strings compare bytes to the first NUL; arrays elementwise; objects
 /// are SORTED IN PLACE then compared key-and-value in order. The in-place sort
 /// is an observable side effect the `test`/generate paths rely on.
+///
+/// The ORDER of the checks is part of that side effect: the C walks the
+/// children pairwise first — recursing, and so sorting every nested object it
+/// reaches — and only then notices that one container had leftovers. Checking
+/// the lengths first (as this did until 2026-10-17) returns before those
+/// sorts, so a failed `test` of `[{"b":1,"a":2}]` against
+/// `[{"b":1,"a":2},5]` printed the document unsorted where the C sorts it.
 fn compare_json(a: &mut Value, b: &mut Value, cs: bool) -> bool {
     if dom::type_code(a) != dom::type_code(b) {
         return false;
@@ -344,12 +351,13 @@ fn compare_json(a: &mut Value, b: &mut Value, cs: bool) -> bool {
                 (Value::Array(ia), Value::Array(ib)) => (ia, ib),
                 _ => return false,
             };
-            if ia.len() != ib.len() {
-                return false;
+            for (x, y) in ia.iter_mut().zip(ib.iter_mut()) {
+                if !compare_json(x, y, cs) {
+                    return false;
+                }
             }
-            ia.iter_mut()
-                .zip(ib.iter_mut())
-                .all(|(x, y)| compare_json(x, y, cs))
+            // cJSON_Utils.c:645 — the leftover check comes AFTER the walk
+            ia.len() == ib.len()
         }
         64 => {
             sort_children(a, cs);
@@ -358,15 +366,13 @@ fn compare_json(a: &mut Value, b: &mut Value, cs: bool) -> bool {
                 (Value::Object(ea), Value::Object(eb)) => (ea, eb),
                 _ => return false,
             };
-            if ea.len() != eb.len() {
-                return false;
-            }
             for ((ka, va), (kb, vb)) in ea.iter_mut().zip(eb.iter_mut()) {
                 if compare_keys(Some(ka), Some(kb), cs) != 0 || !compare_json(va, vb, cs) {
                     return false;
                 }
             }
-            true
+            // cJSON_Utils.c:674 — likewise
+            ea.len() == eb.len()
         }
         _ => true, // null / true / false / raw
     }
@@ -412,6 +418,11 @@ fn detach_path(root: &mut Value, path: &[u8], cs: bool) -> Option<Value> {
             }
         }
         Value::Object(entries) => {
+            // INTENTIONAL DIVERGENCE (DIVERGENCES.md `utils-cs-detach-*`): the
+            // leaf is matched with the caller's flag. The C's detach_path ends
+            // in `cJSON_DetachItemFromObject` (cJSON_Utils.c:466), the
+            // case-INsensitive call, even under ApplyPatchesCaseSensitive — so
+            // there `remove /A` deletes `a`. With `cs == false` the two agree.
             let pos = entries
                 .iter()
                 .position(|(k, _)| key_matches(k, &child, cs))?;
@@ -560,6 +571,10 @@ fn apply_one(doc: &mut Value, patch: &Value, cs: bool, invalid_root: &mut bool) 
             }
         }
         Value::Object(entries) => {
+            // INTENTIONAL DIVERGENCE (DIVERGENCES.md `utils-add-dup-key*`):
+            // EVERY member the key names goes. The C deletes one, so with the
+            // key duplicated the old value stays first, where every
+            // first-match lookup still finds it after the add "succeeds".
             entries.retain(|(k, _)| !key_matches(k, &child, cs));
             entries.push((child, value));
             0
@@ -640,6 +655,15 @@ fn merge_patch(target: Option<Value>, patch: &Value, cs: bool) -> Value {
 ///   * the recursion (cJSON_Utils.c:1455) calls the public *case-insensitive*
 ///     `cJSONUtils_GenerateMergePatch`, so a nested diff is ALWAYS case-
 ///     insensitive even under `...GenerateMergePatchCaseSensitive`.
+///
+/// And one port bug, found 2026-10-17 by the first `genmerge-cs` sweep: the
+/// paired children must be compared and recursed into IN PLACE, not as
+/// clones. `compare_json` sorts objects in place, `sort_list` is not stable (a
+/// tie takes the SECOND run's element, so equal keys swap), and the recursion
+/// sorts the same children again — so in the C a nested object with tied keys
+/// is sorted twice and its ties swap back, while clones were sorted once.
+/// `{"o":{"b":5,"B":2}}` → `{"o":{"":1}}` ordered the two nulls differently,
+/// in both modes.
 fn generate_merge_patch(from: &mut Value, to: &mut Value, cs: bool) -> Option<Value> {
     if !matches!(to, Value::Object(_)) || !matches!(from, Value::Object(_)) {
         return Some(to.clone());
@@ -670,11 +694,11 @@ fn generate_merge_patch(from: &mut Value, to: &mut Value, cs: bool) -> Option<Va
             patch.push((te[j].0.clone(), te[j].1.clone()));
             j = j.saturating_add(1);
         } else {
-            if !compare_json(&mut fe[i].1.clone(), &mut te[j].1.clone(), cs) {
+            // In place, like the C (see above): compare_json's sort is a side
+            // effect the recursion then observes.
+            if !compare_json(&mut fe[i].1, &mut te[j].1, cs) {
                 // the C recurses through the public case-INsensitive entry (:1455).
-                if let Some(sub) =
-                    generate_merge_patch(&mut fe[i].1.clone(), &mut te[j].1.clone(), false)
-                {
+                if let Some(sub) = generate_merge_patch(&mut fe[i].1, &mut te[j].1, false) {
                     patch.push((te[j].0.clone(), sub));
                 }
             }
@@ -1020,7 +1044,7 @@ mod tests {
         assert_eq!(run_ok("sort", "{\"B\":1,\"a\":2}"), "{\"a\":2,\"B\":1}");
     }
 
-    // DIVERGENCE utils-patch-tilde-decode: the C mis-decodes a ~0/~1 escape in a
+    // DIVERGENCE utils-tilde-*: the C mis-decodes a ~0/~1 escape in a
     // Patch child key (add /a~1b -> key "a~/"); this port decodes it correctly.
     #[test]
     fn patch_tilde_decode_is_fixed_not_faithful() {
@@ -1040,6 +1064,50 @@ mod tests {
             ),
             "status=0;{\"x\":2}"
         );
+    }
+
+    // DIVERGENCE utils-cs-detach-*: under the case-sensitive entry point the C
+    // detaches the LEAF case-insensitively, so `remove /A` deletes `a`. The port
+    // honours the flag; the case-insensitive mode keeps the C's behaviour.
+    #[test]
+    fn patch_cs_detaches_the_leaf_the_path_names() {
+        let remove_a = "[{\"op\":\"remove\",\"path\":\"/A\"}]\n{\"a\":1,\"A\":2}";
+        assert_eq!(run_ok("patch-cs", remove_a), "status=0;{\"a\":1}");
+        assert_eq!(run_ok("patch", remove_a), "status=0;{\"A\":2}");
+        // no exact spelling: the C reported success having deleted `a`
+        assert_eq!(
+            run_ok(
+                "patch-cs",
+                "[{\"op\":\"remove\",\"path\":\"/A\"}]\n{\"a\":1}"
+            ),
+            "status=13;{\"a\":1}"
+        );
+        // replace and move detach through the same path
+        assert_eq!(
+            run_ok(
+                "patch-cs",
+                "[{\"op\":\"replace\",\"path\":\"/a\",\"value\":9}]\n{\"A\":1,\"a\":2}"
+            ),
+            "status=0;{\"A\":1,\"a\":9}"
+        );
+        assert_eq!(
+            run_ok(
+                "patch-cs",
+                "[{\"op\":\"move\",\"from\":\"/A\",\"path\":\"/z\"}]\n{\"a\":1,\"A\":2}"
+            ),
+            "status=0;{\"a\":1,\"z\":2}"
+        );
+    }
+
+    // DIVERGENCE utils-add-dup-key*: an add replaces EVERY duplicate of its
+    // key; the C deletes one and appends, leaving the old value first.
+    #[test]
+    fn patch_add_replaces_every_duplicate() {
+        let doc = "{\"role\":\"admin\",\"role\":\"admin\"}";
+        let add = format!("[{{\"op\":\"add\",\"path\":\"/role\",\"value\":\"user\"}}]\n{doc}");
+        for mode in ["patch", "patch-cs"] {
+            assert_eq!(run_ok(mode, &add), "status=0;{\"role\":\"user\"}");
+        }
     }
 
     // An INVALID escape in a Patch child key is NOT a clean RFC decode: the C's

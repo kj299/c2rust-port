@@ -62,7 +62,7 @@ static char *read_all_stdin(size_t *out_len) {
 
 int main(int argc, char **argv) {
     if (argc < 2) {
-        fprintf(stderr, "usage: driver <print|...|build|query|access|construct|set|seq|opts|parent|ptr|patch|merge|genmerge|genpatch|findptr|addpatch|sort (+ -cs)>\n");
+        fprintf(stderr, "usage: driver <print|...|build|query|access|construct|set|seq|opts|parent|parse|ptr|patch|merge|genmerge|genpatch|findptr|addpatch|sort (+ -cs)>\n");
         return 2;
     }
     const char *mode = argv[1];
@@ -275,6 +275,19 @@ int main(int argc, char **argv) {
                                      json, json_len);
         free(input);
         if (out == NULL) { fprintf(stderr, "opts failed\n"); return 1; }
+        fputs(out, stdout);
+        free(out);
+        return 0;
+    }
+
+    if (strcmp(mode, "parse") == 0) {
+        /* cJSON_Parse + cJSON_GetErrorPtr (cjson_modes.h). Self-contained early
+         * return (LESSONS #27). read_all_stdin NUL-terminated `input` at
+         * `len`, which is the C string cJSON_Parse is given -- an embedded NUL
+         * ends it sooner, exactly as it would for a real caller. */
+        char *out = cjson_modes_parse(input, len);
+        free(input);
+        if (out == NULL) { fprintf(stderr, "parse: allocation failed\n"); return 2; }
         fputs(out, stdout);
         free(out);
         return 0;

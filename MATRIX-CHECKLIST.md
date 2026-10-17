@@ -16,6 +16,18 @@ wrong on the first case it could not.
   headers (LESSONS #34, #35). A gate judges only the surface the driver exposes.
 - **Every module has probes**, and `probe.py coverage` fails one that has none
   (LESSONS #23).
+- **Every mode a `ported` row names is run by a case** (LESSONS #61). A row
+  that says "driver mode `ptr-cs`" is a claim until a case runs `ptr-cs`;
+  `check_api.py --matrix` (one flag per matrix file) fails the row otherwise.
+  A flag variant is a mode of its own — cJSON's five `*CaseSensitive` rows
+  named modes nothing ran for seven weeks — so put each input under both values
+  of the flag, and the flag is pinned in both directions.
+- **"Compared transitively" is a claim about one implementation** (LESSONS
+  #61). An argument of the form "its C body is X, and X is compared" covers
+  only the port's functions that actually call the port's X. cJSON's core
+  `parse_with_opts` was compared; the cdylib's `cJSON_Parse` did not call it,
+  and parsed one byte short. Where the port ships an entry point twice — a
+  core function and a C-ABI export, say — compare each one.
 
 ## State no output reads
 
@@ -71,6 +83,15 @@ oracle and the port with `harnesses/diff-fuzz/diff_fuzz.py`: on stdin, or, for a
 command-line tool, on argv, from the C's own option letters
 (`--argv-inventory`, LESSONS #59). Its first run against lsof-rs found four
 divergences no case had.
+
+**New cases are new seeds** (LESSONS #62). `diff_fuzz.py --matrix` seeds from
+every case in the file, whatever mode the case is for, so a change that adds
+cases changes what every mode seeded from that matrix can reach. Re-run the
+high-budget sweeps of all of them, not only the mode the cases were written
+for. Adding case-pair and duplicate-key inputs for cJSON's `-cs` modes let a
+sweep reach two port bugs in the case-INsensitive `patch` and `genmerge`
+modes, present since module 9 through its ~25 000-input hardening sweep
+(LESSONS #33), whose seeds held no such keys.
 
 **Against a corrected oracle.** A *predicate-defined* divergence — one that
 fires for a whole class of inputs rather than a nameable few — has no finite
