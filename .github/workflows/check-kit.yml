@@ -34,10 +34,12 @@
 #     is exactly the change this gate exists to catch — the lesson-link and
 #     skills-integrity checkers read prose.
 #   * No `actions/cache`. Measured, not assumed: every package in the three
-#     Cargo.lock files (skeleton, cJSON, adler32) is a `path` crate, so there is
-#     no registry to restore and target-caching would save seconds of compiling
-#     a few tiny local crates — while adding the `uses:` this file exists to
-#     minimise.
+#     WORKSPACE Cargo.lock files (skeleton, cJSON, adler32) is a `path` crate,
+#     so there is no registry to restore and target-caching would save seconds
+#     of compiling a few tiny local crates — while adding the `uses:` this file
+#     exists to minimise. The one registry dependency set is the cJSON port's
+#     fuzz crate (ports/cjson/rust/fuzz: libfuzzer-sys), built only by stage 3's
+#     cargo-fuzz step; it compiles in under a minute, so the same trade holds.
 name: check-kit
 
 on:
@@ -63,6 +65,8 @@ jobs:
     # harness that HUNG; a hang here would quietly bill six hours of a metered
     # private-repo quota. Observed runtime (2026-10) is 7-10 minutes, most of it
     # check-kit's gate-mutation sweep, so this is ~3x headroom and still a ceiling.
+    # (The cJSON cargo-fuzz step added ~3 minutes on 2026-10-17: install, build,
+    # 2 x 30s. Still inside it.)
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -103,9 +107,20 @@ jobs:
       # the ffi crate's C-ABI shim is the port's entire memory-safety surface, and
       # check.sh only advances `sanitized` when miri actually ran (LESSONS #6, #18).
       - run: rustup toolchain install nightly --profile minimal --component miri --no-self-update
+      # cargo-fuzz so check.sh step 4c ("no panic on input") RUNS here instead of
+      # printing SKIP — before 2026-10-17 the port had no cargo-fuzz target and
+      # CLAUDE.md's control rested on diff-fuzz, which asks a different question
+      # (LESSONS #61 records the change that added them).
+      # --locked: the tool's own dependency tree, as published. Built with stable.
+      - run: cargo install cargo-fuzz --locked
 
       # The keystone port's live gate: locks the C oracle (build + validate all
       # vectors against the vendored cJSON), then diffs the Rust port over the
       # matrices its ported modules support. Runs in CI from day one so the
       # port's gates cannot rot unexecuted (LESSONS #13).
       - run: ports/cjson/check.sh
+        # 30s per cargo-fuzz target here (60 locally): two targets, so about a
+        # minute of fuzzing per run on a metered runner. A regression floor like
+        # diff-fuzz's 2000 iterations, not a sweep (LESSONS #33).
+        env:
+          FUZZ_SECONDS: "30"

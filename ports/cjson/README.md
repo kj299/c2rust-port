@@ -20,6 +20,21 @@ kit did not write (`RETROSPECTIVE-kit-audit.md` §6, keystone item).
 > that table measures and no more. [Corrected 2026-10-10: not every one yet —
 > five `*CaseSensitive` utils symbols name driver modes no case drives, and two
 > base symbols are compared only transitively; `API-COVERAGE.md` marks each.]
+> [Closed 2026-10-17: all seven are now called directly — the six `-cs` modes
+> by case pairs that pin the flag both ways, `cJSON_Parse` and
+> `cJSON_GetErrorPtr` by driver mode `parse` and by ABI vectors over the
+> cdylib, which now exports `cJSON_GetErrorPtr`. Doing it found two C defects
+> the port now fixes (`utils-cs-detach-*`, `errptr-null-input-resets`), one
+> port behaviour now ledgered as a fix (`utils-add-dup-key*`), and four port
+> bugs, fixed and pinned (the cdylib's `cJSON_Parse` one byte short,
+> `compare_json`'s check order, `genmerge`'s clones, the missing export).
+> `check_api.py --matrix` now fails a row naming a mode no case runs, and
+> `rust/fuzz/` adds the cargo-fuzz targets the `fuzzed` rung never had
+> (`check.sh` step 4c). `mutants.toml` holds the mutants that prove the new
+> cases. And the ABI vectors below, which never passed their shims'
+> `out_size`, compared only the returned LENGTH in most calls since they were
+> written (54 of 78 measured): they pass it now, and `lib_diff` fails an output
+> buffer neither side wrote (LESSONS #61–#63).]
 
 **Module 15 (`entry-opts`) closed the ratchet** — `cJSON_ParseWithOpts`,
 `cJSON_ParseWithLengthOpts`, `cJSON_PrintBuffered`, `cJSON_PrintPreallocated`,

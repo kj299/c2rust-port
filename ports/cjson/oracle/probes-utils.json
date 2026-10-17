@@ -357,6 +357,654 @@
    ],
    "stdin": "add\t\n1",
    "note": "empty path is kept as an empty string"
+  },
+  {
+   "id": "ptr-case-miss",
+   "args": [
+    "ptr"
+   ],
+   "stdin": "/A\n{\"a\":1}",
+   "note": "a differently-cased key: case-insensitive finds it, case-sensitive does not"
+  },
+  {
+   "id": "ptr-cs-case-miss",
+   "args": [
+    "ptr-cs"
+   ],
+   "stdin": "/A\n{\"a\":1}",
+   "note": "a differently-cased key: case-insensitive finds it, case-sensitive does not"
+  },
+  {
+   "id": "ptr-exact-second",
+   "args": [
+    "ptr"
+   ],
+   "stdin": "/A\n{\"a\":1,\"A\":2}",
+   "note": "both spellings present, exact one SECOND: ci stops at the first, cs skips it"
+  },
+  {
+   "id": "ptr-cs-exact-second",
+   "args": [
+    "ptr-cs"
+   ],
+   "stdin": "/A\n{\"a\":1,\"A\":2}",
+   "note": "both spellings present, exact one SECOND: ci stops at the first, cs skips it"
+  },
+  {
+   "id": "ptr-exact-first",
+   "args": [
+    "ptr"
+   ],
+   "stdin": "/a\n{\"A\":1,\"a\":2}",
+   "note": "the mirror: the case-insensitive match comes first under ci"
+  },
+  {
+   "id": "ptr-cs-exact-first",
+   "args": [
+    "ptr-cs"
+   ],
+   "stdin": "/a\n{\"A\":1,\"a\":2}",
+   "note": "the mirror: the case-insensitive match comes first under ci"
+  },
+  {
+   "id": "ptr-nested-leaf",
+   "args": [
+    "ptr"
+   ],
+   "stdin": "/a/B\n{\"a\":{\"b\":1,\"B\":2}}",
+   "note": "the flag reaches the LAST segment of a nested pointer"
+  },
+  {
+   "id": "ptr-cs-nested-leaf",
+   "args": [
+    "ptr-cs"
+   ],
+   "stdin": "/a/B\n{\"a\":{\"b\":1,\"B\":2}}",
+   "note": "the flag reaches the LAST segment of a nested pointer"
+  },
+  {
+   "id": "ptr-parent-seg",
+   "args": [
+    "ptr"
+   ],
+   "stdin": "/O/x\n{\"o\":{\"x\":1},\"O\":{\"x\":2}}",
+   "note": "the flag reaches a PARENT segment too"
+  },
+  {
+   "id": "ptr-cs-parent-seg",
+   "args": [
+    "ptr-cs"
+   ],
+   "stdin": "/O/x\n{\"o\":{\"x\":1},\"O\":{\"x\":2}}",
+   "note": "the flag reaches a PARENT segment too"
+  },
+  {
+   "id": "ptr-escaped",
+   "args": [
+    "ptr"
+   ],
+   "stdin": "/A~1B\n{\"a/b\":1,\"A/B\":2}",
+   "note": "case folding still applies around a ~1 escape"
+  },
+  {
+   "id": "ptr-cs-escaped",
+   "args": [
+    "ptr-cs"
+   ],
+   "stdin": "/A~1B\n{\"a/b\":1,\"A/B\":2}",
+   "note": "case folding still applies around a ~1 escape"
+  },
+  {
+   "id": "ptr-non-ascii",
+   "args": [
+    "ptr"
+   ],
+   "stdin": "/\u00c4\n{\"\u00e4\":1}",
+   "note": "tolower() folds ASCII only: a UTF-8 letter pair matches under neither"
+  },
+  {
+   "id": "ptr-cs-non-ascii",
+   "args": [
+    "ptr-cs"
+   ],
+   "stdin": "/\u00c4\n{\"\u00e4\":1}",
+   "note": "tolower() folds ASCII only: a UTF-8 letter pair matches under neither"
+  },
+  {
+   "id": "findptr-exact-second",
+   "args": [
+    "findptr"
+   ],
+   "stdin": "/A\n{\"a\":1,\"A\":2}",
+   "note": "the reverse lookup reports the spelling the forward lookup resolved"
+  },
+  {
+   "id": "findptr-cs-exact-second",
+   "args": [
+    "findptr-cs"
+   ],
+   "stdin": "/A\n{\"a\":1,\"A\":2}",
+   "note": "the reverse lookup reports the spelling the forward lookup resolved"
+  },
+  {
+   "id": "findptr-nested",
+   "args": [
+    "findptr"
+   ],
+   "stdin": "/b/A\n{\"b\":{\"a\":1,\"A\":2}}",
+   "note": "same, one level down"
+  },
+  {
+   "id": "findptr-cs-nested",
+   "args": [
+    "findptr-cs"
+   ],
+   "stdin": "/b/A\n{\"b\":{\"a\":1,\"A\":2}}",
+   "note": "same, one level down"
+  },
+  {
+   "id": "patch-op-key-upper",
+   "args": [
+    "patch"
+   ],
+   "stdin": "[{\"OP\":\"add\",\"path\":\"/x\",\"value\":1}]\n{}",
+   "note": "the op MEMBER is looked up with the flag: OP is not op under cs (status 3)"
+  },
+  {
+   "id": "patch-cs-op-key-upper",
+   "args": [
+    "patch-cs"
+   ],
+   "stdin": "[{\"OP\":\"add\",\"path\":\"/x\",\"value\":1}]\n{}",
+   "note": "the op MEMBER is looked up with the flag: OP is not op under cs (status 3)"
+  },
+  {
+   "id": "patch-path-key-upper",
+   "args": [
+    "patch"
+   ],
+   "stdin": "[{\"op\":\"add\",\"PATH\":\"/x\",\"value\":1}]\n{}",
+   "note": "same for the path member (status 2)"
+  },
+  {
+   "id": "patch-cs-path-key-upper",
+   "args": [
+    "patch-cs"
+   ],
+   "stdin": "[{\"op\":\"add\",\"PATH\":\"/x\",\"value\":1}]\n{}",
+   "note": "same for the path member (status 2)"
+  },
+  {
+   "id": "patch-value-key-upper",
+   "args": [
+    "patch"
+   ],
+   "stdin": "[{\"op\":\"add\",\"path\":\"/x\",\"VALUE\":1}]\n{}",
+   "note": "same for the value member (status 7)"
+  },
+  {
+   "id": "patch-cs-value-key-upper",
+   "args": [
+    "patch-cs"
+   ],
+   "stdin": "[{\"op\":\"add\",\"path\":\"/x\",\"VALUE\":1}]\n{}",
+   "note": "same for the value member (status 7)"
+  },
+  {
+   "id": "patch-from-key-upper",
+   "args": [
+    "patch"
+   ],
+   "stdin": "[{\"op\":\"copy\",\"FROM\":\"/a\",\"path\":\"/z\"}]\n{\"a\":1}",
+   "note": "same for the from member (status 4)"
+  },
+  {
+   "id": "patch-cs-from-key-upper",
+   "args": [
+    "patch-cs"
+   ],
+   "stdin": "[{\"op\":\"copy\",\"FROM\":\"/a\",\"path\":\"/z\"}]\n{\"a\":1}",
+   "note": "same for the from member (status 4)"
+  },
+  {
+   "id": "patch-add-other-case",
+   "args": [
+    "patch"
+   ],
+   "stdin": "[{\"op\":\"add\",\"path\":\"/A\",\"value\":3}]\n{\"a\":1}",
+   "note": "add deletes an existing member first: ci deletes a, cs keeps it"
+  },
+  {
+   "id": "patch-cs-add-other-case",
+   "args": [
+    "patch-cs"
+   ],
+   "stdin": "[{\"op\":\"add\",\"path\":\"/A\",\"value\":3}]\n{\"a\":1}",
+   "note": "add deletes an existing member first: ci deletes a, cs keeps it"
+  },
+  {
+   "id": "patch-test-keys",
+   "args": [
+    "patch"
+   ],
+   "stdin": "[{\"op\":\"test\",\"path\":\"/o\",\"value\":{\"a\":1,\"A\":2}}]\n{\"o\":{\"A\":2,\"a\":1}}",
+   "note": "test sorts both sides with the flag before comparing keys"
+  },
+  {
+   "id": "patch-cs-test-keys",
+   "args": [
+    "patch-cs"
+   ],
+   "stdin": "[{\"op\":\"test\",\"path\":\"/o\",\"value\":{\"a\":1,\"A\":2}}]\n{\"o\":{\"A\":2,\"a\":1}}",
+   "note": "test sorts both sides with the flag before comparing keys"
+  },
+  {
+   "id": "patch-test-mismatch",
+   "args": [
+    "patch"
+   ],
+   "stdin": "[{\"op\":\"test\",\"path\":\"/o\",\"value\":{\"A\":1}}]\n{\"o\":{\"a\":1}}",
+   "note": "the mirror: equal under ci, unequal under cs"
+  },
+  {
+   "id": "patch-cs-test-mismatch",
+   "args": [
+    "patch-cs"
+   ],
+   "stdin": "[{\"op\":\"test\",\"path\":\"/o\",\"value\":{\"A\":1}}]\n{\"o\":{\"a\":1}}",
+   "note": "the mirror: equal under ci, unequal under cs"
+  },
+  {
+   "id": "patch-copy-from-exact",
+   "args": [
+    "patch"
+   ],
+   "stdin": "[{\"op\":\"copy\",\"from\":\"/A\",\"path\":\"/z\"}]\n{\"a\":1,\"A\":2}",
+   "note": "copy resolves from with the flag (get_item_from_pointer)"
+  },
+  {
+   "id": "patch-cs-copy-from-exact",
+   "args": [
+    "patch-cs"
+   ],
+   "stdin": "[{\"op\":\"copy\",\"from\":\"/A\",\"path\":\"/z\"}]\n{\"a\":1,\"A\":2}",
+   "note": "copy resolves from with the flag (get_item_from_pointer)"
+  },
+  {
+   "id": "patch-remove-parent-seg",
+   "args": [
+    "patch"
+   ],
+   "stdin": "[{\"op\":\"remove\",\"path\":\"/O/A\"}]\n{\"o\":{\"A\":1},\"O\":{\"A\":2}}",
+   "note": "remove resolves the PARENT with the flag"
+  },
+  {
+   "id": "patch-cs-remove-parent-seg",
+   "args": [
+    "patch-cs"
+   ],
+   "stdin": "[{\"op\":\"remove\",\"path\":\"/O/A\"}]\n{\"o\":{\"A\":1},\"O\":{\"A\":2}}",
+   "note": "remove resolves the PARENT with the flag"
+  },
+  {
+   "id": "patch-remove-exact-first",
+   "args": [
+    "patch"
+   ],
+   "stdin": "[{\"op\":\"remove\",\"path\":\"/A\"}]\n{\"A\":1,\"a\":2}",
+   "note": "control for utils-cs-detach-*: the exact spelling comes first, so the C's case-insensitive leaf detach lands on the right key and the port agrees"
+  },
+  {
+   "id": "patch-cs-remove-exact-first",
+   "args": [
+    "patch-cs"
+   ],
+   "stdin": "[{\"op\":\"remove\",\"path\":\"/A\"}]\n{\"A\":1,\"a\":2}",
+   "note": "control for utils-cs-detach-*: the exact spelling comes first, so the C's case-insensitive leaf detach lands on the right key and the port agrees"
+  },
+  {
+   "id": "merge-null-exact",
+   "args": [
+    "merge"
+   ],
+   "stdin": "{\"A\":null}\n{\"a\":1,\"A\":2}",
+   "note": "a null member removes the key it names, compared with the flag"
+  },
+  {
+   "id": "merge-cs-null-exact",
+   "args": [
+    "merge-cs"
+   ],
+   "stdin": "{\"A\":null}\n{\"a\":1,\"A\":2}",
+   "note": "a null member removes the key it names, compared with the flag"
+  },
+  {
+   "id": "merge-null-other-case",
+   "args": [
+    "merge"
+   ],
+   "stdin": "{\"a\":null}\n{\"A\":1}",
+   "note": "the mirror: ci removes A, cs removes nothing"
+  },
+  {
+   "id": "merge-cs-null-other-case",
+   "args": [
+    "merge-cs"
+   ],
+   "stdin": "{\"a\":null}\n{\"A\":1}",
+   "note": "the mirror: ci removes A, cs removes nothing"
+  },
+  {
+   "id": "merge-add-other-case",
+   "args": [
+    "merge"
+   ],
+   "stdin": "{\"A\":5}\n{\"a\":1}",
+   "note": "a member is replaced only if the flag matches it, else added beside"
+  },
+  {
+   "id": "merge-cs-add-other-case",
+   "args": [
+    "merge-cs"
+   ],
+   "stdin": "{\"A\":5}\n{\"a\":1}",
+   "note": "a member is replaced only if the flag matches it, else added beside"
+  },
+  {
+   "id": "merge-nested",
+   "args": [
+    "merge"
+   ],
+   "stdin": "{\"o\":{\"B\":2}}\n{\"o\":{\"b\":1}}",
+   "note": "the flag reaches the recursion"
+  },
+  {
+   "id": "merge-cs-nested",
+   "args": [
+    "merge-cs"
+   ],
+   "stdin": "{\"o\":{\"B\":2}}\n{\"o\":{\"b\":1}}",
+   "note": "the flag reaches the recursion"
+  },
+  {
+   "id": "merge-object-other-case",
+   "args": [
+    "merge"
+   ],
+   "stdin": "{\"A\":{\"x\":1}}\n{\"a\":{\"y\":2}}",
+   "note": "ci merges into a; cs adds A beside it"
+  },
+  {
+   "id": "merge-cs-object-other-case",
+   "args": [
+    "merge-cs"
+   ],
+   "stdin": "{\"A\":{\"x\":1}}\n{\"a\":{\"y\":2}}",
+   "note": "ci merges into a; cs adds A beside it"
+  },
+  {
+   "id": "genmerge-nested-case",
+   "args": [
+    "genmerge"
+   ],
+   "stdin": "{\"o\":{\"a\":1}}\n{\"o\":{\"A\":1}}",
+   "note": "compare_json uses the flag: under ci the children are equal (null patch)"
+  },
+  {
+   "id": "genmerge-cs-nested-case",
+   "args": [
+    "genmerge-cs"
+   ],
+   "stdin": "{\"o\":{\"a\":1}}\n{\"o\":{\"A\":1}}",
+   "note": "compare_json uses the flag: under ci the children are equal (null patch)"
+  },
+  {
+   "id": "genmerge-sort-order",
+   "args": [
+    "genmerge"
+   ],
+   "stdin": "{\"a\":1,\"B\":2}\n{\"B\":2,\"c\":3}",
+   "note": "children are SORTED with the flag but DIFFED with strcmp: ci sorts a before B, so strcmp misreads B as new"
+  },
+  {
+   "id": "genmerge-cs-sort-order",
+   "args": [
+    "genmerge-cs"
+   ],
+   "stdin": "{\"a\":1,\"B\":2}\n{\"B\":2,\"c\":3}",
+   "note": "children are SORTED with the flag but DIFFED with strcmp: ci sorts a before B, so strcmp misreads B as new"
+  },
+  {
+   "id": "genmerge-nested-ci-recursion",
+   "args": [
+    "genmerge"
+   ],
+   "stdin": "{\"o\":{\"a\":1,\"B\":2}}\n{\"o\":{\"B\":2,\"c\":3}}",
+   "note": "the C recurses through the case-INSENSITIVE public entry even under cs, so the spurious B appears one level down in both modes"
+  },
+  {
+   "id": "genmerge-cs-nested-ci-recursion",
+   "args": [
+    "genmerge-cs"
+   ],
+   "stdin": "{\"o\":{\"a\":1,\"B\":2}}\n{\"o\":{\"B\":2,\"c\":3}}",
+   "note": "the C recurses through the case-INSENSITIVE public entry even under cs, so the spurious B appears one level down in both modes"
+  },
+  {
+   "id": "genpatch-rename-case",
+   "args": [
+    "genpatch"
+   ],
+   "stdin": "{\"a\":1}\n{\"A\":1}",
+   "note": "ci sees no change; cs sees a remove and an add"
+  },
+  {
+   "id": "genpatch-cs-rename-case",
+   "args": [
+    "genpatch-cs"
+   ],
+   "stdin": "{\"a\":1}\n{\"A\":1}",
+   "note": "ci sees no change; cs sees a remove and an add"
+  },
+  {
+   "id": "genpatch-both-spellings",
+   "args": [
+    "genpatch"
+   ],
+   "stdin": "{\"a\":1,\"A\":2}\n{\"A\":2,\"a\":3}",
+   "note": "the sort with the flag decides which members are paired"
+  },
+  {
+   "id": "genpatch-cs-both-spellings",
+   "args": [
+    "genpatch-cs"
+   ],
+   "stdin": "{\"a\":1,\"A\":2}\n{\"A\":2,\"a\":3}",
+   "note": "the sort with the flag decides which members are paired"
+  },
+  {
+   "id": "genpatch-nested",
+   "args": [
+    "genpatch"
+   ],
+   "stdin": "{\"o\":{\"b\":1,\"B\":2}}\n{\"o\":{\"B\":2,\"b\":1}}",
+   "note": "the flag reaches a nested object"
+  },
+  {
+   "id": "genpatch-cs-nested",
+   "args": [
+    "genpatch-cs"
+   ],
+   "stdin": "{\"o\":{\"b\":1,\"B\":2}}\n{\"o\":{\"B\":2,\"b\":1}}",
+   "note": "the flag reaches a nested object"
+  },
+  {
+   "id": "genpatch-array-child",
+   "args": [
+    "genpatch"
+   ],
+   "stdin": "[{\"a\":1}]\n[{\"A\":1}]",
+   "note": "the flag survives the array-index recursion"
+  },
+  {
+   "id": "genpatch-cs-array-child",
+   "args": [
+    "genpatch-cs"
+   ],
+   "stdin": "[{\"a\":1}]\n[{\"A\":1}]",
+   "note": "the flag survives the array-index recursion"
+  },
+  {
+   "id": "sort-ties",
+   "args": [
+    "sort"
+   ],
+   "stdin": "{\"b\":1,\"A\":2,\"a\":3,\"B\":4}",
+   "note": "ci ties (A/a, b/B) are reordered by the C's merge; cs orders by byte"
+  },
+  {
+   "id": "sort-cs-ties",
+   "args": [
+    "sort-cs"
+   ],
+   "stdin": "{\"b\":1,\"A\":2,\"a\":3,\"B\":4}",
+   "note": "ci ties (A/a, b/B) are reordered by the C's merge; cs orders by byte"
+  },
+  {
+   "id": "patch-detach-remove",
+   "args": [
+    "patch"
+   ],
+   "stdin": "[{\"op\":\"remove\",\"path\":\"/A\"}]\n{\"a\":1}",
+   "note": "ci twin of utils-cs-detach-remove: the C's leaf detach is case-insensitive, which IS this mode's contract"
+  },
+  {
+   "id": "patch-detach-remove-first",
+   "args": [
+    "patch"
+   ],
+   "stdin": "[{\"op\":\"remove\",\"path\":\"/A\"}]\n{\"a\":1,\"A\":2}",
+   "note": "ci twin of utils-cs-detach-remove-first: the C's leaf detach is case-insensitive, which IS this mode's contract"
+  },
+  {
+   "id": "patch-detach-replace",
+   "args": [
+    "patch"
+   ],
+   "stdin": "[{\"op\":\"replace\",\"path\":\"/a\",\"value\":9}]\n{\"A\":1,\"a\":2}",
+   "note": "ci twin of utils-cs-detach-replace: the C's leaf detach is case-insensitive, which IS this mode's contract"
+  },
+  {
+   "id": "patch-detach-move",
+   "args": [
+    "patch"
+   ],
+   "stdin": "[{\"op\":\"move\",\"from\":\"/A\",\"path\":\"/z\"}]\n{\"a\":1,\"A\":2}",
+   "note": "ci twin of utils-cs-detach-move: the C's leaf detach is case-insensitive, which IS this mode's contract"
+  },
+  {
+   "id": "patch-detach-nested",
+   "args": [
+    "patch"
+   ],
+   "stdin": "[{\"op\":\"remove\",\"path\":\"/O/a\"}]\n{\"o\":{\"a\":1},\"O\":{\"A\":2}}",
+   "note": "ci twin of utils-cs-detach-nested: the C's leaf detach is case-insensitive, which IS this mode's contract"
+  },
+  {
+   "id": "patch-test-sorts-before-length",
+   "args": [
+    "patch"
+   ],
+   "stdin": "[{\"op\":\"test\",\"path\":\"\",\"value\":[{\"b\":1,\"a\":2}]}]\n[{\"b\":1,\"a\":2},5]",
+   "note": "compare_json walks the pairs BEFORE it checks for leftovers, so a failing test of unequal-length arrays has already sorted the first element in place -- the port checked lengths first and printed it unsorted"
+  },
+  {
+   "id": "patch-cs-test-sorts-before-length",
+   "args": [
+    "patch-cs"
+   ],
+   "stdin": "[{\"op\":\"test\",\"path\":\"\",\"value\":[{\"b\":1,\"a\":2}]}]\n[{\"b\":1,\"a\":2},5]",
+   "note": "compare_json walks the pairs BEFORE it checks for leftovers, so a failing test of unequal-length arrays has already sorted the first element in place -- the port checked lengths first and printed it unsorted"
+  },
+  {
+   "id": "patch-test-sorts-before-count",
+   "args": [
+    "patch"
+   ],
+   "stdin": "[{\"op\":\"test\",\"path\":\"\",\"value\":{\"o\":{\"b\":1,\"a\":2}}}]\n{\"o\":{\"b\":1,\"a\":2},\"p\":1}",
+   "note": "the same order for an object with an extra member: `o` is sorted before `p` is found unmatched"
+  },
+  {
+   "id": "patch-cs-test-sorts-before-count",
+   "args": [
+    "patch-cs"
+   ],
+   "stdin": "[{\"op\":\"test\",\"path\":\"\",\"value\":{\"o\":{\"b\":1,\"a\":2}}}]\n{\"o\":{\"b\":1,\"a\":2},\"p\":1}",
+   "note": "the same order for an object with an extra member: `o` is sorted before `p` is found unmatched"
+  },
+  {
+   "id": "genmerge-tie-sorted-twice",
+   "args": [
+    "genmerge"
+   ],
+   "stdin": "{\"o\":{\"b\":5,\"B\":2}}\n{\"o\":{\"\":1}}",
+   "note": "compare_json sorts the paired children IN PLACE and the recursion sorts them again; sort_list is unstable (a tie takes the second run), so the case-tied b/B swap twice -- the port compared clones and swapped them once"
+  },
+  {
+   "id": "genmerge-cs-tie-sorted-twice",
+   "args": [
+    "genmerge-cs"
+   ],
+   "stdin": "{\"o\":{\"b\":5,\"B\":2}}\n{\"o\":{\"\":1}}",
+   "note": "compare_json sorts the paired children IN PLACE and the recursion sorts them again; sort_list is unstable (a tie takes the second run), so the case-tied b/B swap twice -- the port compared clones and swapped them once"
+  },
+  {
+   "id": "genmerge-tie-nested-array",
+   "args": [
+    "genmerge"
+   ],
+   "stdin": "{\"o\":{\"x\":[{\"b\":1,\"B\":2}],\"y\":1}}\n{\"o\":{\"x\":[{\"b\":1,\"B\":3}]}}",
+   "note": "both bugs at once: o has a leftover (y), so only the pairwise-first walk reaches x's element and sorts it before the recursion sorts it again"
+  },
+  {
+   "id": "genmerge-cs-tie-nested-array",
+   "args": [
+    "genmerge-cs"
+   ],
+   "stdin": "{\"o\":{\"x\":[{\"b\":1,\"B\":2}],\"y\":1}}\n{\"o\":{\"x\":[{\"b\":1,\"B\":3}]}}",
+   "note": "both bugs at once: o has a leftover (y), so only the pairwise-first walk reaches x's element and sorts it before the recursion sorts it again"
+  },
+  {
+   "id": "genmerge-duplicate-key-ties",
+   "args": [
+    "genmerge"
+   ],
+   "stdin": "{\"o\":{\"\":1,\"\":2}}\n{\"o\":{\"\":9,\"\":1}}",
+   "note": "duplicate keys are ties under both flags, so the double sort shows without any case folding"
+  },
+  {
+   "id": "genmerge-cs-duplicate-key-ties",
+   "args": [
+    "genmerge-cs"
+   ],
+   "stdin": "{\"o\":{\"\":1,\"\":2}}\n{\"o\":{\"\":9,\"\":1}}",
+   "note": "duplicate keys are ties under both flags, so the double sort shows without any case folding"
+  },
+  {
+   "id": "patch-add-single-key",
+   "args": [
+    "patch"
+   ],
+   "stdin": "[{\"op\":\"add\",\"path\":\"/role\",\"value\":\"user\"}]\n{\"role\":\"admin\",\"x\":1}",
+   "note": "control for utils-add-dup-key*: with the key once, deleting one match deletes them all, so port and C agree"
+  },
+  {
+   "id": "patch-cs-add-single-key",
+   "args": [
+    "patch-cs"
+   ],
+   "stdin": "[{\"op\":\"add\",\"path\":\"/role\",\"value\":\"user\"}]\n{\"role\":\"admin\",\"x\":1}",
+   "note": "control for utils-add-dup-key*: with the key once, deleting one match deletes them all, so port and C agree"
   }
  ]
 }

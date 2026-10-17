@@ -313,4 +313,24 @@ char *cjson_modes_opts(int flags, int prebuffer, int prealloc,
 char *cjson_modes_parent(const char *kind, const char *op, const char *key,
                          const char *json, size_t json_len);
 
+/* parse: cJSON_Parse, the default entry point, and cJSON_GetErrorPtr -- the two
+ * symbols that were compared only TRANSITIVELY (through `opts` and the core's
+ * parse_with_opts) until 2026-10-17. The transitive argument held for the
+ * core and failed for the cdylib: its cJSON_Parse parsed `strlen` bytes where
+ * the C parses `strlen + 1`, and the BOM rule (five readable bytes) tells the
+ * two apart. This mode calls the symbols themselves.
+ *
+ * `json` must be NUL-terminated at `json_len` (the driver guarantees it);
+ * cJSON_Parse reads up to the FIRST NUL, so an embedded one truncates.
+ *
+ *   ok;err=<e>;<printed>    the document parsed; printed unformatted
+ *   fail;err=<e>            it did not
+ *
+ * <e> is cJSON_GetErrorPtr() as an offset into `json`, `null`, or `other` (a
+ * pointer outside the buffer: stale, from some earlier parse). The global is
+ * set only on failure, so a success reads `null` -- the C resets it on entry.
+ *
+ * Returns NULL only on allocation failure. */
+char *cjson_modes_parse(const char *json, size_t json_len);
+
 #endif /* CJSON_MODES_H */

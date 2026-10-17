@@ -5,7 +5,7 @@
 // byte-compares this file against a fresh regeneration, so a hand
 // edit here FAILS the gate instead of silently redefining the spec.
 // module: utils
-// transcript fingerprint: sha256:2190622b0da2719e52f1b0a22cd73a1a1309e4be3ef44f4fde70d89ff62e7c4e
+// transcript fingerprint: sha256:f423ddf732498fb74ae1744de01af1d4b7457c1aa7a13bc215ad2cb6c4f8d2ea
 
 mod probe_glue;
 
@@ -325,4 +325,571 @@ fn probe_addpatch_obj() {
 #[rustfmt::skip]
 fn probe_addpatch_emptypath() {
     check("addpatch-emptypath", &["addpatch"], b"add\x09\x0a1", 0, b"[{\"op\":\"add\",\"path\":\"\",\"value\":1}]");
+}
+
+// a differently-cased key: case-insensitive finds it, case-sensitive does not
+#[test]
+#[rustfmt::skip]
+fn probe_ptr_case_miss() {
+    check("ptr-case-miss", &["ptr"], b"/A\x0a{\"a\":1}", 0, b"1");
+}
+
+// a differently-cased key: case-insensitive finds it, case-sensitive does not
+#[test]
+#[rustfmt::skip]
+fn probe_ptr_cs_case_miss() {
+    check("ptr-cs-case-miss", &["ptr-cs"], b"/A\x0a{\"a\":1}", 0, b"missing");
+}
+
+// both spellings present, exact one SECOND: ci stops at the first, cs skips it
+#[test]
+#[rustfmt::skip]
+fn probe_ptr_exact_second() {
+    check("ptr-exact-second", &["ptr"], b"/A\x0a{\"a\":1,\"A\":2}", 0, b"1");
+}
+
+// both spellings present, exact one SECOND: ci stops at the first, cs skips it
+#[test]
+#[rustfmt::skip]
+fn probe_ptr_cs_exact_second() {
+    check("ptr-cs-exact-second", &["ptr-cs"], b"/A\x0a{\"a\":1,\"A\":2}", 0, b"2");
+}
+
+// the mirror: the case-insensitive match comes first under ci
+#[test]
+#[rustfmt::skip]
+fn probe_ptr_exact_first() {
+    check("ptr-exact-first", &["ptr"], b"/a\x0a{\"A\":1,\"a\":2}", 0, b"1");
+}
+
+// the mirror: the case-insensitive match comes first under ci
+#[test]
+#[rustfmt::skip]
+fn probe_ptr_cs_exact_first() {
+    check("ptr-cs-exact-first", &["ptr-cs"], b"/a\x0a{\"A\":1,\"a\":2}", 0, b"2");
+}
+
+// the flag reaches the LAST segment of a nested pointer
+#[test]
+#[rustfmt::skip]
+fn probe_ptr_nested_leaf() {
+    check("ptr-nested-leaf", &["ptr"], b"/a/B\x0a{\"a\":{\"b\":1,\"B\":2}}", 0, b"1");
+}
+
+// the flag reaches the LAST segment of a nested pointer
+#[test]
+#[rustfmt::skip]
+fn probe_ptr_cs_nested_leaf() {
+    check("ptr-cs-nested-leaf", &["ptr-cs"], b"/a/B\x0a{\"a\":{\"b\":1,\"B\":2}}", 0, b"2");
+}
+
+// the flag reaches a PARENT segment too
+#[test]
+#[rustfmt::skip]
+fn probe_ptr_parent_seg() {
+    check("ptr-parent-seg", &["ptr"], b"/O/x\x0a{\"o\":{\"x\":1},\"O\":{\"x\":2}}", 0, b"1");
+}
+
+// the flag reaches a PARENT segment too
+#[test]
+#[rustfmt::skip]
+fn probe_ptr_cs_parent_seg() {
+    check("ptr-cs-parent-seg", &["ptr-cs"], b"/O/x\x0a{\"o\":{\"x\":1},\"O\":{\"x\":2}}", 0, b"2");
+}
+
+// case folding still applies around a ~1 escape
+#[test]
+#[rustfmt::skip]
+fn probe_ptr_escaped() {
+    check("ptr-escaped", &["ptr"], b"/A~1B\x0a{\"a/b\":1,\"A/B\":2}", 0, b"1");
+}
+
+// case folding still applies around a ~1 escape
+#[test]
+#[rustfmt::skip]
+fn probe_ptr_cs_escaped() {
+    check("ptr-cs-escaped", &["ptr-cs"], b"/A~1B\x0a{\"a/b\":1,\"A/B\":2}", 0, b"2");
+}
+
+// tolower() folds ASCII only: a UTF-8 letter pair matches under neither
+#[test]
+#[rustfmt::skip]
+fn probe_ptr_non_ascii() {
+    check("ptr-non-ascii", &["ptr"], b"/\xc3\x84\x0a{\"\xc3\xa4\":1}", 0, b"missing");
+}
+
+// tolower() folds ASCII only: a UTF-8 letter pair matches under neither
+#[test]
+#[rustfmt::skip]
+fn probe_ptr_cs_non_ascii() {
+    check("ptr-cs-non-ascii", &["ptr-cs"], b"/\xc3\x84\x0a{\"\xc3\xa4\":1}", 0, b"missing");
+}
+
+// the reverse lookup reports the spelling the forward lookup resolved
+#[test]
+#[rustfmt::skip]
+fn probe_findptr_exact_second() {
+    check("findptr-exact-second", &["findptr"], b"/A\x0a{\"a\":1,\"A\":2}", 0, b"/a");
+}
+
+// the reverse lookup reports the spelling the forward lookup resolved
+#[test]
+#[rustfmt::skip]
+fn probe_findptr_cs_exact_second() {
+    check("findptr-cs-exact-second", &["findptr-cs"], b"/A\x0a{\"a\":1,\"A\":2}", 0, b"/A");
+}
+
+// same, one level down
+#[test]
+#[rustfmt::skip]
+fn probe_findptr_nested() {
+    check("findptr-nested", &["findptr"], b"/b/A\x0a{\"b\":{\"a\":1,\"A\":2}}", 0, b"/b/a");
+}
+
+// same, one level down
+#[test]
+#[rustfmt::skip]
+fn probe_findptr_cs_nested() {
+    check("findptr-cs-nested", &["findptr-cs"], b"/b/A\x0a{\"b\":{\"a\":1,\"A\":2}}", 0, b"/b/A");
+}
+
+// the op MEMBER is looked up with the flag: OP is not op under cs (status 3)
+#[test]
+#[rustfmt::skip]
+fn probe_patch_op_key_upper() {
+    check("patch-op-key-upper", &["patch"], b"[{\"OP\":\"add\",\"path\":\"/x\",\"value\":1}]\x0a{}", 0, b"status=0;{\"x\":1}");
+}
+
+// the op MEMBER is looked up with the flag: OP is not op under cs (status 3)
+#[test]
+#[rustfmt::skip]
+fn probe_patch_cs_op_key_upper() {
+    check("patch-cs-op-key-upper", &["patch-cs"], b"[{\"OP\":\"add\",\"path\":\"/x\",\"value\":1}]\x0a{}", 0, b"status=3;{}");
+}
+
+// same for the path member (status 2)
+#[test]
+#[rustfmt::skip]
+fn probe_patch_path_key_upper() {
+    check("patch-path-key-upper", &["patch"], b"[{\"op\":\"add\",\"PATH\":\"/x\",\"value\":1}]\x0a{}", 0, b"status=0;{\"x\":1}");
+}
+
+// same for the path member (status 2)
+#[test]
+#[rustfmt::skip]
+fn probe_patch_cs_path_key_upper() {
+    check("patch-cs-path-key-upper", &["patch-cs"], b"[{\"op\":\"add\",\"PATH\":\"/x\",\"value\":1}]\x0a{}", 0, b"status=2;{}");
+}
+
+// same for the value member (status 7)
+#[test]
+#[rustfmt::skip]
+fn probe_patch_value_key_upper() {
+    check("patch-value-key-upper", &["patch"], b"[{\"op\":\"add\",\"path\":\"/x\",\"VALUE\":1}]\x0a{}", 0, b"status=0;{\"x\":1}");
+}
+
+// same for the value member (status 7)
+#[test]
+#[rustfmt::skip]
+fn probe_patch_cs_value_key_upper() {
+    check("patch-cs-value-key-upper", &["patch-cs"], b"[{\"op\":\"add\",\"path\":\"/x\",\"VALUE\":1}]\x0a{}", 0, b"status=7;{}");
+}
+
+// same for the from member (status 4)
+#[test]
+#[rustfmt::skip]
+fn probe_patch_from_key_upper() {
+    check("patch-from-key-upper", &["patch"], b"[{\"op\":\"copy\",\"FROM\":\"/a\",\"path\":\"/z\"}]\x0a{\"a\":1}", 0, b"status=0;{\"a\":1,\"z\":1}");
+}
+
+// same for the from member (status 4)
+#[test]
+#[rustfmt::skip]
+fn probe_patch_cs_from_key_upper() {
+    check("patch-cs-from-key-upper", &["patch-cs"], b"[{\"op\":\"copy\",\"FROM\":\"/a\",\"path\":\"/z\"}]\x0a{\"a\":1}", 0, b"status=4;{\"a\":1}");
+}
+
+// add deletes an existing member first: ci deletes a, cs keeps it
+#[test]
+#[rustfmt::skip]
+fn probe_patch_add_other_case() {
+    check("patch-add-other-case", &["patch"], b"[{\"op\":\"add\",\"path\":\"/A\",\"value\":3}]\x0a{\"a\":1}", 0, b"status=0;{\"A\":3}");
+}
+
+// add deletes an existing member first: ci deletes a, cs keeps it
+#[test]
+#[rustfmt::skip]
+fn probe_patch_cs_add_other_case() {
+    check("patch-cs-add-other-case", &["patch-cs"], b"[{\"op\":\"add\",\"path\":\"/A\",\"value\":3}]\x0a{\"a\":1}", 0, b"status=0;{\"a\":1,\"A\":3}");
+}
+
+// test sorts both sides with the flag before comparing keys
+#[test]
+#[rustfmt::skip]
+fn probe_patch_test_keys() {
+    check("patch-test-keys", &["patch"], b"[{\"op\":\"test\",\"path\":\"/o\",\"value\":{\"a\":1,\"A\":2}}]\x0a{\"o\":{\"A\":2,\"a\":1}}", 0, b"status=1;{\"o\":{\"a\":1,\"A\":2}}");
+}
+
+// test sorts both sides with the flag before comparing keys
+#[test]
+#[rustfmt::skip]
+fn probe_patch_cs_test_keys() {
+    check("patch-cs-test-keys", &["patch-cs"], b"[{\"op\":\"test\",\"path\":\"/o\",\"value\":{\"a\":1,\"A\":2}}]\x0a{\"o\":{\"A\":2,\"a\":1}}", 0, b"status=0;{\"o\":{\"A\":2,\"a\":1}}");
+}
+
+// the mirror: equal under ci, unequal under cs
+#[test]
+#[rustfmt::skip]
+fn probe_patch_test_mismatch() {
+    check("patch-test-mismatch", &["patch"], b"[{\"op\":\"test\",\"path\":\"/o\",\"value\":{\"A\":1}}]\x0a{\"o\":{\"a\":1}}", 0, b"status=0;{\"o\":{\"a\":1}}");
+}
+
+// the mirror: equal under ci, unequal under cs
+#[test]
+#[rustfmt::skip]
+fn probe_patch_cs_test_mismatch() {
+    check("patch-cs-test-mismatch", &["patch-cs"], b"[{\"op\":\"test\",\"path\":\"/o\",\"value\":{\"A\":1}}]\x0a{\"o\":{\"a\":1}}", 0, b"status=1;{\"o\":{\"a\":1}}");
+}
+
+// copy resolves from with the flag (get_item_from_pointer)
+#[test]
+#[rustfmt::skip]
+fn probe_patch_copy_from_exact() {
+    check("patch-copy-from-exact", &["patch"], b"[{\"op\":\"copy\",\"from\":\"/A\",\"path\":\"/z\"}]\x0a{\"a\":1,\"A\":2}", 0, b"status=0;{\"a\":1,\"A\":2,\"z\":1}");
+}
+
+// copy resolves from with the flag (get_item_from_pointer)
+#[test]
+#[rustfmt::skip]
+fn probe_patch_cs_copy_from_exact() {
+    check("patch-cs-copy-from-exact", &["patch-cs"], b"[{\"op\":\"copy\",\"from\":\"/A\",\"path\":\"/z\"}]\x0a{\"a\":1,\"A\":2}", 0, b"status=0;{\"a\":1,\"A\":2,\"z\":2}");
+}
+
+// remove resolves the PARENT with the flag
+#[test]
+#[rustfmt::skip]
+fn probe_patch_remove_parent_seg() {
+    check("patch-remove-parent-seg", &["patch"], b"[{\"op\":\"remove\",\"path\":\"/O/A\"}]\x0a{\"o\":{\"A\":1},\"O\":{\"A\":2}}", 0, b"status=0;{\"o\":{},\"O\":{\"A\":2}}");
+}
+
+// remove resolves the PARENT with the flag
+#[test]
+#[rustfmt::skip]
+fn probe_patch_cs_remove_parent_seg() {
+    check("patch-cs-remove-parent-seg", &["patch-cs"], b"[{\"op\":\"remove\",\"path\":\"/O/A\"}]\x0a{\"o\":{\"A\":1},\"O\":{\"A\":2}}", 0, b"status=0;{\"o\":{\"A\":1},\"O\":{}}");
+}
+
+// control for utils-cs-detach-*: the exact spelling comes first, so the C's case-insensitive leaf detach lands on the right key and the port agrees
+#[test]
+#[rustfmt::skip]
+fn probe_patch_remove_exact_first() {
+    check("patch-remove-exact-first", &["patch"], b"[{\"op\":\"remove\",\"path\":\"/A\"}]\x0a{\"A\":1,\"a\":2}", 0, b"status=0;{\"a\":2}");
+}
+
+// control for utils-cs-detach-*: the exact spelling comes first, so the C's case-insensitive leaf detach lands on the right key and the port agrees
+#[test]
+#[rustfmt::skip]
+fn probe_patch_cs_remove_exact_first() {
+    check("patch-cs-remove-exact-first", &["patch-cs"], b"[{\"op\":\"remove\",\"path\":\"/A\"}]\x0a{\"A\":1,\"a\":2}", 0, b"status=0;{\"a\":2}");
+}
+
+// a null member removes the key it names, compared with the flag
+#[test]
+#[rustfmt::skip]
+fn probe_merge_null_exact() {
+    check("merge-null-exact", &["merge"], b"{\"A\":null}\x0a{\"a\":1,\"A\":2}", 0, b"{\"A\":2}");
+}
+
+// a null member removes the key it names, compared with the flag
+#[test]
+#[rustfmt::skip]
+fn probe_merge_cs_null_exact() {
+    check("merge-cs-null-exact", &["merge-cs"], b"{\"A\":null}\x0a{\"a\":1,\"A\":2}", 0, b"{\"a\":1}");
+}
+
+// the mirror: ci removes A, cs removes nothing
+#[test]
+#[rustfmt::skip]
+fn probe_merge_null_other_case() {
+    check("merge-null-other-case", &["merge"], b"{\"a\":null}\x0a{\"A\":1}", 0, b"{}");
+}
+
+// the mirror: ci removes A, cs removes nothing
+#[test]
+#[rustfmt::skip]
+fn probe_merge_cs_null_other_case() {
+    check("merge-cs-null-other-case", &["merge-cs"], b"{\"a\":null}\x0a{\"A\":1}", 0, b"{\"A\":1}");
+}
+
+// a member is replaced only if the flag matches it, else added beside
+#[test]
+#[rustfmt::skip]
+fn probe_merge_add_other_case() {
+    check("merge-add-other-case", &["merge"], b"{\"A\":5}\x0a{\"a\":1}", 0, b"{\"A\":5}");
+}
+
+// a member is replaced only if the flag matches it, else added beside
+#[test]
+#[rustfmt::skip]
+fn probe_merge_cs_add_other_case() {
+    check("merge-cs-add-other-case", &["merge-cs"], b"{\"A\":5}\x0a{\"a\":1}", 0, b"{\"a\":1,\"A\":5}");
+}
+
+// the flag reaches the recursion
+#[test]
+#[rustfmt::skip]
+fn probe_merge_nested() {
+    check("merge-nested", &["merge"], b"{\"o\":{\"B\":2}}\x0a{\"o\":{\"b\":1}}", 0, b"{\"o\":{\"B\":2}}");
+}
+
+// the flag reaches the recursion
+#[test]
+#[rustfmt::skip]
+fn probe_merge_cs_nested() {
+    check("merge-cs-nested", &["merge-cs"], b"{\"o\":{\"B\":2}}\x0a{\"o\":{\"b\":1}}", 0, b"{\"o\":{\"b\":1,\"B\":2}}");
+}
+
+// ci merges into a; cs adds A beside it
+#[test]
+#[rustfmt::skip]
+fn probe_merge_object_other_case() {
+    check("merge-object-other-case", &["merge"], b"{\"A\":{\"x\":1}}\x0a{\"a\":{\"y\":2}}", 0, b"{\"A\":{\"y\":2,\"x\":1}}");
+}
+
+// ci merges into a; cs adds A beside it
+#[test]
+#[rustfmt::skip]
+fn probe_merge_cs_object_other_case() {
+    check("merge-cs-object-other-case", &["merge-cs"], b"{\"A\":{\"x\":1}}\x0a{\"a\":{\"y\":2}}", 0, b"{\"a\":{\"y\":2},\"A\":{\"x\":1}}");
+}
+
+// compare_json uses the flag: under ci the children are equal (null patch)
+#[test]
+#[rustfmt::skip]
+fn probe_genmerge_nested_case() {
+    check("genmerge-nested-case", &["genmerge"], b"{\"o\":{\"a\":1}}\x0a{\"o\":{\"A\":1}}", 0, b"null");
+}
+
+// compare_json uses the flag: under ci the children are equal (null patch)
+#[test]
+#[rustfmt::skip]
+fn probe_genmerge_cs_nested_case() {
+    check("genmerge-cs-nested-case", &["genmerge-cs"], b"{\"o\":{\"a\":1}}\x0a{\"o\":{\"A\":1}}", 0, b"{\"o\":{\"A\":1,\"a\":null}}");
+}
+
+// children are SORTED with the flag but DIFFED with strcmp: ci sorts a before B, so strcmp misreads B as new
+#[test]
+#[rustfmt::skip]
+fn probe_genmerge_sort_order() {
+    check("genmerge-sort-order", &["genmerge"], b"{\"a\":1,\"B\":2}\x0a{\"B\":2,\"c\":3}", 0, b"{\"B\":2,\"a\":null,\"B\":null,\"c\":3}");
+}
+
+// children are SORTED with the flag but DIFFED with strcmp: ci sorts a before B, so strcmp misreads B as new
+#[test]
+#[rustfmt::skip]
+fn probe_genmerge_cs_sort_order() {
+    check("genmerge-cs-sort-order", &["genmerge-cs"], b"{\"a\":1,\"B\":2}\x0a{\"B\":2,\"c\":3}", 0, b"{\"a\":null,\"c\":3}");
+}
+
+// the C recurses through the case-INSENSITIVE public entry even under cs, so the spurious B appears one level down in both modes
+#[test]
+#[rustfmt::skip]
+fn probe_genmerge_nested_ci_recursion() {
+    check("genmerge-nested-ci-recursion", &["genmerge"], b"{\"o\":{\"a\":1,\"B\":2}}\x0a{\"o\":{\"B\":2,\"c\":3}}", 0, b"{\"o\":{\"B\":2,\"a\":null,\"B\":null,\"c\":3}}");
+}
+
+// the C recurses through the case-INSENSITIVE public entry even under cs, so the spurious B appears one level down in both modes
+#[test]
+#[rustfmt::skip]
+fn probe_genmerge_cs_nested_ci_recursion() {
+    check("genmerge-cs-nested-ci-recursion", &["genmerge-cs"], b"{\"o\":{\"a\":1,\"B\":2}}\x0a{\"o\":{\"B\":2,\"c\":3}}", 0, b"{\"o\":{\"B\":2,\"a\":null,\"B\":null,\"c\":3}}");
+}
+
+// ci sees no change; cs sees a remove and an add
+#[test]
+#[rustfmt::skip]
+fn probe_genpatch_rename_case() {
+    check("genpatch-rename-case", &["genpatch"], b"{\"a\":1}\x0a{\"A\":1}", 0, b"[]");
+}
+
+// ci sees no change; cs sees a remove and an add
+#[test]
+#[rustfmt::skip]
+fn probe_genpatch_cs_rename_case() {
+    check("genpatch-cs-rename-case", &["genpatch-cs"], b"{\"a\":1}\x0a{\"A\":1}", 0, b"[{\"op\":\"add\",\"path\":\"/A\",\"value\":1},{\"op\":\"remove\",\"path\":\"/a\"}]");
+}
+
+// the sort with the flag decides which members are paired
+#[test]
+#[rustfmt::skip]
+fn probe_genpatch_both_spellings() {
+    check("genpatch-both-spellings", &["genpatch"], b"{\"a\":1,\"A\":2}\x0a{\"A\":2,\"a\":3}", 0, b"[{\"op\":\"replace\",\"path\":\"/A\",\"value\":3},{\"op\":\"replace\",\"path\":\"/a\",\"value\":2}]");
+}
+
+// the sort with the flag decides which members are paired
+#[test]
+#[rustfmt::skip]
+fn probe_genpatch_cs_both_spellings() {
+    check("genpatch-cs-both-spellings", &["genpatch-cs"], b"{\"a\":1,\"A\":2}\x0a{\"A\":2,\"a\":3}", 0, b"[{\"op\":\"replace\",\"path\":\"/a\",\"value\":3}]");
+}
+
+// the flag reaches a nested object
+#[test]
+#[rustfmt::skip]
+fn probe_genpatch_nested() {
+    check("genpatch-nested", &["genpatch"], b"{\"o\":{\"b\":1,\"B\":2}}\x0a{\"o\":{\"B\":2,\"b\":1}}", 0, b"[{\"op\":\"replace\",\"path\":\"/o/B\",\"value\":1},{\"op\":\"replace\",\"path\":\"/o/b\",\"value\":2}]");
+}
+
+// the flag reaches a nested object
+#[test]
+#[rustfmt::skip]
+fn probe_genpatch_cs_nested() {
+    check("genpatch-cs-nested", &["genpatch-cs"], b"{\"o\":{\"b\":1,\"B\":2}}\x0a{\"o\":{\"B\":2,\"b\":1}}", 0, b"[]");
+}
+
+// the flag survives the array-index recursion
+#[test]
+#[rustfmt::skip]
+fn probe_genpatch_array_child() {
+    check("genpatch-array-child", &["genpatch"], b"[{\"a\":1}]\x0a[{\"A\":1}]", 0, b"[]");
+}
+
+// the flag survives the array-index recursion
+#[test]
+#[rustfmt::skip]
+fn probe_genpatch_cs_array_child() {
+    check("genpatch-cs-array-child", &["genpatch-cs"], b"[{\"a\":1}]\x0a[{\"A\":1}]", 0, b"[{\"op\":\"add\",\"path\":\"/0/A\",\"value\":1},{\"op\":\"remove\",\"path\":\"/0/a\"}]");
+}
+
+// ci ties (A/a, b/B) are reordered by the C's merge; cs orders by byte
+#[test]
+#[rustfmt::skip]
+fn probe_sort_ties() {
+    check("sort-ties", &["sort"], b"{\"b\":1,\"A\":2,\"a\":3,\"B\":4}", 0, b"{\"a\":3,\"A\":2,\"B\":4,\"b\":1}");
+}
+
+// ci ties (A/a, b/B) are reordered by the C's merge; cs orders by byte
+#[test]
+#[rustfmt::skip]
+fn probe_sort_cs_ties() {
+    check("sort-cs-ties", &["sort-cs"], b"{\"b\":1,\"A\":2,\"a\":3,\"B\":4}", 0, b"{\"A\":2,\"B\":4,\"a\":3,\"b\":1}");
+}
+
+// ci twin of utils-cs-detach-remove: the C's leaf detach is case-insensitive, which IS this mode's contract
+#[test]
+#[rustfmt::skip]
+fn probe_patch_detach_remove() {
+    check("patch-detach-remove", &["patch"], b"[{\"op\":\"remove\",\"path\":\"/A\"}]\x0a{\"a\":1}", 0, b"status=0;{}");
+}
+
+// ci twin of utils-cs-detach-remove-first: the C's leaf detach is case-insensitive, which IS this mode's contract
+#[test]
+#[rustfmt::skip]
+fn probe_patch_detach_remove_first() {
+    check("patch-detach-remove-first", &["patch"], b"[{\"op\":\"remove\",\"path\":\"/A\"}]\x0a{\"a\":1,\"A\":2}", 0, b"status=0;{\"A\":2}");
+}
+
+// ci twin of utils-cs-detach-replace: the C's leaf detach is case-insensitive, which IS this mode's contract
+#[test]
+#[rustfmt::skip]
+fn probe_patch_detach_replace() {
+    check("patch-detach-replace", &["patch"], b"[{\"op\":\"replace\",\"path\":\"/a\",\"value\":9}]\x0a{\"A\":1,\"a\":2}", 0, b"status=0;{\"a\":9}");
+}
+
+// ci twin of utils-cs-detach-move: the C's leaf detach is case-insensitive, which IS this mode's contract
+#[test]
+#[rustfmt::skip]
+fn probe_patch_detach_move() {
+    check("patch-detach-move", &["patch"], b"[{\"op\":\"move\",\"from\":\"/A\",\"path\":\"/z\"}]\x0a{\"a\":1,\"A\":2}", 0, b"status=0;{\"A\":2,\"z\":1}");
+}
+
+// ci twin of utils-cs-detach-nested: the C's leaf detach is case-insensitive, which IS this mode's contract
+#[test]
+#[rustfmt::skip]
+fn probe_patch_detach_nested() {
+    check("patch-detach-nested", &["patch"], b"[{\"op\":\"remove\",\"path\":\"/O/a\"}]\x0a{\"o\":{\"a\":1},\"O\":{\"A\":2}}", 0, b"status=0;{\"o\":{},\"O\":{\"A\":2}}");
+}
+
+// compare_json walks the pairs BEFORE it checks for leftovers, so a failing test of unequal-length arrays has already sorted the first element in place -- the port checked lengths first and printed it unsorted
+#[test]
+#[rustfmt::skip]
+fn probe_patch_test_sorts_before_length() {
+    check("patch-test-sorts-before-length", &["patch"], b"[{\"op\":\"test\",\"path\":\"\",\"value\":[{\"b\":1,\"a\":2}]}]\x0a[{\"b\":1,\"a\":2},5]", 0, b"status=1;[{\"a\":2,\"b\":1},5]");
+}
+
+// compare_json walks the pairs BEFORE it checks for leftovers, so a failing test of unequal-length arrays has already sorted the first element in place -- the port checked lengths first and printed it unsorted
+#[test]
+#[rustfmt::skip]
+fn probe_patch_cs_test_sorts_before_length() {
+    check("patch-cs-test-sorts-before-length", &["patch-cs"], b"[{\"op\":\"test\",\"path\":\"\",\"value\":[{\"b\":1,\"a\":2}]}]\x0a[{\"b\":1,\"a\":2},5]", 0, b"status=1;[{\"a\":2,\"b\":1},5]");
+}
+
+// the same order for an object with an extra member: `o` is sorted before `p` is found unmatched
+#[test]
+#[rustfmt::skip]
+fn probe_patch_test_sorts_before_count() {
+    check("patch-test-sorts-before-count", &["patch"], b"[{\"op\":\"test\",\"path\":\"\",\"value\":{\"o\":{\"b\":1,\"a\":2}}}]\x0a{\"o\":{\"b\":1,\"a\":2},\"p\":1}", 0, b"status=1;{\"o\":{\"a\":2,\"b\":1},\"p\":1}");
+}
+
+// the same order for an object with an extra member: `o` is sorted before `p` is found unmatched
+#[test]
+#[rustfmt::skip]
+fn probe_patch_cs_test_sorts_before_count() {
+    check("patch-cs-test-sorts-before-count", &["patch-cs"], b"[{\"op\":\"test\",\"path\":\"\",\"value\":{\"o\":{\"b\":1,\"a\":2}}}]\x0a{\"o\":{\"b\":1,\"a\":2},\"p\":1}", 0, b"status=1;{\"o\":{\"a\":2,\"b\":1},\"p\":1}");
+}
+
+// compare_json sorts the paired children IN PLACE and the recursion sorts them again; sort_list is unstable (a tie takes the second run), so the case-tied b/B swap twice -- the port compared clones and swapped them once
+#[test]
+#[rustfmt::skip]
+fn probe_genmerge_tie_sorted_twice() {
+    check("genmerge-tie-sorted-twice", &["genmerge"], b"{\"o\":{\"b\":5,\"B\":2}}\x0a{\"o\":{\"\":1}}", 0, b"{\"o\":{\"\":1,\"b\":null,\"B\":null}}");
+}
+
+// compare_json sorts the paired children IN PLACE and the recursion sorts them again; sort_list is unstable (a tie takes the second run), so the case-tied b/B swap twice -- the port compared clones and swapped them once
+#[test]
+#[rustfmt::skip]
+fn probe_genmerge_cs_tie_sorted_twice() {
+    check("genmerge-cs-tie-sorted-twice", &["genmerge-cs"], b"{\"o\":{\"b\":5,\"B\":2}}\x0a{\"o\":{\"\":1}}", 0, b"{\"o\":{\"\":1,\"b\":null,\"B\":null}}");
+}
+
+// both bugs at once: o has a leftover (y), so only the pairwise-first walk reaches x's element and sorts it before the recursion sorts it again
+#[test]
+#[rustfmt::skip]
+fn probe_genmerge_tie_nested_array() {
+    check("genmerge-tie-nested-array", &["genmerge"], b"{\"o\":{\"x\":[{\"b\":1,\"B\":2}],\"y\":1}}\x0a{\"o\":{\"x\":[{\"b\":1,\"B\":3}]}}", 0, b"{\"o\":{\"x\":[{\"b\":1,\"B\":3}],\"y\":null}}");
+}
+
+// both bugs at once: o has a leftover (y), so only the pairwise-first walk reaches x's element and sorts it before the recursion sorts it again
+#[test]
+#[rustfmt::skip]
+fn probe_genmerge_cs_tie_nested_array() {
+    check("genmerge-cs-tie-nested-array", &["genmerge-cs"], b"{\"o\":{\"x\":[{\"b\":1,\"B\":2}],\"y\":1}}\x0a{\"o\":{\"x\":[{\"b\":1,\"B\":3}]}}", 0, b"{\"o\":{\"x\":[{\"b\":1,\"B\":3}],\"y\":null}}");
+}
+
+// duplicate keys are ties under both flags, so the double sort shows without any case folding
+#[test]
+#[rustfmt::skip]
+fn probe_genmerge_duplicate_key_ties() {
+    check("genmerge-duplicate-key-ties", &["genmerge"], b"{\"o\":{\"\":1,\"\":2}}\x0a{\"o\":{\"\":9,\"\":1}}", 0, b"{\"o\":{\"\":9,\"\":1}}");
+}
+
+// duplicate keys are ties under both flags, so the double sort shows without any case folding
+#[test]
+#[rustfmt::skip]
+fn probe_genmerge_cs_duplicate_key_ties() {
+    check("genmerge-cs-duplicate-key-ties", &["genmerge-cs"], b"{\"o\":{\"\":1,\"\":2}}\x0a{\"o\":{\"\":9,\"\":1}}", 0, b"{\"o\":{\"\":9,\"\":1}}");
+}
+
+// control for utils-add-dup-key*: with the key once, deleting one match deletes them all, so port and C agree
+#[test]
+#[rustfmt::skip]
+fn probe_patch_add_single_key() {
+    check("patch-add-single-key", &["patch"], b"[{\"op\":\"add\",\"path\":\"/role\",\"value\":\"user\"}]\x0a{\"role\":\"admin\",\"x\":1}", 0, b"status=0;{\"x\":1,\"role\":\"user\"}");
+}
+
+// control for utils-add-dup-key*: with the key once, deleting one match deletes them all, so port and C agree
+#[test]
+#[rustfmt::skip]
+fn probe_patch_cs_add_single_key() {
+    check("patch-cs-add-single-key", &["patch-cs"], b"[{\"op\":\"add\",\"path\":\"/role\",\"value\":\"user\"}]\x0a{\"role\":\"admin\",\"x\":1}", 0, b"status=0;{\"x\":1,\"role\":\"user\"}");
 }

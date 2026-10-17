@@ -29,7 +29,14 @@ contract, which is exactly what this table was built to measure and no more.
 [Corrected 2026-10-10: not every one yet. Five `*CaseSensitive` utils rows name
 driver modes that no case drives (see the note under that table), and
 `cJSON_Parse` and `cJSON_GetErrorPtr` are compared only transitively; each of
-those rows says so in its own cell.]
+those rows says so in its own cell.] [Closed 2026-10-17: all seven are now
+called by a driver mode or ABI vector of their own. Putting them there found
+two C defects the port now fixes (`utils-cs-detach-*`, the stale
+`cJSON_GetErrorPtr` after `cJSON_Parse(NULL)`), one undecided port behaviour
+now ledgered as a fix (`utils-add-dup-key*`), and four port bugs: the
+cdylib's `cJSON_Parse` parsed one byte short, `compare_json` checked lengths
+before walking, `genmerge` compared clones, and `cJSON_GetErrorPtr` was not
+exported at all. Details under each table.]
 The gate stays wired at 0 so the next symbol added to the header, or the next
 module that quietly drops one, fails loudly instead of passing.
 
@@ -54,28 +61,97 @@ requires the export macro, and pins that case in its self-test.
 | Symbol | Status | Where it is gated |
 |---|---|---|
 | `cJSONUtils_GetPointer` | ported | `utils::get_pointer` — driver mode `ptr` |
-| `cJSONUtils_GetPointerCaseSensitive` | ported | same, `cs=true` — driver mode `ptr-cs`, **which no case drives yet** (gap noted below the table) |
+| `cJSONUtils_GetPointerCaseSensitive` | ported | same, `cs=true` — driver mode `ptr-cs`; its cases pair each input with the case-insensitive mode (gap closed 2026-10-17, below the table) |
 | `cJSONUtils_ApplyPatches` | ported | `utils::apply_patches` — driver mode `patch` |
-| `cJSONUtils_ApplyPatchesCaseSensitive` | ported | same, `cs=true` — driver mode `patch-cs`, **which no case drives yet** (gap noted below the table) |
+| `cJSONUtils_ApplyPatchesCaseSensitive` | ported | same, `cs=true` — driver mode `patch-cs`; its cases pair each input with the case-insensitive mode (gap closed 2026-10-17, below the table) |
 | `cJSONUtils_MergePatch` | ported | `utils::merge_patch` — driver mode `merge` |
-| `cJSONUtils_MergePatchCaseSensitive` | ported | same, `cs=true` — driver mode `merge-cs`, **which no case drives yet** (gap noted below the table) |
+| `cJSONUtils_MergePatchCaseSensitive` | ported | same, `cs=true` — driver mode `merge-cs`; its cases pair each input with the case-insensitive mode (gap closed 2026-10-17, below the table) |
 | `cJSONUtils_GenerateMergePatch` | ported | `utils::generate_merge_patch` — driver mode `genmerge` |
-| `cJSONUtils_GenerateMergePatchCaseSensitive` | ported | same, `cs=true` — driver mode `genmerge-cs`, **which no case drives yet** (gap noted below the table) |
+| `cJSONUtils_GenerateMergePatchCaseSensitive` | ported | same, `cs=true` — driver mode `genmerge-cs`; its cases pair each input with the case-insensitive mode (gap closed 2026-10-17, below the table) |
 | `cJSONUtils_GeneratePatches` | ported | `utils::create_patches` — driver mode `genpatch` |
-| `cJSONUtils_GeneratePatchesCaseSensitive` | ported | same, `cs=true` — driver mode `genpatch-cs`, **which no case drives yet** (gap noted below the table) |
+| `cJSONUtils_GeneratePatchesCaseSensitive` | ported | same, `cs=true` — driver mode `genpatch-cs`; its cases pair each input with the case-insensitive mode (gap closed 2026-10-17, below the table) |
 | `cJSONUtils_SortObject` | ported | `utils::sort_object` — driver mode `sort` |
 | `cJSONUtils_SortObjectCaseSensitive` | ported | same, `cs=true` — driver mode `sort-cs` |
 | `cJSONUtils_FindPointerFromObjectTo` | ported | `utils::find_pointer_from_object_to` — driver mode `findptr` |
 | `cJSONUtils_AddPatchToArray` | ported | `utils::add_patch_to_array` — driver mode `addpatch` |
 
-**Open gap (found 2026-10-10).** Both drivers implement `ptr-cs`, `patch-cs`,
-`merge-cs`, `genmerge-cs` and `genpatch-cs`, but no matrix case, probe, holdout
-vector or `check.sh` diff-fuzz run invokes any of them — `sort-cs` is the only
-`-cs` mode anything drives (matrix case `u-sort-cs`, probe `sort-cs`). For those
-five rows the legend's "so the differential compares it" is therefore not yet
-true: each symbol is ported, but these five case-sensitive entry points are off
-the compared contract until cases for their modes land in `matrix-utils.json` /
-`probes-utils.json`.
+**Open gap (found 2026-10-10), closed 2026-10-17.** Both drivers implemented
+`ptr-cs`, `patch-cs`, `merge-cs`, `genmerge-cs` and `genpatch-cs` (and
+`findptr-cs`), but no matrix case, probe, holdout vector or `check.sh` diff-fuzz
+run invoked any of them — `sort-cs` was the only `-cs` mode anything drove.
+Now every input added for them goes in TWICE, under the case-insensitive mode
+and its `-cs` twin, so the flag is pinned in both directions: 37 inputs, 74
+matrix cases and 74 probes, each with a note naming what it tells apart.
+`check.sh` fuzzes all six `-cs` modes (and `findptr`/`addpatch`, which the gate
+had not fuzzed either), and `mutants.toml` holds one wrong version of each
+flag's rule; every one is killed by the cases.
+
+What driving them found, in the order it was found:
+
+* **`utils-cs-detach-*` — a C defect, now a ledgered fix.** The first `patch-cs`
+  input with a differently-cased key diverged: `detach_path` ends in the
+  case-INsensitive `cJSON_DetachItemFromObject` whatever the flag, so
+  `ApplyPatchesCaseSensitive`'s `remove /A` deletes `a`. The port had always
+  detached case-sensitively — an unexamined divergence since module 9.
+* **`compare_json` checked lengths first — a port bug.** The C walks the pairs
+  (recursing, and so sorting nested objects in place) BEFORE it notices a
+  leftover; the port returned early and skipped the sorts. Visible through
+  `patch`'s `test` (which prints the document) in both modes.
+* **`genmerge` compared clones — a port bug.** The C's `compare_json` sorts the
+  paired children in place and the recursion sorts them again; `sort_list` is
+  unstable (a tie takes the second run), so tied keys swap twice in the C and
+  once in the port. Found by the first `genmerge-cs` sweep; present in
+  `genmerge` too.
+* **`utils-add-dup-key*` — undecided port behaviour, now a ledgered fix.** The
+  port's `add` deletes every member its key names; the C deletes one, leaving
+  a duplicated key's old value first. Found once the seeds carried duplicate
+  keys; kept and ledgered because the C's answer lets a duplicated key defeat
+  a patch that enforces a field.
+
+### High-budget sweep on the `-cs` modes (LESSONS #33 + #42), 2026-10-17
+
+Run on the FINAL binary — after the three port fixes above — with the matrix
+that carries the new case-pair and duplicate-key seeds:
+
+| Mode | Oracle | Seeds | Iterations each | Findings |
+|---|---|---|---|---|
+| `ptr-cs` | pristine | 1 / 2 / 3 | 20 000 | 0 |
+| `findptr-cs` | pristine | 1 / 2 / 3 | 20 000 | 0 |
+| `merge-cs` | pristine | 1 / 2 / 3 | 20 000 | 0 |
+| `genmerge-cs` | pristine | 1 / 2 / 3 | 20 000 | 0 |
+| `genpatch-cs` | pristine | 1 / 2 / 3 | 20 000 | 0 |
+| `patch-cs` | corrected | 1 / 2 / 3 | 20 000 | 0 |
+| `genmerge` | pristine | 1 / 2 / 3 | 20 000 | 0 |
+| `patch` | corrected | 1 / 2 / 3 | 20 000 | 0 |
+| `patch-cs` | **pristine** | 7 | 4 000 | 15, all ledgered |
+| `patch` | **pristine** | 11 | 4 000 | 8, all ledgered |
+
+480 000 generated inputs, zero divergences. `genmerge` and `patch` are swept
+again because the fixes changed them and the new seeds reach them: the first
+`genmerge-cs` sweep, on the binary before the fixes, found 29 distinct
+divergences across its three seeds, every one of which matches the C once
+`compare_json` walks before it counts and `genmerge` stops comparing clones.
+
+The two pristine rows are the LESSONS #42 control, and they had more to
+control than before: the corrected oracle now carries THREE utils corrections.
+Every finding was classified mechanically, by building one oracle per
+correction and asking which single one makes the C agree with the port:
+`patch-cs` — 9 detach, 3 tilde, 3 duplicate-key, 0 outside; `patch` — 4 tilde,
+4 duplicate-key, 0 outside (and no detach finding, as it must be: that
+correction is a no-op without the flag). Each correction is as wide as its
+ledgered class and no wider.
+
+### High-budget sweep on the `parse` mode (LESSONS #33), 2026-10-17
+
+| Mode | Oracle | Seeded from | Seeds | Iterations each | Findings |
+|---|---|---|---|---|---|
+| `parse` | pristine | `matrix.json` (the 79-vector corpus) | 1 / 2 / 3 | 20 000 | 0 |
+| `parse` | pristine | `matrix-opts.json` (BOM, terminator, embedded NUL) | 1 / 2 / 3 | 20 000 | 0 |
+
+120 000 generated inputs, zero divergences. The mode compares the core's
+`parse_with_opts` to the C's `cJSON_Parse`; the cdylib's own `cJSON_Parse` —
+the one that was one byte short — is compared by the ABI vectors, which the
+fuzzer does not drive.
 
 ### High-budget sweep on the two new modes (LESSONS #33)
 
@@ -123,7 +199,7 @@ wired into the gate. Two notes on getting the *number* right first:
 | Symbol | Status | Where it is gated |
 |---|---|---|
 | `cJSON_Version` | ported | ABI vector `version` (`ffi/vectors.json`) |
-| `cJSON_Parse` | ported | cdylib export (unit-tested in `crates/ffi`), but **no driver mode or ABI vector calls it** — the oracle parses only through `ParseWithLength` and the `*Opts` pair. Its C body is `cJSON_ParseWithOpts(value, 0, 0)` (cJSON.c:1184), so its behavior is compared *transitively*, through driver mode `opts` (field `pwo`, with `require_null_terminated` off) |
+| `cJSON_Parse` | ported | driver mode `parse` (16 `parse-*` cases in `matrix-opts.json`, the same as probes) against the core's `parse_with_opts`; and the cdylib export ITSELF through ABI vectors `parse-*` (shim `cjson_parse_seq`). Until 2026-10-17 it was compared only transitively, and the transitive argument held for the core and failed for the cdylib: its `cJSON_Parse` parsed `strlen` bytes where the C parses `strlen + 1`, so a BOM plus one digit (`parse-bom-terminator`) parsed in the C and not in the port. The driver mode alone would not have caught it — it calls the core, which was right — only the ABI vector does |
 | `cJSON_ParseWithLength` | ported | cdylib export; shim `cjson_rt`, all ABI `rt-*` vectors |
 | `cJSON_Print` | ported | cdylib export; shim `cjson_rt_fmt`, ABI `rt-fmt-*` vectors; driver mode `print` |
 | `cJSON_PrintUnformatted` | ported | cdylib export; shim `cjson_rt`, driver mode `print-unformatted` (also `dup`, and every descriptor mode's printed fields) |
@@ -136,7 +212,7 @@ wired into the gate. Two notes on getting the *number* right first:
 | `cJSON_Duplicate` | ported | cdylib export; driver mode `dup` |
 | `cJSON_Compare` | ported | cdylib export; driver modes `dup-eq` (original vs its duplicate) and `parent` (field `cmp`) — both call it with `case_sensitive = 1` only |
 | `cJSON_free` | ported | cdylib export; frees every string the print modes return |
-| `cJSON_GetErrorPtr` | ported | **not compared directly, and not a cdylib export.** The C driver calls it only on a parse failure in its fall-through modes (`print`, `print-unformatted`, `dup`, `dup-eq`) and writes the offset to STDERR, which `check.sh` never compares (no `--with-stderr`; DIVERGENCES.md calls it "off the compared contract") — only the exit code is. The position it would return IS compared, *transitively*: cJSON writes `*return_parse_end` and the global error from the same `local_error` (cJSON.c:1159–1177), and driver mode `opts` compares `pwoend`/`pwlend` on the failure path |
+| `cJSON_GetErrorPtr` | ported | driver mode `parse` (field `err`: the offset it returns after `cJSON_Parse`) and, since 2026-10-17, a cdylib export compared by ABI vectors `parse-*`/`parse-len-*`/`errptr-*`. The error is STATE, so the shim runs two parses in one call and reads it after each: the reset on success, the length path, and the NULL input — where the C hands back a stale pointer into the previous call's buffer and the port answers NULL (DIVERGENCES.md `errptr-null-input-resets`). Kept per thread, not per process (`errptr-thread-local`, Structural eliminations) |
 | `cJSON_GetArraySize` | ported | `cjson_modes_query` — driver mode `query`, 8 ABI vectors |
 | `cJSON_GetObjectItemCaseSensitive` | ported | `cjson_modes_query` — driver mode `query` |
 | `cJSON_IsInvalid` | ported | `cjson_modes_query` type descriptor |

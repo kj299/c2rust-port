@@ -1,7 +1,7 @@
 # Build + capture artifacts (regenerable by oracle/run.sh); sources are committed.
 oracle/cjson_oracle
 # Fuzz-only corrected oracle: the vendored C with its known defects fixed —
-# cJSON_Utils.c's pointer decode (make_fixed_utils.py) and cJSON.c's NaN->int
+# cJSON_Utils.c's pointer decode and leaf detach (make_fixed_utils.py) and cJSON.c's NaN->int
 # conversion (make_fixed_core.py) — built by build_fixed.sh. The generated .c
 # files and the binary are all regenerable and never committed (the pristine
 # vendored source is the only truth).

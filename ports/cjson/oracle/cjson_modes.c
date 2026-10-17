@@ -1055,3 +1055,42 @@ char *cjson_modes_parent(const char *kind, const char *op, const char *key,
     }
     return b.p;
 }
+
+/* ---- parse (cJSON_Parse + cJSON_GetErrorPtr) -------------------------------
+ * See cjson_modes.h. The error pointer is located by ADDRESS (uintptr_t, since
+ * relational operators across objects are undefined) and never dereferenced:
+ * the stale-pointer case is exactly one that must not be read. */
+char *cjson_modes_parse(const char *json, size_t json_len) {
+    cJSON *item = cJSON_Parse(json);
+    const char *err = cJSON_GetErrorPtr();
+    char where[32];
+    char *printed = NULL;
+    char *out;
+    size_t cap;
+
+    if (err == NULL) {
+        snprintf(where, sizeof where, "null");
+    } else if ((uintptr_t)err >= (uintptr_t)json
+               && (uintptr_t)err - (uintptr_t)json <= json_len) {
+        snprintf(where, sizeof where, "%lu",
+                 (unsigned long)((uintptr_t)err - (uintptr_t)json));
+    } else {
+        snprintf(where, sizeof where, "other");
+    }
+    if (item != NULL) {
+        printed = cJSON_PrintUnformatted(item);
+        if (printed == NULL) {
+            cJSON_Delete(item);
+            return NULL;
+        }
+    }
+    cap = (printed ? strlen(printed) : 0) + sizeof where + 16;
+    out = (char *)malloc(cap);
+    if (out != NULL) {
+        if (item == NULL) snprintf(out, cap, "fail;err=%s", where);
+        else snprintf(out, cap, "ok;err=%s;%s", where, printed);
+    }
+    cJSON_free(printed);
+    cJSON_Delete(item);
+    return out;
+}

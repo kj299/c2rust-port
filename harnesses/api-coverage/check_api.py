@@ -54,11 +54,28 @@ THE `unported` RATCHET (LESSONS #35)
   Exactly-as-declared passes, and prints the shortfall LOUDLY every run, because
   a green gate over an incomplete API must never read as a complete one.
 
+A `ported` ROW NAMING A MODE NO CASE RUNS (LESSONS #61)
+  `ported` means "a driver mode or vector calls it, so the differential compares
+  it" — but nothing checked the second half. cJSON's manifest carried five
+  `*CaseSensitive` rows reading "driver mode `ptr-cs`" (and four like it) for
+  seven weeks after module 9; both drivers implemented those modes and no matrix
+  case ran any of them. When they finally ran, the first `patch-cs` input found
+  a C defect the port diverged from, unexamined. So, given the port's matrices:
+
+      check_api.py ... --matrix oracle/matrix.json --matrix oracle/matrix-x.json
+
+  every mode a `ported` row names as "driver mode `X`" must be the first argv
+  word of at least one case, or the row fails as UNDRIVEN. Matrices are JSON (a
+  list, or {"case": [...]}) or TOML ([[case]]); an unreadable one, or matrices
+  holding no case at all, cannot be judged (exit 2). Without `--matrix` the
+  check is not run — and a row naming a mode is then a claim, not a fact.
+
 Usage:
   check_api.py --header H [--header H2] --manifest API-COVERAGE.md
-               [--export-macro CJSON_PUBLIC] [--json]
+               [--matrix M [--matrix M2 ...]] [--export-macro CJSON_PUBLIC] [--json]
   check_api.py --self-test
-Exit: 0 = every exported symbol accounted for; 1 = one is not; 2 = usage/input error.
+Exit: 0 = every exported symbol accounted for (and, with --matrix, every named
+mode driven); 1 = one is not; 2 = usage/input error.
 """
 from __future__ import annotations
 
@@ -77,6 +94,15 @@ TABLE_ROW = re.compile(r"^\s*\|")
 VALID_STATUS = ("ported", "out-of-scope", "unported")
 NEEDS_REASON = ("out-of-scope", "unported")
 MAX_UNPORTED = re.compile(r"api-coverage:\s*max-unported\s*=\s*(\d+)")
+# How a `ported` row names the driver mode that gates it: "driver mode `ptr`".
+# Conservative on purpose: in "driver modes `a` and `b`" only `a` is read, so a
+# row can under-claim to this check but never be failed for prose it did not
+# mean as a mode name. The closing backtick may be gone: manifest_rows strips
+# backticks from both ENDS of a cell, so a note ending in "driver mode `ptr`"
+# arrives as "driver mode `ptr" — and a pattern requiring the closer matched
+# nothing there and passed every row, which the self-test's first fixture
+# (written the way the real manifest is) caught.
+DRIVER_MODE = re.compile(r"\bdriver modes?\s+`([^`]+)(?:`|$)")
 
 
 def strip_comments(text):
@@ -155,7 +181,58 @@ def ratchet_holds(actual, declared):
     return actual == declared
 
 
-def check(header_paths, manifest_path, export_macro, as_json=False):
+def named_modes(rows):
+    """{mode: [symbols]} for every driver mode a `ported` row names."""
+    named = {}
+    for sym, (status, note) in rows.items():
+        if status != "ported":
+            continue
+        for m in DRIVER_MODE.finditer(note):
+            named.setdefault(m.group(1), []).append(sym)
+    return named
+
+
+def matrix_modes(paths):
+    """The set of first argv words across every case in the matrices; None,
+    reported, when a matrix is unreadable or the matrices hold no case at all
+    (a mode check over zero cases proves nothing — LESSONS #18)."""
+    modes, cases_seen = set(), 0
+    for p in paths:
+        try:
+            if p.endswith(".toml"):
+                import tomllib
+                with open(p, "rb") as fh:
+                    data = tomllib.load(fh)
+            else:
+                with open(p, encoding="utf-8") as fh:
+                    data = json.load(fh)
+        except (OSError, ValueError) as e:
+            print(f"error: cannot read matrix {p}: {e}", file=sys.stderr)
+            return None
+        cases = data.get("case", []) if isinstance(data, dict) else data
+        if not isinstance(cases, list):
+            print(f"error: matrix {p}: cases are not a list", file=sys.stderr)
+            return None
+        for case in cases:
+            args = case.get("args") if isinstance(case, dict) else None
+            if isinstance(args, list) and args:
+                modes.add(str(args[0]))
+            cases_seen += 1
+    if cases_seen == 0:
+        print(f"error: no cases in {', '.join(paths)} — a mode check over zero "
+              "cases proves nothing", file=sys.stderr)
+        return None
+    return modes
+
+
+def mode_is_driven(mode, driven):
+    """THE THIRD VERDICT (LESSONS #61): a mode a `ported` row names is run by
+    at least one matrix case. Its own predicate, like the other two, so the
+    gate-mutation sweep can neutralize it alone."""
+    return mode in driven
+
+
+def check(header_paths, manifest_path, export_macro, as_json=False, matrices=None):
     for p in list(header_paths) + [manifest_path]:
         if not os.path.isfile(p):
             print(f"error: not found: {p}", file=sys.stderr)
@@ -172,6 +249,13 @@ def check(header_paths, manifest_path, export_macro, as_json=False):
     rows = manifest_rows(manifest_path)
     missing = [s for s in syms if not symbol_is_accounted(s, rows)]
     stale = [s for s in rows if s not in syms]
+    undriven = {}
+    if matrices:
+        driven = matrix_modes(matrices)
+        if driven is None:
+            return 2
+        undriven = {m: syms_ for m, syms_ in sorted(named_modes(rows).items())
+                    if not mode_is_driven(m, driven)}
 
     def by_status(want):
         return [s for s in syms
@@ -180,13 +264,14 @@ def check(header_paths, manifest_path, export_macro, as_json=False):
     ported, scoped, todo = by_status("ported"), by_status("out-of-scope"), by_status("unported")
     declared = declared_max_unported(manifest_path)
     ratchet_ok = ratchet_holds(len(todo), declared)
-    failed = bool(missing) or bool(stale) or not ratchet_ok
+    failed = bool(missing) or bool(stale) or not ratchet_ok or bool(undriven)
 
     if as_json:
         json.dump({"tool": "api-coverage", "symbols": syms, "ported": ported,
                    "out_of_scope": scoped, "unported": todo,
                    "max_unported_declared": declared, "ratchet_ok": ratchet_ok,
                    "unaccounted": missing, "stale_rows": stale,
+                   "undriven_modes": undriven,
                    "ok": not failed}, sys.stdout, indent=1)
         print()
     else:
@@ -211,6 +296,14 @@ def check(header_paths, manifest_path, export_macro, as_json=False):
                   "  | <symbol> | out-of-scope | <why it will never be ported> |\n"
                   "An entry point no mode reaches is ungated whatever the matrix says "
                   "(LESSONS #26).", file=sys.stderr)
+        if undriven:
+            for m, by in undriven.items():
+                print(f"  UNDRIVEN     driver mode `{m}` (named by {', '.join(by)})"
+                      " — no matrix case runs it", file=sys.stderr)
+            print(f"\napi-coverage FAILED: {len(undriven)} driver mode(s) a `ported` "
+                  "row names are run by no case, so the differential compares "
+                  "nothing there. Add cases for the mode, or say in the row what "
+                  "does gate the symbol (LESSONS #61).", file=sys.stderr)
         if not ratchet_ok:
             print(f"\napi-coverage FAILED the unported ratchet: {len(todo)} unported, "
                   f"manifest declares {declared}.", file=sys.stderr)
@@ -227,6 +320,9 @@ def check(header_paths, manifest_path, export_macro, as_json=False):
         if not failed:
             line = (f"\napi coverage: {len(syms)} exported symbol(s) — "
                     f"{len(ported)} ported, {len(scoped)} out-of-scope with a reason")
+            if matrices:
+                line += (f"; every driver mode a ported row names "
+                         f"({len(named_modes(rows))}) is run by a case")
             if todo:
                 # Loud on every run: green here means "exactly as incomplete as
                 # declared", never "complete". A ceiling you stop seeing is a
@@ -363,6 +459,52 @@ def _self_test():
         case("ratchet predicate: slack over an empty surface is not a pass",
              ratchet_holds(0, 3) is False)
 
+        # ---- a `ported` row naming a mode no case runs (LESSONS #61) -------
+        modes_md = manifest("m.md",
+                            "| `lib_AddPatch` | ported | same, driver mode `ptr-cs` |\n"
+                            "| `lib_Gone` | out-of-scope | was driver mode `zzz` |\n")
+        # lib_Gone is not exported: drop it so only the mode check can fail
+        with open(modes_md, encoding="utf-8") as fh:
+            body = fh.read().replace("| `lib_Gone` | out-of-scope | was driver mode `zzz` |\n", "")
+        with open(modes_md, "w", encoding="utf-8") as fh:
+            fh.write(body + "\napi-coverage: max-unported = 0\n")
+
+        def matrix(name, modes, toml=False):
+            p = os.path.join(d, name)
+            with open(p, "w", encoding="utf-8") as fh:
+                if toml:
+                    fh.write("".join(f'[[case]]\nname = "{m}"\nargs = ["{m}"]\n'
+                                     for m in modes))
+                else:
+                    json.dump([{"name": m, "args": [m], "stdin": ""} for m in modes], fh)
+            return p
+
+        only_ptr = matrix("only_ptr.json", ["ptr"])
+        both = matrix("both.json", ["ptr", "ptr-cs"])
+        case("a ported row naming a mode no case runs FAILS (the ptr-cs gap)",
+             check([hdr], modes_md, "CJSON_PUBLIC", matrices=[only_ptr]) == 1)
+        case("...and passes once a case runs the mode",
+             check([hdr], modes_md, "CJSON_PUBLIC", matrices=[both]) == 0)
+        case("cases split across matrices count together",
+             check([hdr], modes_md, "CJSON_PUBLIC",
+                   matrices=[only_ptr, matrix("cs.toml", ["ptr-cs"], toml=True)]) == 0)
+        case("without --matrix the mode check does not run",
+             check([hdr], modes_md, "CJSON_PUBLIC") == 0)
+        case("an unreadable matrix cannot be judged",
+             check([hdr], modes_md, "CJSON_PUBLIC",
+                   matrices=[os.path.join(d, "nope.json")]) == 2)
+        case("matrices with no case cannot be judged (0-of-0)",
+             check([hdr], modes_md, "CJSON_PUBLIC", matrices=[matrix("none.json", [])]) == 2)
+        case("a mode named at the END of a cell (its closing ` stripped) is read",
+             named_modes(manifest_rows(modes_md)) == {"ptr": ["lib_GetPointer"],
+                                                      "ptr-cs": ["lib_AddPatch"]})
+        case("only `ported` rows are held to the modes they name",
+             named_modes({"a": ("out-of-scope", "driver mode `x`"),
+                          "b": ("ported", "driver mode `y`")}) == {"y": ["b"]})
+        case("mode predicate: an undriven mode is not driven",
+             mode_is_driven("ptr-cs", {"ptr"}) is False)
+        case("mode predicate: a driven mode is", mode_is_driven("ptr", {"ptr"}) is True)
+
         # 0-of-0 must not pass
         empty = os.path.join(d, "empty.h")
         with open(empty, "w", encoding="utf-8") as fh:
@@ -381,6 +523,9 @@ def main(argv=None):
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--header", action="append", default=[])
     ap.add_argument("--manifest")
+    ap.add_argument("--matrix", action="append", default=[],
+                    help="a differential matrix (repeat per file): every driver mode "
+                         "a `ported` row names must be run by one of its cases")
     ap.add_argument("--export-macro", default="CJSON_PUBLIC")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--self-test", action="store_true")
@@ -390,7 +535,7 @@ def main(argv=None):
     if not a.header or not a.manifest:
         print("error: give --header and --manifest, or --self-test", file=sys.stderr)
         return 2
-    return check(a.header, a.manifest, a.export_macro, a.json)
+    return check(a.header, a.manifest, a.export_macro, a.json, a.matrix)
 
 
 if __name__ == "__main__":

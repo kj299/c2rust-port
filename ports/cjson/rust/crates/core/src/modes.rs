@@ -1142,6 +1142,30 @@ fn query(input: &[u8]) -> (i32, Vec<u8>) {
     (0, out)
 }
 
+/// Driver mode `parse` — `cJSON_Parse` and `cJSON_GetErrorPtr`, the two
+/// symbols compared only transitively until this mode existed (see
+/// `oracle/cjson_modes.h`). `input` is the C string the C driver hands
+/// cJSON_Parse: it ends at the first NUL, and `parse_with_opts` reconstructs
+/// the terminator the C's `strlen + 1` buffer includes.
+///
+/// The error offset is the core's `ParseError::position`, which is what the
+/// C's global error records (cJSON.c:1177). The global itself is not modelled
+/// here: the core has no state, and the cdylib's `cJSON_GetErrorPtr` (whose
+/// state the ABI vectors `parse-*` compare) is where the port keeps it.
+fn parse_mode(input: &[u8]) -> (i32, Vec<u8>) {
+    match crate::parse_with_opts(input, false) {
+        Ok((value, _)) => match crate::print_value(&value, false) {
+            Some(printed) => {
+                let mut out = b"ok;err=null;".to_vec();
+                out.extend_from_slice(&printed);
+                (0, out)
+            }
+            None => (RC_USAGE, Vec::new()),
+        },
+        Err(e) => (0, format!("fail;err={}", e.position).into_bytes()),
+    }
+}
+
 /// Run one driver mode. `(exit_code, stdout)`.
 #[must_use]
 pub fn run(mode: &str, input: &[u8]) -> (i32, Vec<u8>) {
@@ -1189,6 +1213,9 @@ pub fn run(mode: &str, input: &[u8]) -> (i32, Vec<u8>) {
     }
     if mode == "parent" {
         return parent(input);
+    }
+    if mode == "parse" {
+        return parse_mode(input);
     }
 
     // cJSON_Utils modes (JSON Pointer / Patch / Merge / Sort) — one dispatch,

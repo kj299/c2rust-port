@@ -1,7 +1,7 @@
 {
   "probe_transcript": 1,
   "module": "utils",
-  "oracle_sha256": "8454f5eed48675596dfa3890bc84894ce0984ad3c19a25e63e8134b9e05ce3f3",
+  "oracle_sha256": "226082e52fe2129feaaf0cf57423962b62079aa64c5c96e631d53465946d31cf",
   "generated_by": "harnesses/probe/probe.py run",
   "entries": [
     {
@@ -531,7 +531,979 @@
       "stdout_b64": "W3sib3AiOiJhZGQiLCJwYXRoIjoiIiwidmFsdWUiOjF9XQ==",
       "stdin_preview": "add\t\n1",
       "stdout_preview": "[{\"op\":\"add\",\"path\":\"\",\"value\":1}]"
+    },
+    {
+      "id": "ptr-case-miss",
+      "args": [
+        "ptr"
+      ],
+      "stdin_b64": "L0EKeyJhIjoxfQ==",
+      "note": "a differently-cased key: case-insensitive finds it, case-sensitive does not",
+      "rc": 0,
+      "stdout_b64": "MQ==",
+      "stdin_preview": "/A\n{\"a\":1}",
+      "stdout_preview": "1"
+    },
+    {
+      "id": "ptr-cs-case-miss",
+      "args": [
+        "ptr-cs"
+      ],
+      "stdin_b64": "L0EKeyJhIjoxfQ==",
+      "note": "a differently-cased key: case-insensitive finds it, case-sensitive does not",
+      "rc": 0,
+      "stdout_b64": "bWlzc2luZw==",
+      "stdin_preview": "/A\n{\"a\":1}",
+      "stdout_preview": "missing"
+    },
+    {
+      "id": "ptr-exact-second",
+      "args": [
+        "ptr"
+      ],
+      "stdin_b64": "L0EKeyJhIjoxLCJBIjoyfQ==",
+      "note": "both spellings present, exact one SECOND: ci stops at the first, cs skips it",
+      "rc": 0,
+      "stdout_b64": "MQ==",
+      "stdin_preview": "/A\n{\"a\":1,\"A\":2}",
+      "stdout_preview": "1"
+    },
+    {
+      "id": "ptr-cs-exact-second",
+      "args": [
+        "ptr-cs"
+      ],
+      "stdin_b64": "L0EKeyJhIjoxLCJBIjoyfQ==",
+      "note": "both spellings present, exact one SECOND: ci stops at the first, cs skips it",
+      "rc": 0,
+      "stdout_b64": "Mg==",
+      "stdin_preview": "/A\n{\"a\":1,\"A\":2}",
+      "stdout_preview": "2"
+    },
+    {
+      "id": "ptr-exact-first",
+      "args": [
+        "ptr"
+      ],
+      "stdin_b64": "L2EKeyJBIjoxLCJhIjoyfQ==",
+      "note": "the mirror: the case-insensitive match comes first under ci",
+      "rc": 0,
+      "stdout_b64": "MQ==",
+      "stdin_preview": "/a\n{\"A\":1,\"a\":2}",
+      "stdout_preview": "1"
+    },
+    {
+      "id": "ptr-cs-exact-first",
+      "args": [
+        "ptr-cs"
+      ],
+      "stdin_b64": "L2EKeyJBIjoxLCJhIjoyfQ==",
+      "note": "the mirror: the case-insensitive match comes first under ci",
+      "rc": 0,
+      "stdout_b64": "Mg==",
+      "stdin_preview": "/a\n{\"A\":1,\"a\":2}",
+      "stdout_preview": "2"
+    },
+    {
+      "id": "ptr-nested-leaf",
+      "args": [
+        "ptr"
+      ],
+      "stdin_b64": "L2EvQgp7ImEiOnsiYiI6MSwiQiI6Mn19",
+      "note": "the flag reaches the LAST segment of a nested pointer",
+      "rc": 0,
+      "stdout_b64": "MQ==",
+      "stdin_preview": "/a/B\n{\"a\":{\"b\":1,\"B\":2}}",
+      "stdout_preview": "1"
+    },
+    {
+      "id": "ptr-cs-nested-leaf",
+      "args": [
+        "ptr-cs"
+      ],
+      "stdin_b64": "L2EvQgp7ImEiOnsiYiI6MSwiQiI6Mn19",
+      "note": "the flag reaches the LAST segment of a nested pointer",
+      "rc": 0,
+      "stdout_b64": "Mg==",
+      "stdin_preview": "/a/B\n{\"a\":{\"b\":1,\"B\":2}}",
+      "stdout_preview": "2"
+    },
+    {
+      "id": "ptr-parent-seg",
+      "args": [
+        "ptr"
+      ],
+      "stdin_b64": "L08veAp7Im8iOnsieCI6MX0sIk8iOnsieCI6Mn19",
+      "note": "the flag reaches a PARENT segment too",
+      "rc": 0,
+      "stdout_b64": "MQ==",
+      "stdin_preview": "/O/x\n{\"o\":{\"x\":1},\"O\":{\"x\":2}}",
+      "stdout_preview": "1"
+    },
+    {
+      "id": "ptr-cs-parent-seg",
+      "args": [
+        "ptr-cs"
+      ],
+      "stdin_b64": "L08veAp7Im8iOnsieCI6MX0sIk8iOnsieCI6Mn19",
+      "note": "the flag reaches a PARENT segment too",
+      "rc": 0,
+      "stdout_b64": "Mg==",
+      "stdin_preview": "/O/x\n{\"o\":{\"x\":1},\"O\":{\"x\":2}}",
+      "stdout_preview": "2"
+    },
+    {
+      "id": "ptr-escaped",
+      "args": [
+        "ptr"
+      ],
+      "stdin_b64": "L0F+MUIKeyJhL2IiOjEsIkEvQiI6Mn0=",
+      "note": "case folding still applies around a ~1 escape",
+      "rc": 0,
+      "stdout_b64": "MQ==",
+      "stdin_preview": "/A~1B\n{\"a/b\":1,\"A/B\":2}",
+      "stdout_preview": "1"
+    },
+    {
+      "id": "ptr-cs-escaped",
+      "args": [
+        "ptr-cs"
+      ],
+      "stdin_b64": "L0F+MUIKeyJhL2IiOjEsIkEvQiI6Mn0=",
+      "note": "case folding still applies around a ~1 escape",
+      "rc": 0,
+      "stdout_b64": "Mg==",
+      "stdin_preview": "/A~1B\n{\"a/b\":1,\"A/B\":2}",
+      "stdout_preview": "2"
+    },
+    {
+      "id": "ptr-non-ascii",
+      "args": [
+        "ptr"
+      ],
+      "stdin_b64": "L8OECnsiw6QiOjF9",
+      "note": "tolower() folds ASCII only: a UTF-8 letter pair matches under neither",
+      "rc": 0,
+      "stdout_b64": "bWlzc2luZw==",
+      "stdin_preview": "/\u00c4\n{\"\u00e4\":1}",
+      "stdout_preview": "missing"
+    },
+    {
+      "id": "ptr-cs-non-ascii",
+      "args": [
+        "ptr-cs"
+      ],
+      "stdin_b64": "L8OECnsiw6QiOjF9",
+      "note": "tolower() folds ASCII only: a UTF-8 letter pair matches under neither",
+      "rc": 0,
+      "stdout_b64": "bWlzc2luZw==",
+      "stdin_preview": "/\u00c4\n{\"\u00e4\":1}",
+      "stdout_preview": "missing"
+    },
+    {
+      "id": "findptr-exact-second",
+      "args": [
+        "findptr"
+      ],
+      "stdin_b64": "L0EKeyJhIjoxLCJBIjoyfQ==",
+      "note": "the reverse lookup reports the spelling the forward lookup resolved",
+      "rc": 0,
+      "stdout_b64": "L2E=",
+      "stdin_preview": "/A\n{\"a\":1,\"A\":2}",
+      "stdout_preview": "/a"
+    },
+    {
+      "id": "findptr-cs-exact-second",
+      "args": [
+        "findptr-cs"
+      ],
+      "stdin_b64": "L0EKeyJhIjoxLCJBIjoyfQ==",
+      "note": "the reverse lookup reports the spelling the forward lookup resolved",
+      "rc": 0,
+      "stdout_b64": "L0E=",
+      "stdin_preview": "/A\n{\"a\":1,\"A\":2}",
+      "stdout_preview": "/A"
+    },
+    {
+      "id": "findptr-nested",
+      "args": [
+        "findptr"
+      ],
+      "stdin_b64": "L2IvQQp7ImIiOnsiYSI6MSwiQSI6Mn19",
+      "note": "same, one level down",
+      "rc": 0,
+      "stdout_b64": "L2IvYQ==",
+      "stdin_preview": "/b/A\n{\"b\":{\"a\":1,\"A\":2}}",
+      "stdout_preview": "/b/a"
+    },
+    {
+      "id": "findptr-cs-nested",
+      "args": [
+        "findptr-cs"
+      ],
+      "stdin_b64": "L2IvQQp7ImIiOnsiYSI6MSwiQSI6Mn19",
+      "note": "same, one level down",
+      "rc": 0,
+      "stdout_b64": "L2IvQQ==",
+      "stdin_preview": "/b/A\n{\"b\":{\"a\":1,\"A\":2}}",
+      "stdout_preview": "/b/A"
+    },
+    {
+      "id": "patch-op-key-upper",
+      "args": [
+        "patch"
+      ],
+      "stdin_b64": "W3siT1AiOiJhZGQiLCJwYXRoIjoiL3giLCJ2YWx1ZSI6MX1dCnt9",
+      "note": "the op MEMBER is looked up with the flag: OP is not op under cs (status 3)",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTA7eyJ4IjoxfQ==",
+      "stdin_preview": "[{\"OP\":\"add\",\"path\":\"/x\",\"value\":1}]\n{}",
+      "stdout_preview": "status=0;{\"x\":1}"
+    },
+    {
+      "id": "patch-cs-op-key-upper",
+      "args": [
+        "patch-cs"
+      ],
+      "stdin_b64": "W3siT1AiOiJhZGQiLCJwYXRoIjoiL3giLCJ2YWx1ZSI6MX1dCnt9",
+      "note": "the op MEMBER is looked up with the flag: OP is not op under cs (status 3)",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTM7e30=",
+      "stdin_preview": "[{\"OP\":\"add\",\"path\":\"/x\",\"value\":1}]\n{}",
+      "stdout_preview": "status=3;{}"
+    },
+    {
+      "id": "patch-path-key-upper",
+      "args": [
+        "patch"
+      ],
+      "stdin_b64": "W3sib3AiOiJhZGQiLCJQQVRIIjoiL3giLCJ2YWx1ZSI6MX1dCnt9",
+      "note": "same for the path member (status 2)",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTA7eyJ4IjoxfQ==",
+      "stdin_preview": "[{\"op\":\"add\",\"PATH\":\"/x\",\"value\":1}]\n{}",
+      "stdout_preview": "status=0;{\"x\":1}"
+    },
+    {
+      "id": "patch-cs-path-key-upper",
+      "args": [
+        "patch-cs"
+      ],
+      "stdin_b64": "W3sib3AiOiJhZGQiLCJQQVRIIjoiL3giLCJ2YWx1ZSI6MX1dCnt9",
+      "note": "same for the path member (status 2)",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTI7e30=",
+      "stdin_preview": "[{\"op\":\"add\",\"PATH\":\"/x\",\"value\":1}]\n{}",
+      "stdout_preview": "status=2;{}"
+    },
+    {
+      "id": "patch-value-key-upper",
+      "args": [
+        "patch"
+      ],
+      "stdin_b64": "W3sib3AiOiJhZGQiLCJwYXRoIjoiL3giLCJWQUxVRSI6MX1dCnt9",
+      "note": "same for the value member (status 7)",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTA7eyJ4IjoxfQ==",
+      "stdin_preview": "[{\"op\":\"add\",\"path\":\"/x\",\"VALUE\":1}]\n{}",
+      "stdout_preview": "status=0;{\"x\":1}"
+    },
+    {
+      "id": "patch-cs-value-key-upper",
+      "args": [
+        "patch-cs"
+      ],
+      "stdin_b64": "W3sib3AiOiJhZGQiLCJwYXRoIjoiL3giLCJWQUxVRSI6MX1dCnt9",
+      "note": "same for the value member (status 7)",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTc7e30=",
+      "stdin_preview": "[{\"op\":\"add\",\"path\":\"/x\",\"VALUE\":1}]\n{}",
+      "stdout_preview": "status=7;{}"
+    },
+    {
+      "id": "patch-from-key-upper",
+      "args": [
+        "patch"
+      ],
+      "stdin_b64": "W3sib3AiOiJjb3B5IiwiRlJPTSI6Ii9hIiwicGF0aCI6Ii96In1dCnsiYSI6MX0=",
+      "note": "same for the from member (status 4)",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTA7eyJhIjoxLCJ6IjoxfQ==",
+      "stdin_preview": "[{\"op\":\"copy\",\"FROM\":\"/a\",\"path\":\"/z\"}]\n{\"a\":1}",
+      "stdout_preview": "status=0;{\"a\":1,\"z\":1}"
+    },
+    {
+      "id": "patch-cs-from-key-upper",
+      "args": [
+        "patch-cs"
+      ],
+      "stdin_b64": "W3sib3AiOiJjb3B5IiwiRlJPTSI6Ii9hIiwicGF0aCI6Ii96In1dCnsiYSI6MX0=",
+      "note": "same for the from member (status 4)",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTQ7eyJhIjoxfQ==",
+      "stdin_preview": "[{\"op\":\"copy\",\"FROM\":\"/a\",\"path\":\"/z\"}]\n{\"a\":1}",
+      "stdout_preview": "status=4;{\"a\":1}"
+    },
+    {
+      "id": "patch-add-other-case",
+      "args": [
+        "patch"
+      ],
+      "stdin_b64": "W3sib3AiOiJhZGQiLCJwYXRoIjoiL0EiLCJ2YWx1ZSI6M31dCnsiYSI6MX0=",
+      "note": "add deletes an existing member first: ci deletes a, cs keeps it",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTA7eyJBIjozfQ==",
+      "stdin_preview": "[{\"op\":\"add\",\"path\":\"/A\",\"value\":3}]\n{\"a\":1}",
+      "stdout_preview": "status=0;{\"A\":3}"
+    },
+    {
+      "id": "patch-cs-add-other-case",
+      "args": [
+        "patch-cs"
+      ],
+      "stdin_b64": "W3sib3AiOiJhZGQiLCJwYXRoIjoiL0EiLCJ2YWx1ZSI6M31dCnsiYSI6MX0=",
+      "note": "add deletes an existing member first: ci deletes a, cs keeps it",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTA7eyJhIjoxLCJBIjozfQ==",
+      "stdin_preview": "[{\"op\":\"add\",\"path\":\"/A\",\"value\":3}]\n{\"a\":1}",
+      "stdout_preview": "status=0;{\"a\":1,\"A\":3}"
+    },
+    {
+      "id": "patch-test-keys",
+      "args": [
+        "patch"
+      ],
+      "stdin_b64": "W3sib3AiOiJ0ZXN0IiwicGF0aCI6Ii9vIiwidmFsdWUiOnsiYSI6MSwiQSI6Mn19XQp7Im8iOnsiQSI6MiwiYSI6MX19",
+      "note": "test sorts both sides with the flag before comparing keys",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTE7eyJvIjp7ImEiOjEsIkEiOjJ9fQ==",
+      "stdin_preview": "[{\"op\":\"test\",\"path\":\"/o\",\"value\":{\"a\":1,\"A\":2}}]\n{\"o\":{\"A\":2,\"a\":1}}",
+      "stdout_preview": "status=1;{\"o\":{\"a\":1,\"A\":2}}"
+    },
+    {
+      "id": "patch-cs-test-keys",
+      "args": [
+        "patch-cs"
+      ],
+      "stdin_b64": "W3sib3AiOiJ0ZXN0IiwicGF0aCI6Ii9vIiwidmFsdWUiOnsiYSI6MSwiQSI6Mn19XQp7Im8iOnsiQSI6MiwiYSI6MX19",
+      "note": "test sorts both sides with the flag before comparing keys",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTA7eyJvIjp7IkEiOjIsImEiOjF9fQ==",
+      "stdin_preview": "[{\"op\":\"test\",\"path\":\"/o\",\"value\":{\"a\":1,\"A\":2}}]\n{\"o\":{\"A\":2,\"a\":1}}",
+      "stdout_preview": "status=0;{\"o\":{\"A\":2,\"a\":1}}"
+    },
+    {
+      "id": "patch-test-mismatch",
+      "args": [
+        "patch"
+      ],
+      "stdin_b64": "W3sib3AiOiJ0ZXN0IiwicGF0aCI6Ii9vIiwidmFsdWUiOnsiQSI6MX19XQp7Im8iOnsiYSI6MX19",
+      "note": "the mirror: equal under ci, unequal under cs",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTA7eyJvIjp7ImEiOjF9fQ==",
+      "stdin_preview": "[{\"op\":\"test\",\"path\":\"/o\",\"value\":{\"A\":1}}]\n{\"o\":{\"a\":1}}",
+      "stdout_preview": "status=0;{\"o\":{\"a\":1}}"
+    },
+    {
+      "id": "patch-cs-test-mismatch",
+      "args": [
+        "patch-cs"
+      ],
+      "stdin_b64": "W3sib3AiOiJ0ZXN0IiwicGF0aCI6Ii9vIiwidmFsdWUiOnsiQSI6MX19XQp7Im8iOnsiYSI6MX19",
+      "note": "the mirror: equal under ci, unequal under cs",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTE7eyJvIjp7ImEiOjF9fQ==",
+      "stdin_preview": "[{\"op\":\"test\",\"path\":\"/o\",\"value\":{\"A\":1}}]\n{\"o\":{\"a\":1}}",
+      "stdout_preview": "status=1;{\"o\":{\"a\":1}}"
+    },
+    {
+      "id": "patch-copy-from-exact",
+      "args": [
+        "patch"
+      ],
+      "stdin_b64": "W3sib3AiOiJjb3B5IiwiZnJvbSI6Ii9BIiwicGF0aCI6Ii96In1dCnsiYSI6MSwiQSI6Mn0=",
+      "note": "copy resolves from with the flag (get_item_from_pointer)",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTA7eyJhIjoxLCJBIjoyLCJ6IjoxfQ==",
+      "stdin_preview": "[{\"op\":\"copy\",\"from\":\"/A\",\"path\":\"/z\"}]\n{\"a\":1,\"A\":2}",
+      "stdout_preview": "status=0;{\"a\":1,\"A\":2,\"z\":1}"
+    },
+    {
+      "id": "patch-cs-copy-from-exact",
+      "args": [
+        "patch-cs"
+      ],
+      "stdin_b64": "W3sib3AiOiJjb3B5IiwiZnJvbSI6Ii9BIiwicGF0aCI6Ii96In1dCnsiYSI6MSwiQSI6Mn0=",
+      "note": "copy resolves from with the flag (get_item_from_pointer)",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTA7eyJhIjoxLCJBIjoyLCJ6IjoyfQ==",
+      "stdin_preview": "[{\"op\":\"copy\",\"from\":\"/A\",\"path\":\"/z\"}]\n{\"a\":1,\"A\":2}",
+      "stdout_preview": "status=0;{\"a\":1,\"A\":2,\"z\":2}"
+    },
+    {
+      "id": "patch-remove-parent-seg",
+      "args": [
+        "patch"
+      ],
+      "stdin_b64": "W3sib3AiOiJyZW1vdmUiLCJwYXRoIjoiL08vQSJ9XQp7Im8iOnsiQSI6MX0sIk8iOnsiQSI6Mn19",
+      "note": "remove resolves the PARENT with the flag",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTA7eyJvIjp7fSwiTyI6eyJBIjoyfX0=",
+      "stdin_preview": "[{\"op\":\"remove\",\"path\":\"/O/A\"}]\n{\"o\":{\"A\":1},\"O\":{\"A\":2}}",
+      "stdout_preview": "status=0;{\"o\":{},\"O\":{\"A\":2}}"
+    },
+    {
+      "id": "patch-cs-remove-parent-seg",
+      "args": [
+        "patch-cs"
+      ],
+      "stdin_b64": "W3sib3AiOiJyZW1vdmUiLCJwYXRoIjoiL08vQSJ9XQp7Im8iOnsiQSI6MX0sIk8iOnsiQSI6Mn19",
+      "note": "remove resolves the PARENT with the flag",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTA7eyJvIjp7IkEiOjF9LCJPIjp7fX0=",
+      "stdin_preview": "[{\"op\":\"remove\",\"path\":\"/O/A\"}]\n{\"o\":{\"A\":1},\"O\":{\"A\":2}}",
+      "stdout_preview": "status=0;{\"o\":{\"A\":1},\"O\":{}}"
+    },
+    {
+      "id": "patch-remove-exact-first",
+      "args": [
+        "patch"
+      ],
+      "stdin_b64": "W3sib3AiOiJyZW1vdmUiLCJwYXRoIjoiL0EifV0KeyJBIjoxLCJhIjoyfQ==",
+      "note": "control for utils-cs-detach-*: the exact spelling comes first, so the C's case-insensitive leaf detach lands on the right key and the port agrees",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTA7eyJhIjoyfQ==",
+      "stdin_preview": "[{\"op\":\"remove\",\"path\":\"/A\"}]\n{\"A\":1,\"a\":2}",
+      "stdout_preview": "status=0;{\"a\":2}"
+    },
+    {
+      "id": "patch-cs-remove-exact-first",
+      "args": [
+        "patch-cs"
+      ],
+      "stdin_b64": "W3sib3AiOiJyZW1vdmUiLCJwYXRoIjoiL0EifV0KeyJBIjoxLCJhIjoyfQ==",
+      "note": "control for utils-cs-detach-*: the exact spelling comes first, so the C's case-insensitive leaf detach lands on the right key and the port agrees",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTA7eyJhIjoyfQ==",
+      "stdin_preview": "[{\"op\":\"remove\",\"path\":\"/A\"}]\n{\"A\":1,\"a\":2}",
+      "stdout_preview": "status=0;{\"a\":2}"
+    },
+    {
+      "id": "merge-null-exact",
+      "args": [
+        "merge"
+      ],
+      "stdin_b64": "eyJBIjpudWxsfQp7ImEiOjEsIkEiOjJ9",
+      "note": "a null member removes the key it names, compared with the flag",
+      "rc": 0,
+      "stdout_b64": "eyJBIjoyfQ==",
+      "stdin_preview": "{\"A\":null}\n{\"a\":1,\"A\":2}",
+      "stdout_preview": "{\"A\":2}"
+    },
+    {
+      "id": "merge-cs-null-exact",
+      "args": [
+        "merge-cs"
+      ],
+      "stdin_b64": "eyJBIjpudWxsfQp7ImEiOjEsIkEiOjJ9",
+      "note": "a null member removes the key it names, compared with the flag",
+      "rc": 0,
+      "stdout_b64": "eyJhIjoxfQ==",
+      "stdin_preview": "{\"A\":null}\n{\"a\":1,\"A\":2}",
+      "stdout_preview": "{\"a\":1}"
+    },
+    {
+      "id": "merge-null-other-case",
+      "args": [
+        "merge"
+      ],
+      "stdin_b64": "eyJhIjpudWxsfQp7IkEiOjF9",
+      "note": "the mirror: ci removes A, cs removes nothing",
+      "rc": 0,
+      "stdout_b64": "e30=",
+      "stdin_preview": "{\"a\":null}\n{\"A\":1}",
+      "stdout_preview": "{}"
+    },
+    {
+      "id": "merge-cs-null-other-case",
+      "args": [
+        "merge-cs"
+      ],
+      "stdin_b64": "eyJhIjpudWxsfQp7IkEiOjF9",
+      "note": "the mirror: ci removes A, cs removes nothing",
+      "rc": 0,
+      "stdout_b64": "eyJBIjoxfQ==",
+      "stdin_preview": "{\"a\":null}\n{\"A\":1}",
+      "stdout_preview": "{\"A\":1}"
+    },
+    {
+      "id": "merge-add-other-case",
+      "args": [
+        "merge"
+      ],
+      "stdin_b64": "eyJBIjo1fQp7ImEiOjF9",
+      "note": "a member is replaced only if the flag matches it, else added beside",
+      "rc": 0,
+      "stdout_b64": "eyJBIjo1fQ==",
+      "stdin_preview": "{\"A\":5}\n{\"a\":1}",
+      "stdout_preview": "{\"A\":5}"
+    },
+    {
+      "id": "merge-cs-add-other-case",
+      "args": [
+        "merge-cs"
+      ],
+      "stdin_b64": "eyJBIjo1fQp7ImEiOjF9",
+      "note": "a member is replaced only if the flag matches it, else added beside",
+      "rc": 0,
+      "stdout_b64": "eyJhIjoxLCJBIjo1fQ==",
+      "stdin_preview": "{\"A\":5}\n{\"a\":1}",
+      "stdout_preview": "{\"a\":1,\"A\":5}"
+    },
+    {
+      "id": "merge-nested",
+      "args": [
+        "merge"
+      ],
+      "stdin_b64": "eyJvIjp7IkIiOjJ9fQp7Im8iOnsiYiI6MX19",
+      "note": "the flag reaches the recursion",
+      "rc": 0,
+      "stdout_b64": "eyJvIjp7IkIiOjJ9fQ==",
+      "stdin_preview": "{\"o\":{\"B\":2}}\n{\"o\":{\"b\":1}}",
+      "stdout_preview": "{\"o\":{\"B\":2}}"
+    },
+    {
+      "id": "merge-cs-nested",
+      "args": [
+        "merge-cs"
+      ],
+      "stdin_b64": "eyJvIjp7IkIiOjJ9fQp7Im8iOnsiYiI6MX19",
+      "note": "the flag reaches the recursion",
+      "rc": 0,
+      "stdout_b64": "eyJvIjp7ImIiOjEsIkIiOjJ9fQ==",
+      "stdin_preview": "{\"o\":{\"B\":2}}\n{\"o\":{\"b\":1}}",
+      "stdout_preview": "{\"o\":{\"b\":1,\"B\":2}}"
+    },
+    {
+      "id": "merge-object-other-case",
+      "args": [
+        "merge"
+      ],
+      "stdin_b64": "eyJBIjp7IngiOjF9fQp7ImEiOnsieSI6Mn19",
+      "note": "ci merges into a; cs adds A beside it",
+      "rc": 0,
+      "stdout_b64": "eyJBIjp7InkiOjIsIngiOjF9fQ==",
+      "stdin_preview": "{\"A\":{\"x\":1}}\n{\"a\":{\"y\":2}}",
+      "stdout_preview": "{\"A\":{\"y\":2,\"x\":1}}"
+    },
+    {
+      "id": "merge-cs-object-other-case",
+      "args": [
+        "merge-cs"
+      ],
+      "stdin_b64": "eyJBIjp7IngiOjF9fQp7ImEiOnsieSI6Mn19",
+      "note": "ci merges into a; cs adds A beside it",
+      "rc": 0,
+      "stdout_b64": "eyJhIjp7InkiOjJ9LCJBIjp7IngiOjF9fQ==",
+      "stdin_preview": "{\"A\":{\"x\":1}}\n{\"a\":{\"y\":2}}",
+      "stdout_preview": "{\"a\":{\"y\":2},\"A\":{\"x\":1}}"
+    },
+    {
+      "id": "genmerge-nested-case",
+      "args": [
+        "genmerge"
+      ],
+      "stdin_b64": "eyJvIjp7ImEiOjF9fQp7Im8iOnsiQSI6MX19",
+      "note": "compare_json uses the flag: under ci the children are equal (null patch)",
+      "rc": 0,
+      "stdout_b64": "bnVsbA==",
+      "stdin_preview": "{\"o\":{\"a\":1}}\n{\"o\":{\"A\":1}}",
+      "stdout_preview": "null"
+    },
+    {
+      "id": "genmerge-cs-nested-case",
+      "args": [
+        "genmerge-cs"
+      ],
+      "stdin_b64": "eyJvIjp7ImEiOjF9fQp7Im8iOnsiQSI6MX19",
+      "note": "compare_json uses the flag: under ci the children are equal (null patch)",
+      "rc": 0,
+      "stdout_b64": "eyJvIjp7IkEiOjEsImEiOm51bGx9fQ==",
+      "stdin_preview": "{\"o\":{\"a\":1}}\n{\"o\":{\"A\":1}}",
+      "stdout_preview": "{\"o\":{\"A\":1,\"a\":null}}"
+    },
+    {
+      "id": "genmerge-sort-order",
+      "args": [
+        "genmerge"
+      ],
+      "stdin_b64": "eyJhIjoxLCJCIjoyfQp7IkIiOjIsImMiOjN9",
+      "note": "children are SORTED with the flag but DIFFED with strcmp: ci sorts a before B, so strcmp misreads B as new",
+      "rc": 0,
+      "stdout_b64": "eyJCIjoyLCJhIjpudWxsLCJCIjpudWxsLCJjIjozfQ==",
+      "stdin_preview": "{\"a\":1,\"B\":2}\n{\"B\":2,\"c\":3}",
+      "stdout_preview": "{\"B\":2,\"a\":null,\"B\":null,\"c\":3}"
+    },
+    {
+      "id": "genmerge-cs-sort-order",
+      "args": [
+        "genmerge-cs"
+      ],
+      "stdin_b64": "eyJhIjoxLCJCIjoyfQp7IkIiOjIsImMiOjN9",
+      "note": "children are SORTED with the flag but DIFFED with strcmp: ci sorts a before B, so strcmp misreads B as new",
+      "rc": 0,
+      "stdout_b64": "eyJhIjpudWxsLCJjIjozfQ==",
+      "stdin_preview": "{\"a\":1,\"B\":2}\n{\"B\":2,\"c\":3}",
+      "stdout_preview": "{\"a\":null,\"c\":3}"
+    },
+    {
+      "id": "genmerge-nested-ci-recursion",
+      "args": [
+        "genmerge"
+      ],
+      "stdin_b64": "eyJvIjp7ImEiOjEsIkIiOjJ9fQp7Im8iOnsiQiI6MiwiYyI6M319",
+      "note": "the C recurses through the case-INSENSITIVE public entry even under cs, so the spurious B appears one level down in both modes",
+      "rc": 0,
+      "stdout_b64": "eyJvIjp7IkIiOjIsImEiOm51bGwsIkIiOm51bGwsImMiOjN9fQ==",
+      "stdin_preview": "{\"o\":{\"a\":1,\"B\":2}}\n{\"o\":{\"B\":2,\"c\":3}}",
+      "stdout_preview": "{\"o\":{\"B\":2,\"a\":null,\"B\":null,\"c\":3}}"
+    },
+    {
+      "id": "genmerge-cs-nested-ci-recursion",
+      "args": [
+        "genmerge-cs"
+      ],
+      "stdin_b64": "eyJvIjp7ImEiOjEsIkIiOjJ9fQp7Im8iOnsiQiI6MiwiYyI6M319",
+      "note": "the C recurses through the case-INSENSITIVE public entry even under cs, so the spurious B appears one level down in both modes",
+      "rc": 0,
+      "stdout_b64": "eyJvIjp7IkIiOjIsImEiOm51bGwsIkIiOm51bGwsImMiOjN9fQ==",
+      "stdin_preview": "{\"o\":{\"a\":1,\"B\":2}}\n{\"o\":{\"B\":2,\"c\":3}}",
+      "stdout_preview": "{\"o\":{\"B\":2,\"a\":null,\"B\":null,\"c\":3}}"
+    },
+    {
+      "id": "genpatch-rename-case",
+      "args": [
+        "genpatch"
+      ],
+      "stdin_b64": "eyJhIjoxfQp7IkEiOjF9",
+      "note": "ci sees no change; cs sees a remove and an add",
+      "rc": 0,
+      "stdout_b64": "W10=",
+      "stdin_preview": "{\"a\":1}\n{\"A\":1}",
+      "stdout_preview": "[]"
+    },
+    {
+      "id": "genpatch-cs-rename-case",
+      "args": [
+        "genpatch-cs"
+      ],
+      "stdin_b64": "eyJhIjoxfQp7IkEiOjF9",
+      "note": "ci sees no change; cs sees a remove and an add",
+      "rc": 0,
+      "stdout_b64": "W3sib3AiOiJhZGQiLCJwYXRoIjoiL0EiLCJ2YWx1ZSI6MX0seyJvcCI6InJlbW92ZSIsInBhdGgiOiIvYSJ9XQ==",
+      "stdin_preview": "{\"a\":1}\n{\"A\":1}",
+      "stdout_preview": "[{\"op\":\"add\",\"path\":\"/A\",\"value\":1},{\"op\":\"remove\",\"path\":\"/a\"}]"
+    },
+    {
+      "id": "genpatch-both-spellings",
+      "args": [
+        "genpatch"
+      ],
+      "stdin_b64": "eyJhIjoxLCJBIjoyfQp7IkEiOjIsImEiOjN9",
+      "note": "the sort with the flag decides which members are paired",
+      "rc": 0,
+      "stdout_b64": "W3sib3AiOiJyZXBsYWNlIiwicGF0aCI6Ii9BIiwidmFsdWUiOjN9LHsib3AiOiJyZXBsYWNlIiwicGF0aCI6Ii9hIiwidmFsdWUiOjJ9XQ==",
+      "stdin_preview": "{\"a\":1,\"A\":2}\n{\"A\":2,\"a\":3}",
+      "stdout_preview": "[{\"op\":\"replace\",\"path\":\"/A\",\"value\":3},{\"op\":\"replace\",\"path\":\"/a\",\"value\":2}]"
+    },
+    {
+      "id": "genpatch-cs-both-spellings",
+      "args": [
+        "genpatch-cs"
+      ],
+      "stdin_b64": "eyJhIjoxLCJBIjoyfQp7IkEiOjIsImEiOjN9",
+      "note": "the sort with the flag decides which members are paired",
+      "rc": 0,
+      "stdout_b64": "W3sib3AiOiJyZXBsYWNlIiwicGF0aCI6Ii9hIiwidmFsdWUiOjN9XQ==",
+      "stdin_preview": "{\"a\":1,\"A\":2}\n{\"A\":2,\"a\":3}",
+      "stdout_preview": "[{\"op\":\"replace\",\"path\":\"/a\",\"value\":3}]"
+    },
+    {
+      "id": "genpatch-nested",
+      "args": [
+        "genpatch"
+      ],
+      "stdin_b64": "eyJvIjp7ImIiOjEsIkIiOjJ9fQp7Im8iOnsiQiI6MiwiYiI6MX19",
+      "note": "the flag reaches a nested object",
+      "rc": 0,
+      "stdout_b64": "W3sib3AiOiJyZXBsYWNlIiwicGF0aCI6Ii9vL0IiLCJ2YWx1ZSI6MX0seyJvcCI6InJlcGxhY2UiLCJwYXRoIjoiL28vYiIsInZhbHVlIjoyfV0=",
+      "stdin_preview": "{\"o\":{\"b\":1,\"B\":2}}\n{\"o\":{\"B\":2,\"b\":1}}",
+      "stdout_preview": "[{\"op\":\"replace\",\"path\":\"/o/B\",\"value\":1},{\"op\":\"replace\",\"path\":\"/o/b\",\"value\":\u2026"
+    },
+    {
+      "id": "genpatch-cs-nested",
+      "args": [
+        "genpatch-cs"
+      ],
+      "stdin_b64": "eyJvIjp7ImIiOjEsIkIiOjJ9fQp7Im8iOnsiQiI6MiwiYiI6MX19",
+      "note": "the flag reaches a nested object",
+      "rc": 0,
+      "stdout_b64": "W10=",
+      "stdin_preview": "{\"o\":{\"b\":1,\"B\":2}}\n{\"o\":{\"B\":2,\"b\":1}}",
+      "stdout_preview": "[]"
+    },
+    {
+      "id": "genpatch-array-child",
+      "args": [
+        "genpatch"
+      ],
+      "stdin_b64": "W3siYSI6MX1dClt7IkEiOjF9XQ==",
+      "note": "the flag survives the array-index recursion",
+      "rc": 0,
+      "stdout_b64": "W10=",
+      "stdin_preview": "[{\"a\":1}]\n[{\"A\":1}]",
+      "stdout_preview": "[]"
+    },
+    {
+      "id": "genpatch-cs-array-child",
+      "args": [
+        "genpatch-cs"
+      ],
+      "stdin_b64": "W3siYSI6MX1dClt7IkEiOjF9XQ==",
+      "note": "the flag survives the array-index recursion",
+      "rc": 0,
+      "stdout_b64": "W3sib3AiOiJhZGQiLCJwYXRoIjoiLzAvQSIsInZhbHVlIjoxfSx7Im9wIjoicmVtb3ZlIiwicGF0aCI6Ii8wL2EifV0=",
+      "stdin_preview": "[{\"a\":1}]\n[{\"A\":1}]",
+      "stdout_preview": "[{\"op\":\"add\",\"path\":\"/0/A\",\"value\":1},{\"op\":\"remove\",\"path\":\"/0/a\"}]"
+    },
+    {
+      "id": "sort-ties",
+      "args": [
+        "sort"
+      ],
+      "stdin_b64": "eyJiIjoxLCJBIjoyLCJhIjozLCJCIjo0fQ==",
+      "note": "ci ties (A/a, b/B) are reordered by the C's merge; cs orders by byte",
+      "rc": 0,
+      "stdout_b64": "eyJhIjozLCJBIjoyLCJCIjo0LCJiIjoxfQ==",
+      "stdin_preview": "{\"b\":1,\"A\":2,\"a\":3,\"B\":4}",
+      "stdout_preview": "{\"a\":3,\"A\":2,\"B\":4,\"b\":1}"
+    },
+    {
+      "id": "sort-cs-ties",
+      "args": [
+        "sort-cs"
+      ],
+      "stdin_b64": "eyJiIjoxLCJBIjoyLCJhIjozLCJCIjo0fQ==",
+      "note": "ci ties (A/a, b/B) are reordered by the C's merge; cs orders by byte",
+      "rc": 0,
+      "stdout_b64": "eyJBIjoyLCJCIjo0LCJhIjozLCJiIjoxfQ==",
+      "stdin_preview": "{\"b\":1,\"A\":2,\"a\":3,\"B\":4}",
+      "stdout_preview": "{\"A\":2,\"B\":4,\"a\":3,\"b\":1}"
+    },
+    {
+      "id": "patch-detach-remove",
+      "args": [
+        "patch"
+      ],
+      "stdin_b64": "W3sib3AiOiJyZW1vdmUiLCJwYXRoIjoiL0EifV0KeyJhIjoxfQ==",
+      "note": "ci twin of utils-cs-detach-remove: the C's leaf detach is case-insensitive, which IS this mode's contract",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTA7e30=",
+      "stdin_preview": "[{\"op\":\"remove\",\"path\":\"/A\"}]\n{\"a\":1}",
+      "stdout_preview": "status=0;{}"
+    },
+    {
+      "id": "patch-detach-remove-first",
+      "args": [
+        "patch"
+      ],
+      "stdin_b64": "W3sib3AiOiJyZW1vdmUiLCJwYXRoIjoiL0EifV0KeyJhIjoxLCJBIjoyfQ==",
+      "note": "ci twin of utils-cs-detach-remove-first: the C's leaf detach is case-insensitive, which IS this mode's contract",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTA7eyJBIjoyfQ==",
+      "stdin_preview": "[{\"op\":\"remove\",\"path\":\"/A\"}]\n{\"a\":1,\"A\":2}",
+      "stdout_preview": "status=0;{\"A\":2}"
+    },
+    {
+      "id": "patch-detach-replace",
+      "args": [
+        "patch"
+      ],
+      "stdin_b64": "W3sib3AiOiJyZXBsYWNlIiwicGF0aCI6Ii9hIiwidmFsdWUiOjl9XQp7IkEiOjEsImEiOjJ9",
+      "note": "ci twin of utils-cs-detach-replace: the C's leaf detach is case-insensitive, which IS this mode's contract",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTA7eyJhIjo5fQ==",
+      "stdin_preview": "[{\"op\":\"replace\",\"path\":\"/a\",\"value\":9}]\n{\"A\":1,\"a\":2}",
+      "stdout_preview": "status=0;{\"a\":9}"
+    },
+    {
+      "id": "patch-detach-move",
+      "args": [
+        "patch"
+      ],
+      "stdin_b64": "W3sib3AiOiJtb3ZlIiwiZnJvbSI6Ii9BIiwicGF0aCI6Ii96In1dCnsiYSI6MSwiQSI6Mn0=",
+      "note": "ci twin of utils-cs-detach-move: the C's leaf detach is case-insensitive, which IS this mode's contract",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTA7eyJBIjoyLCJ6IjoxfQ==",
+      "stdin_preview": "[{\"op\":\"move\",\"from\":\"/A\",\"path\":\"/z\"}]\n{\"a\":1,\"A\":2}",
+      "stdout_preview": "status=0;{\"A\":2,\"z\":1}"
+    },
+    {
+      "id": "patch-detach-nested",
+      "args": [
+        "patch"
+      ],
+      "stdin_b64": "W3sib3AiOiJyZW1vdmUiLCJwYXRoIjoiL08vYSJ9XQp7Im8iOnsiYSI6MX0sIk8iOnsiQSI6Mn19",
+      "note": "ci twin of utils-cs-detach-nested: the C's leaf detach is case-insensitive, which IS this mode's contract",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTA7eyJvIjp7fSwiTyI6eyJBIjoyfX0=",
+      "stdin_preview": "[{\"op\":\"remove\",\"path\":\"/O/a\"}]\n{\"o\":{\"a\":1},\"O\":{\"A\":2}}",
+      "stdout_preview": "status=0;{\"o\":{},\"O\":{\"A\":2}}"
+    },
+    {
+      "id": "patch-test-sorts-before-length",
+      "args": [
+        "patch"
+      ],
+      "stdin_b64": "W3sib3AiOiJ0ZXN0IiwicGF0aCI6IiIsInZhbHVlIjpbeyJiIjoxLCJhIjoyfV19XQpbeyJiIjoxLCJhIjoyfSw1XQ==",
+      "note": "compare_json walks the pairs BEFORE it checks for leftovers, so a failing test of unequal-length arrays has already sorted the first element in place -- the port checked lengths first and printed it unsorted",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTE7W3siYSI6MiwiYiI6MX0sNV0=",
+      "stdin_preview": "[{\"op\":\"test\",\"path\":\"\",\"value\":[{\"b\":1,\"a\":2}]}]\n[{\"b\":1,\"a\":2},5]",
+      "stdout_preview": "status=1;[{\"a\":2,\"b\":1},5]"
+    },
+    {
+      "id": "patch-cs-test-sorts-before-length",
+      "args": [
+        "patch-cs"
+      ],
+      "stdin_b64": "W3sib3AiOiJ0ZXN0IiwicGF0aCI6IiIsInZhbHVlIjpbeyJiIjoxLCJhIjoyfV19XQpbeyJiIjoxLCJhIjoyfSw1XQ==",
+      "note": "compare_json walks the pairs BEFORE it checks for leftovers, so a failing test of unequal-length arrays has already sorted the first element in place -- the port checked lengths first and printed it unsorted",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTE7W3siYSI6MiwiYiI6MX0sNV0=",
+      "stdin_preview": "[{\"op\":\"test\",\"path\":\"\",\"value\":[{\"b\":1,\"a\":2}]}]\n[{\"b\":1,\"a\":2},5]",
+      "stdout_preview": "status=1;[{\"a\":2,\"b\":1},5]"
+    },
+    {
+      "id": "patch-test-sorts-before-count",
+      "args": [
+        "patch"
+      ],
+      "stdin_b64": "W3sib3AiOiJ0ZXN0IiwicGF0aCI6IiIsInZhbHVlIjp7Im8iOnsiYiI6MSwiYSI6Mn19fV0KeyJvIjp7ImIiOjEsImEiOjJ9LCJwIjoxfQ==",
+      "note": "the same order for an object with an extra member: `o` is sorted before `p` is found unmatched",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTE7eyJvIjp7ImEiOjIsImIiOjF9LCJwIjoxfQ==",
+      "stdin_preview": "[{\"op\":\"test\",\"path\":\"\",\"value\":{\"o\":{\"b\":1,\"a\":2}}}]\n{\"o\":{\"b\":1,\"a\":2},\"p\":1}",
+      "stdout_preview": "status=1;{\"o\":{\"a\":2,\"b\":1},\"p\":1}"
+    },
+    {
+      "id": "patch-cs-test-sorts-before-count",
+      "args": [
+        "patch-cs"
+      ],
+      "stdin_b64": "W3sib3AiOiJ0ZXN0IiwicGF0aCI6IiIsInZhbHVlIjp7Im8iOnsiYiI6MSwiYSI6Mn19fV0KeyJvIjp7ImIiOjEsImEiOjJ9LCJwIjoxfQ==",
+      "note": "the same order for an object with an extra member: `o` is sorted before `p` is found unmatched",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTE7eyJvIjp7ImEiOjIsImIiOjF9LCJwIjoxfQ==",
+      "stdin_preview": "[{\"op\":\"test\",\"path\":\"\",\"value\":{\"o\":{\"b\":1,\"a\":2}}}]\n{\"o\":{\"b\":1,\"a\":2},\"p\":1}",
+      "stdout_preview": "status=1;{\"o\":{\"a\":2,\"b\":1},\"p\":1}"
+    },
+    {
+      "id": "genmerge-tie-sorted-twice",
+      "args": [
+        "genmerge"
+      ],
+      "stdin_b64": "eyJvIjp7ImIiOjUsIkIiOjJ9fQp7Im8iOnsiIjoxfX0=",
+      "note": "compare_json sorts the paired children IN PLACE and the recursion sorts them again; sort_list is unstable (a tie takes the second run), so the case-tied b/B swap twice -- the port compared clones and swapped them once",
+      "rc": 0,
+      "stdout_b64": "eyJvIjp7IiI6MSwiYiI6bnVsbCwiQiI6bnVsbH19",
+      "stdin_preview": "{\"o\":{\"b\":5,\"B\":2}}\n{\"o\":{\"\":1}}",
+      "stdout_preview": "{\"o\":{\"\":1,\"b\":null,\"B\":null}}"
+    },
+    {
+      "id": "genmerge-cs-tie-sorted-twice",
+      "args": [
+        "genmerge-cs"
+      ],
+      "stdin_b64": "eyJvIjp7ImIiOjUsIkIiOjJ9fQp7Im8iOnsiIjoxfX0=",
+      "note": "compare_json sorts the paired children IN PLACE and the recursion sorts them again; sort_list is unstable (a tie takes the second run), so the case-tied b/B swap twice -- the port compared clones and swapped them once",
+      "rc": 0,
+      "stdout_b64": "eyJvIjp7IiI6MSwiYiI6bnVsbCwiQiI6bnVsbH19",
+      "stdin_preview": "{\"o\":{\"b\":5,\"B\":2}}\n{\"o\":{\"\":1}}",
+      "stdout_preview": "{\"o\":{\"\":1,\"b\":null,\"B\":null}}"
+    },
+    {
+      "id": "genmerge-tie-nested-array",
+      "args": [
+        "genmerge"
+      ],
+      "stdin_b64": "eyJvIjp7IngiOlt7ImIiOjEsIkIiOjJ9XSwieSI6MX19CnsibyI6eyJ4IjpbeyJiIjoxLCJCIjozfV19fQ==",
+      "note": "both bugs at once: o has a leftover (y), so only the pairwise-first walk reaches x's element and sorts it before the recursion sorts it again",
+      "rc": 0,
+      "stdout_b64": "eyJvIjp7IngiOlt7ImIiOjEsIkIiOjN9XSwieSI6bnVsbH19",
+      "stdin_preview": "{\"o\":{\"x\":[{\"b\":1,\"B\":2}],\"y\":1}}\n{\"o\":{\"x\":[{\"b\":1,\"B\":3}]}}",
+      "stdout_preview": "{\"o\":{\"x\":[{\"b\":1,\"B\":3}],\"y\":null}}"
+    },
+    {
+      "id": "genmerge-cs-tie-nested-array",
+      "args": [
+        "genmerge-cs"
+      ],
+      "stdin_b64": "eyJvIjp7IngiOlt7ImIiOjEsIkIiOjJ9XSwieSI6MX19CnsibyI6eyJ4IjpbeyJiIjoxLCJCIjozfV19fQ==",
+      "note": "both bugs at once: o has a leftover (y), so only the pairwise-first walk reaches x's element and sorts it before the recursion sorts it again",
+      "rc": 0,
+      "stdout_b64": "eyJvIjp7IngiOlt7ImIiOjEsIkIiOjN9XSwieSI6bnVsbH19",
+      "stdin_preview": "{\"o\":{\"x\":[{\"b\":1,\"B\":2}],\"y\":1}}\n{\"o\":{\"x\":[{\"b\":1,\"B\":3}]}}",
+      "stdout_preview": "{\"o\":{\"x\":[{\"b\":1,\"B\":3}],\"y\":null}}"
+    },
+    {
+      "id": "genmerge-duplicate-key-ties",
+      "args": [
+        "genmerge"
+      ],
+      "stdin_b64": "eyJvIjp7IiI6MSwiIjoyfX0KeyJvIjp7IiI6OSwiIjoxfX0=",
+      "note": "duplicate keys are ties under both flags, so the double sort shows without any case folding",
+      "rc": 0,
+      "stdout_b64": "eyJvIjp7IiI6OSwiIjoxfX0=",
+      "stdin_preview": "{\"o\":{\"\":1,\"\":2}}\n{\"o\":{\"\":9,\"\":1}}",
+      "stdout_preview": "{\"o\":{\"\":9,\"\":1}}"
+    },
+    {
+      "id": "genmerge-cs-duplicate-key-ties",
+      "args": [
+        "genmerge-cs"
+      ],
+      "stdin_b64": "eyJvIjp7IiI6MSwiIjoyfX0KeyJvIjp7IiI6OSwiIjoxfX0=",
+      "note": "duplicate keys are ties under both flags, so the double sort shows without any case folding",
+      "rc": 0,
+      "stdout_b64": "eyJvIjp7IiI6OSwiIjoxfX0=",
+      "stdin_preview": "{\"o\":{\"\":1,\"\":2}}\n{\"o\":{\"\":9,\"\":1}}",
+      "stdout_preview": "{\"o\":{\"\":9,\"\":1}}"
+    },
+    {
+      "id": "patch-add-single-key",
+      "args": [
+        "patch"
+      ],
+      "stdin_b64": "W3sib3AiOiJhZGQiLCJwYXRoIjoiL3JvbGUiLCJ2YWx1ZSI6InVzZXIifV0KeyJyb2xlIjoiYWRtaW4iLCJ4IjoxfQ==",
+      "note": "control for utils-add-dup-key*: with the key once, deleting one match deletes them all, so port and C agree",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTA7eyJ4IjoxLCJyb2xlIjoidXNlciJ9",
+      "stdin_preview": "[{\"op\":\"add\",\"path\":\"/role\",\"value\":\"user\"}]\n{\"role\":\"admin\",\"x\":1}",
+      "stdout_preview": "status=0;{\"x\":1,\"role\":\"user\"}"
+    },
+    {
+      "id": "patch-cs-add-single-key",
+      "args": [
+        "patch-cs"
+      ],
+      "stdin_b64": "W3sib3AiOiJhZGQiLCJwYXRoIjoiL3JvbGUiLCJ2YWx1ZSI6InVzZXIifV0KeyJyb2xlIjoiYWRtaW4iLCJ4IjoxfQ==",
+      "note": "control for utils-add-dup-key*: with the key once, deleting one match deletes them all, so port and C agree",
+      "rc": 0,
+      "stdout_b64": "c3RhdHVzPTA7eyJ4IjoxLCJyb2xlIjoidXNlciJ9",
+      "stdin_preview": "[{\"op\":\"add\",\"path\":\"/role\",\"value\":\"user\"}]\n{\"role\":\"admin\",\"x\":1}",
+      "stdout_preview": "status=0;{\"x\":1,\"role\":\"user\"}"
     }
   ],
-  "fingerprint": "2190622b0da2719e52f1b0a22cd73a1a1309e4be3ef44f4fde70d89ff62e7c4e"
+  "fingerprint": "f423ddf732498fb74ae1744de01af1d4b7457c1aa7a13bc215ad2cb6c4f8d2ea"
 }
