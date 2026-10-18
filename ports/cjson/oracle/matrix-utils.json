@@ -1331,6 +1331,28 @@
     ]
   },
   {
+    "name": "u-merge-single-key",
+    "args": [
+      "merge"
+    ],
+    "stdin": "{\"role\":null,\"x\":{\"y\":2}}\n{\"role\":\"admin\",\"x\":{\"x\":1}}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-patch"
+    ]
+  },
+  {
+    "name": "u-merge-cs-single-key",
+    "args": [
+      "merge-cs"
+    ],
+    "stdin": "{\"role\":null,\"x\":{\"y\":2}}\n{\"role\":\"admin\",\"x\":{\"x\":1}}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-patch"
+    ]
+  },
+  {
     "name": "u-patch-add-single-key",
     "args": [
       "patch"
@@ -1468,6 +1490,72 @@
       "patch"
     ],
     "stdin": "[{\"op\":\"move\",\"from\":\"/x\",\"path\":\"/role\"}]\n{\"role\":\"admin\",\"x\":\"user\",\"role\":\"admin\"}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-patch"
+    ]
+  },
+  {
+    "name": "utils-merge-dup-key-null",
+    "args": [
+      "merge"
+    ],
+    "stdin": "{\"role\":null}\n{\"role\":\"admin\",\"role\":\"admin\"}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-patch"
+    ]
+  },
+  {
+    "name": "utils-merge-dup-key-value",
+    "args": [
+      "merge"
+    ],
+    "stdin": "{\"role\":\"user\"}\n{\"role\":\"admin\",\"role\":\"admin\"}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-patch"
+    ]
+  },
+  {
+    "name": "utils-merge-dup-key-object",
+    "args": [
+      "merge"
+    ],
+    "stdin": "{\"o\":{\"y\":2}}\n{\"o\":{\"x\":1},\"o\":{\"z\":3}}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-patch"
+    ]
+  },
+  {
+    "name": "utils-merge-dup-key-null-cs",
+    "args": [
+      "merge-cs"
+    ],
+    "stdin": "{\"role\":null}\n{\"role\":\"admin\",\"role\":\"admin\"}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-patch"
+    ]
+  },
+  {
+    "name": "utils-merge-dup-key-value-cs",
+    "args": [
+      "merge-cs"
+    ],
+    "stdin": "{\"role\":\"user\"}\n{\"role\":\"admin\",\"role\":\"admin\"}",
+    "expect_rc": 0,
+    "mods": [
+      "utils-patch"
+    ]
+  },
+  {
+    "name": "utils-merge-dup-key-object-cs",
+    "args": [
+      "merge-cs"
+    ],
+    "stdin": "{\"o\":{\"y\":2}}\n{\"o\":{\"x\":1},\"o\":{\"z\":3}}",
     "expect_rc": 0,
     "mods": [
       "utils-patch"

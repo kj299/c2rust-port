@@ -663,14 +663,6 @@
    "note": "control for utils-cs-detach-*: the exact spelling comes first, so the C's case-insensitive leaf detach lands on the right key and the port agrees"
   },
   {
-   "id": "merge-null-exact",
-   "args": [
-    "merge"
-   ],
-   "stdin": "{\"A\":null}\n{\"a\":1,\"A\":2}",
-   "note": "a null member removes the key it names, compared with the flag"
-  },
-  {
    "id": "merge-cs-null-exact",
    "args": [
     "merge-cs"
@@ -1005,6 +997,22 @@
    ],
    "stdin": "[{\"op\":\"add\",\"path\":\"/role\",\"value\":\"user\"}]\n{\"role\":\"admin\",\"x\":1}",
    "note": "control for utils-add-dup-key*: with the key once, deleting one match deletes them all, so port and C agree"
+  },
+  {
+   "id": "merge-single-key",
+   "args": [
+    "merge"
+   ],
+   "stdin": "{\"role\":null,\"x\":{\"y\":2}}\n{\"role\":\"admin\",\"x\":{\"x\":1}}",
+   "note": "control for utils-merge-dup-key*: with each key once, acting on the first match is acting on all of them"
+  },
+  {
+   "id": "merge-cs-single-key",
+   "args": [
+    "merge-cs"
+   ],
+   "stdin": "{\"role\":null,\"x\":{\"y\":2}}\n{\"role\":\"admin\",\"x\":{\"x\":1}}",
+   "note": "control for utils-merge-dup-key*: with each key once, acting on the first match is acting on all of them"
   }
  ]
 }

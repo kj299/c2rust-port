@@ -9,6 +9,7 @@
 #   `patch`     : every ~0/~1-escaped child key       (utils-tilde-*)
 #   `patch-cs`  : the same, plus every differently-cased leaf of a
 #                 remove/replace/move                 (utils-cs-detach-*)
+#   `merge(-cs)`: every duplicated key a patch member names (utils-merge-dup-key*)
 #   `construct` : every NaN element of a number array (construct-nan-*)
 # Both classes are infinite, so there is nothing to fingerprint-pin; the finite
 # assertion lives in the MATRIX, which still runs against the pristine oracle

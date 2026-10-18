@@ -97,8 +97,8 @@ name = "merge-cs-ignores-flag"
 rule = "merge-patch's null removal matches with the flag (u-merge-cs-null-*)"
 [[mutant.edit]]
 file = "rust/crates/core/src/utils.rs"
-old = "            if let Some(pos) = obj.iter().position(|(k, _)| key_matches(k, key, cs)) {"
-new = "            if let Some(pos) = obj.iter().position(|(k, _)| key_matches(k, key, false)) {"
+old = "            obj.retain(|(k, _)| !key_matches(k, key, cs));\n        } else {"
+new = "            obj.retain(|(k, _)| !key_matches(k, key, false));\n        } else {"
 
 [[mutant]]
 name = "genpatch-cs-ignores-flag"
@@ -227,3 +227,21 @@ rule = "the error points AT the failing byte (ABI parse-err-offsets)"
 file = "rust/crates/ffi/src/lib.rs"
 old = "            LAST_ERROR.with(|c| c.set(value.wrapping_add(e.position)));"
 new = "            LAST_ERROR.with(|c| c.set(value.wrapping_add(e.position.wrapping_add(1))));"
+
+# ---- merge-patch acts on every duplicate (2026-10-18) ----------------------
+
+[[mutant]]
+name = "merge-null-removes-first-duplicate-only"
+rule = "a null removes every member its key names (utils-merge-dup-key-null*: LEDGER-STALE if reverted)"
+[[mutant.edit]]
+file = "rust/crates/core/src/utils.rs"
+old = "            // RFC 7396: null removes the key.\n            obj.retain(|(k, _)| !key_matches(k, key, cs));"
+new = "            // RFC 7396: null removes the key.\n            if let Some(pos) = obj.iter().position(|(k, _)| key_matches(k, key, cs)) {\n                obj.remove(pos);\n            }"
+
+[[mutant]]
+name = "merge-value-keeps-other-duplicates"
+rule = "a value replaces every duplicate, merged into the first (utils-merge-dup-key-value*/-object*)"
+[[mutant.edit]]
+file = "rust/crates/core/src/utils.rs"
+old = "                .map(|pos| obj.remove(pos).1);\n            obj.retain(|(k, _)| !key_matches(k, key, cs));\n"
+new = "                .map(|pos| obj.remove(pos).1);\n"

@@ -107,13 +107,42 @@ Format:
   the same add, so `move from:/x path:/role` leaves the stale `role` first too.
 
   The control `u-patch-add-single-key` (and its `-cs` twin) matches: with the
-  key once, deleting one match IS deleting them all. NOT extended here to
-  merge-patch, which has the same shape — `{"role":"user"}` merged into the
-  same document gives `{"role":"admin","role":"user"}`, and `{"role":null}`
-  leaves one `role` behind — because the port reproduces those on purpose
-  (`utils::tests::merge_null_removes_only_the_first_duplicate`). That earlier
-  decision predates this entry and is left for its own change rather than
-  reversed in passing.
+  key once, deleting one match IS deleting them all.
+
+- [x] `utils-merge-dup-key-null` [sha256:2f27022abc37]: **a JSON Merge Patch
+  null "removes" a duplicated key and leaves it there** (CWE-694, as
+  `utils-add-dup-key`). `merge_patch` (cJSON_Utils.c:1346) deletes ONE member
+  for a null, so `{"role":null}` on `{"role":"admin","role":"admin"}` leaves
+  `{"role":"admin"}` — the field a removal patch exists to clear is still what
+  every lookup returns. The port removes every member the key names.
+- [x] `utils-merge-dup-key-value` [sha256:023b19297da9]: the non-null branch
+  detaches one member, merges into it and appends: `{"role":"user"}` on the same
+  document gives `{"role":"admin","role":"user"}`, and the stale `admin` is
+  first. The port merges into the FIRST duplicate — the one a reader saw — and
+  drops the rest, leaving `{"role":"user"}`.
+- [x] `utils-merge-dup-key-object` [sha256:a8ab470f5f46]: the same for a nested
+  merge: `{"o":{"y":2}}` on `{"o":{"x":1},"o":{"z":3}}` gives the C's
+  `{"o":{"z":3},"o":{"x":1,"y":2}}`, whose first `o` lacks the patched member.
+- [x] `utils-merge-dup-key-null-cs` [sha256:d8205e4b48d0]: the null case through
+  `cJSONUtils_MergePatchCaseSensitive`.
+- [x] `utils-merge-dup-key-value-cs` [sha256:291650426cee]: the value case,
+  case-sensitive entry point.
+- [x] `utils-merge-dup-key-object-cs` [sha256:a60ab50135b8]: the nested case,
+  case-sensitive entry point.
+- [x] `u-merge-null-exact` [sha256:52d68a9bcd5f]: the same class seen through
+  CASE FOLDING. Under the case-insensitive entry point `a` and `A` are one key,
+  so `{"A":null}` on `{"a":1,"A":2}` deletes `a` in the C and leaves `A`, which
+  `cJSON_GetObjectItem(doc, "a")` still finds. The port removes both. (This row
+  was a matching case until 2026-10-18; its `-cs` twin still matches, since
+  there `a` and `A` are different keys.)
+
+  Decided 2026-10-18, reversing the port's earlier choice to reproduce the C
+  here (`utils::tests::merge_null_removes_only_the_first_duplicate`, now
+  `merge_acts_on_every_duplicate`), for the reason `utils-add-dup-key` was kept:
+  a merge patch that sets or clears a field must be what a reader then sees.
+  Controls `u-merge-single-key` / `u-merge-cs-single-key` match. `merge` and
+  `merge-cs` fuzz against the corrected oracle, whose `make_fixed_utils.py`
+  makes the same change.
 
 - [x] `errptr-null-input-resets` [sha256:f5ab9a820486]: **`cJSON_GetErrorPtr`
   hands back a STALE pointer after `cJSON_Parse(NULL)`** (CWE-825, expired

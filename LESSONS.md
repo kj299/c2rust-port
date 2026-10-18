@@ -2814,3 +2814,31 @@ points.)*
   contract is to write nothing (a document that does not parse) declare it.
 - **Section amended:** harnesses/library-differential/lib_diff.py;
   harnesses/gate-mutation/mutate_gates.py; README · harness table.
+
+---
+
+## 064. A choice to reproduce the C was made without asking what a reader then sees
+
+- **Date:** 2026-10-18
+- **Codebase:** the cJSON port's merge-patch (`utils::merge_patch`)
+- **What happened:** module 9 decided, and pinned with a unit test, that a
+  merge-patch null removes only the FIRST of a duplicated key, because the C
+  does. The decision was about fidelity and was right on its own terms. Two
+  days earlier LESSONS #62 had kept the opposite answer for JSON Patch `add`,
+  for a security reason: every cJSON lookup is first-match, so a patch that
+  touches one duplicate leaves the old value where readers find it. Merge-patch
+  has the same shape in both branches — `{"role":null}` on
+  `{"role":"admin","role":"admin"}` leaves `admin`, and `{"role":"user"}` leaves
+  `admin` first — and the case-insensitive entry point makes `a`/`A` one key,
+  so the class reaches documents with no literal duplicate at all. The earlier
+  choice had never been read for what a later reader of the document sees.
+- **The rule.** A choice to reproduce the C is a decision, and is read the way
+  a fix is: for what the output then means to the code that consumes it. When
+  one entry point of a family is fixed for a reason, re-read its siblings for
+  the same reason in the same change, or record that they still need it.
+- **Kit change:** none beyond the port. The port now ledgers the class as
+  `utils-merge-dup-key*` (seven rows, controls that match), the corrected
+  oracle carries a fourth utils correction, `merge`/`merge-cs` fuzz against it,
+  and two mutants pin it.
+- **Section amended:** ports/cjson only (DIVERGENCES.md, API-COVERAGE.md,
+  mutants.toml).

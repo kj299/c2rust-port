@@ -388,6 +388,23 @@ def main():
          "stdin": '[{"op":"move","from":"/x","path":"/role"}]\n{"role":"admin","x":"user","role":"admin"}',
          "expect_rc": 0, "mods": ["utils-patch"]},
     ]
+    # Merge-patch acts on EVERY duplicate its key names; the C detaches or
+    # deletes one (DIVERGENCES.md `utils-merge-dup-key*`).
+    mdoc = '{"role":"admin","role":"admin"}'
+    for m in ("merge", "merge-cs"):
+        sfx = "-cs" if m == "merge-cs" else ""
+        utils_diverge += [
+            {"name": f"utils-merge-dup-key-null{sfx}", "args": [m],
+             "stdin": '{"role":null}\n' + mdoc, "expect_rc": 0, "mods": ["utils-patch"]},
+            {"name": f"utils-merge-dup-key-value{sfx}", "args": [m],
+             "stdin": '{"role":"user"}\n' + mdoc, "expect_rc": 0, "mods": ["utils-patch"]},
+            {"name": f"utils-merge-dup-key-object{sfx}", "args": [m],
+             "stdin": '{"o":{"y":2}}\n{"o":{"x":1},"o":{"z":3}}', "expect_rc": 0,
+             "mods": ["utils-patch"]},
+        ]
+        utils.append({"name": f"u-{m}-single-key", "args": [m],
+                      "stdin": '{"role":null,"x":{"y":2}}\n{"role":"admin","x":{"x":1}}',
+                      "expect_rc": 0, "mods": ["utils-patch"]})
     for m in ("patch", "patch-cs"):
         utils.append({"name": f"u-{m}-add-single-key", "args": [m],
                       "stdin": '[{"op":"add","path":"/role","value":"user"}]\n{"role":"admin","x":1}',
