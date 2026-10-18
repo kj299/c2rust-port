@@ -5,7 +5,7 @@
 // byte-compares this file against a fresh regeneration, so a hand
 // edit here FAILS the gate instead of silently redefining the spec.
 // module: utils
-// transcript fingerprint: sha256:f423ddf732498fb74ae1744de01af1d4b7457c1aa7a13bc215ad2cb6c4f8d2ea
+// transcript fingerprint: sha256:8d0481c60a81dc26cdae86529dabc07c19a6da7a05575219fda5fad21d0a3e64
 
 mod probe_glue;
 
@@ -596,13 +596,6 @@ fn probe_patch_cs_remove_exact_first() {
 // a null member removes the key it names, compared with the flag
 #[test]
 #[rustfmt::skip]
-fn probe_merge_null_exact() {
-    check("merge-null-exact", &["merge"], b"{\"A\":null}\x0a{\"a\":1,\"A\":2}", 0, b"{\"A\":2}");
-}
-
-// a null member removes the key it names, compared with the flag
-#[test]
-#[rustfmt::skip]
 fn probe_merge_cs_null_exact() {
     check("merge-cs-null-exact", &["merge-cs"], b"{\"A\":null}\x0a{\"a\":1,\"A\":2}", 0, b"{\"a\":1}");
 }
@@ -892,4 +885,18 @@ fn probe_patch_add_single_key() {
 #[rustfmt::skip]
 fn probe_patch_cs_add_single_key() {
     check("patch-cs-add-single-key", &["patch-cs"], b"[{\"op\":\"add\",\"path\":\"/role\",\"value\":\"user\"}]\x0a{\"role\":\"admin\",\"x\":1}", 0, b"status=0;{\"x\":1,\"role\":\"user\"}");
+}
+
+// control for utils-merge-dup-key*: with each key once, acting on the first match is acting on all of them
+#[test]
+#[rustfmt::skip]
+fn probe_merge_single_key() {
+    check("merge-single-key", &["merge"], b"{\"role\":null,\"x\":{\"y\":2}}\x0a{\"role\":\"admin\",\"x\":{\"x\":1}}", 0, b"{\"x\":{\"x\":1,\"y\":2}}");
+}
+
+// control for utils-merge-dup-key*: with each key once, acting on the first match is acting on all of them
+#[test]
+#[rustfmt::skip]
+fn probe_merge_cs_single_key() {
+    check("merge-cs-single-key", &["merge-cs"], b"{\"role\":null,\"x\":{\"y\":2}}\x0a{\"role\":\"admin\",\"x\":{\"x\":1}}", 0, b"{\"x\":{\"x\":1,\"y\":2}}");
 }

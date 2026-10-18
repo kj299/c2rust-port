@@ -989,18 +989,6 @@
       "stdout_preview": "status=0;{\"a\":2}"
     },
     {
-      "id": "merge-null-exact",
-      "args": [
-        "merge"
-      ],
-      "stdin_b64": "eyJBIjpudWxsfQp7ImEiOjEsIkEiOjJ9",
-      "note": "a null member removes the key it names, compared with the flag",
-      "rc": 0,
-      "stdout_b64": "eyJBIjoyfQ==",
-      "stdin_preview": "{\"A\":null}\n{\"a\":1,\"A\":2}",
-      "stdout_preview": "{\"A\":2}"
-    },
-    {
       "id": "merge-cs-null-exact",
       "args": [
         "merge-cs"
@@ -1503,7 +1491,31 @@
       "stdout_b64": "c3RhdHVzPTA7eyJ4IjoxLCJyb2xlIjoidXNlciJ9",
       "stdin_preview": "[{\"op\":\"add\",\"path\":\"/role\",\"value\":\"user\"}]\n{\"role\":\"admin\",\"x\":1}",
       "stdout_preview": "status=0;{\"x\":1,\"role\":\"user\"}"
+    },
+    {
+      "id": "merge-single-key",
+      "args": [
+        "merge"
+      ],
+      "stdin_b64": "eyJyb2xlIjpudWxsLCJ4Ijp7InkiOjJ9fQp7InJvbGUiOiJhZG1pbiIsIngiOnsieCI6MX19",
+      "note": "control for utils-merge-dup-key*: with each key once, acting on the first match is acting on all of them",
+      "rc": 0,
+      "stdout_b64": "eyJ4Ijp7IngiOjEsInkiOjJ9fQ==",
+      "stdin_preview": "{\"role\":null,\"x\":{\"y\":2}}\n{\"role\":\"admin\",\"x\":{\"x\":1}}",
+      "stdout_preview": "{\"x\":{\"x\":1,\"y\":2}}"
+    },
+    {
+      "id": "merge-cs-single-key",
+      "args": [
+        "merge-cs"
+      ],
+      "stdin_b64": "eyJyb2xlIjpudWxsLCJ4Ijp7InkiOjJ9fQp7InJvbGUiOiJhZG1pbiIsIngiOnsieCI6MX19",
+      "note": "control for utils-merge-dup-key*: with each key once, acting on the first match is acting on all of them",
+      "rc": 0,
+      "stdout_b64": "eyJ4Ijp7IngiOjEsInkiOjJ9fQ==",
+      "stdin_preview": "{\"role\":null,\"x\":{\"y\":2}}\n{\"role\":\"admin\",\"x\":{\"x\":1}}",
+      "stdout_preview": "{\"x\":{\"x\":1,\"y\":2}}"
     }
   ],
-  "fingerprint": "f423ddf732498fb74ae1744de01af1d4b7457c1aa7a13bc215ad2cb6c4f8d2ea"
+  "fingerprint": "8d0481c60a81dc26cdae86529dabc07c19a6da7a05575219fda5fad21d0a3e64"
 }

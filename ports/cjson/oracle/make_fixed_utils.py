@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Emit `cJSON_Utils_fixed.c` — the vendored cJSON_Utils.c with the corrections
 the port makes deliberately, so differential FUZZING has a reference that
-shares them. Three sites, three corrections:
+shares them. Four sites, four corrections:
 
   1. `decode_pointer_inplace` decodes `~0`/`~1` per RFC 6901 (the pristine
      function writes to the wrong offset and never copies non-escape bytes
@@ -18,6 +18,9 @@ shares them. Three sites, three corrections:
      before appending. The pristine code deletes one, so on a document with the
      key twice the old value stays first and every first-match lookup still
      returns it after a "successful" add. DIVERGENCES.md `utils-add-dup-key*`.
+  4. `merge_patch` does the same for a merge patch: a null removes EVERY
+     member its key names, and a value merges into the first and drops the
+     rest. DIVERGENCES.md `utils-merge-dup-key*`.
 
 Why a corrected reference exists (LESSONS #28: a predicate-defined intentional
 divergence breaks differential FUZZING against the pristine oracle). The port
@@ -142,10 +145,81 @@ ADD_FIXED = """\
         cJSON_AddItemToObject(parent, (char*)child_pointer, value);
 """
 
+# merge_patch: one delete for a null, one detach for a value. Both now act on
+# every member the key names; the value merges into the FIRST one.
+MERGE_PRISTINE = """\
+            /* NULL is the indicator to remove a value, see RFC7396 */
+            if (case_sensitive)
+            {
+                cJSON_DeleteItemFromObjectCaseSensitive(target, patch_child->string);
+            }
+            else
+            {
+                cJSON_DeleteItemFromObject(target, patch_child->string);
+            }
+        }
+        else
+        {
+            cJSON *replace_me = NULL;
+            cJSON *replacement = NULL;
+
+            if (case_sensitive)
+            {
+                replace_me = cJSON_DetachItemFromObjectCaseSensitive(target, patch_child->string);
+            }
+            else
+            {
+                replace_me = cJSON_DetachItemFromObject(target, patch_child->string);
+            }
+"""
+
+MERGE_FIXED = """\
+            /* NULL is the indicator to remove a value, see RFC7396 */
+            /* fixed: remove EVERY member the key names (utils-merge-dup-key*) */
+            if (case_sensitive)
+            {
+                while (cJSON_GetObjectItemCaseSensitive(target, patch_child->string) != NULL)
+                {
+                    cJSON_DeleteItemFromObjectCaseSensitive(target, patch_child->string);
+                }
+            }
+            else
+            {
+                while (cJSON_GetObjectItem(target, patch_child->string) != NULL)
+                {
+                    cJSON_DeleteItemFromObject(target, patch_child->string);
+                }
+            }
+        }
+        else
+        {
+            cJSON *replace_me = NULL;
+            cJSON *replacement = NULL;
+
+            /* fixed: merge into the FIRST duplicate, drop the rest */
+            if (case_sensitive)
+            {
+                replace_me = cJSON_DetachItemFromObjectCaseSensitive(target, patch_child->string);
+                while (cJSON_GetObjectItemCaseSensitive(target, patch_child->string) != NULL)
+                {
+                    cJSON_DeleteItemFromObjectCaseSensitive(target, patch_child->string);
+                }
+            }
+            else
+            {
+                replace_me = cJSON_DetachItemFromObject(target, patch_child->string);
+                while (cJSON_GetObjectItem(target, patch_child->string) != NULL)
+                {
+                    cJSON_DeleteItemFromObject(target, patch_child->string);
+                }
+            }
+"""
+
 PATCHES = [
     ("decode_pointer_inplace's ~0/~1 decode", DECODE_PRISTINE, DECODE_FIXED),
     ("detach_path's case-insensitive leaf detach", DETACH_PRISTINE, DETACH_FIXED),
     ("apply_patch's single delete before an add", ADD_PRISTINE, ADD_FIXED),
+    ("merge_patch's single delete / detach", MERGE_PRISTINE, MERGE_FIXED),
 ]
 
 
@@ -171,8 +245,8 @@ def main():
               "utils-tilde-*), a\n"
               " * case-flag-honouring leaf detach in detach_path "
               "(utils-cs-detach-*), and an\n"
-              " * add that replaces every duplicate of its key "
-              "(utils-add-dup-key*). */\n")
+              " * add and a merge that act on every duplicate of a key "
+              "(utils-add-dup-key*, utils-merge-dup-key*). */\n")
     open(OUT, "w", encoding="utf-8").write(banner + text)
     print(f"wrote {OUT}")
     return 0

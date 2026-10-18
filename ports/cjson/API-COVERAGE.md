@@ -141,6 +141,20 @@ correction and asking which single one makes the C agree with the port:
 correction is a no-op without the flag). Each correction is as wide as its
 ledgered class and no wider.
 
+### High-budget sweep after the merge-patch duplicate-key fix (LESSONS #33 + #42), 2026-10-18
+
+| Mode | Oracle | Seeds | Iterations each | Findings |
+|---|---|---|---|---|
+| `merge` | corrected | 1 / 2 / 3 | 20 000 | 0 |
+| `merge-cs` | corrected | 1 / 2 / 3 | 20 000 | 0 |
+| `merge` | **pristine** | 7 | 4 000 | 14, all `utils-merge-dup-key*` |
+| `merge-cs` | **pristine** | 7 | 4 000 | 6, all `utils-merge-dup-key*` |
+
+120 000 inputs against the corrected oracle, zero divergences. The pristine
+rows were classified as before, one oracle per correction: every finding is
+explained by the merge correction alone, 0 outside it. `merge` and `merge-cs`
+now fuzz against the corrected oracle in `check.sh`.
+
 ### High-budget sweep on the `parse` mode (LESSONS #33), 2026-10-17
 
 | Mode | Oracle | Seeded from | Seeds | Iterations each | Findings |

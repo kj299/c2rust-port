@@ -624,19 +624,23 @@ fn merge_patch(target: Option<Value>, patch: &Value, cs: bool) -> Value {
         _ => Vec::new(),
     };
     for (key, pval) in patch_members {
+        // INTENTIONAL DIVERGENCE (DIVERGENCES.md `utils-merge-dup-key*`): a
+        // patch member acts on EVERY member its key names. The C detaches or
+        // deletes only the first, so with the key duplicated the survivor is
+        // still the first match every cJSON lookup reads — a null "removes"
+        // the key and it is still there; a value is merged and the old one
+        // still answers.
         if matches!(pval, Value::Null) {
-            // RFC 7396: null removes the key. The C calls
-            // `cJSON_DeleteItemFromObject`, which deletes only the FIRST match
-            // (its list walk stops at the first), so with duplicate keys a single
-            // null-merge removes ONE, not all.
-            if let Some(pos) = obj.iter().position(|(k, _)| key_matches(k, key, cs)) {
-                obj.remove(pos);
-            }
+            // RFC 7396: null removes the key.
+            obj.retain(|(k, _)| !key_matches(k, key, cs));
         } else {
+            // Merge into the FIRST duplicate — the one a reader saw — and drop
+            // the rest.
             let existing = obj
                 .iter()
                 .position(|(k, _)| key_matches(k, key, cs))
                 .map(|pos| obj.remove(pos).1);
+            obj.retain(|(k, _)| !key_matches(k, key, cs));
             let replacement = merge_patch(existing, pval, cs);
             obj.push((key.clone(), replacement));
         }
@@ -1220,10 +1224,20 @@ mod tests {
     // only the FIRST matching key; a `retain` that removed all duplicates was a
     // fuzz-found divergence.
     #[test]
-    fn merge_null_removes_only_the_first_duplicate() {
+    // DIVERGENCE utils-merge-dup-key*: this test used to pin the C's answer
+    // (`{"a":1,"c":6}` — one `a` left behind by a null that "removed" it).
+    fn merge_acts_on_every_duplicate() {
         assert_eq!(
             run_ok("merge", "{\"a\":null}\n{\"a\":1,\"a\":1,\"c\":6}"),
-            "{\"a\":1,\"c\":6}"
+            "{\"c\":6}"
+        );
+        // a value merges into the FIRST duplicate and replaces them all
+        assert_eq!(
+            run_ok(
+                "merge",
+                "{\"a\":{\"y\":2}}\n{\"a\":{\"x\":1},\"a\":{\"z\":3}}"
+            ),
+            "{\"a\":{\"x\":1,\"y\":2}}"
         );
     }
 

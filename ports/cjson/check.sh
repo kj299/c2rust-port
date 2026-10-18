@@ -302,6 +302,8 @@ mkdir -p "$HERE/reports/fuzz"
 #   patch     : cJSON_Utils.c's ~0/~1 pointer decode  (utils-tilde-*)
 #   patch-cs  : the same, plus detach_path's case-insensitive leaf
 #                                                     (utils-cs-detach-*)
+#   patch(-cs): an add replacing one duplicate of its key (utils-add-dup-key*)
+#   merge(-cs): merge_patch's one delete / detach     (utils-merge-dup-key*)
 #   construct : cJSON.c's NaN -> int conversion       (construct-nan-*)
 #   set       : the same cast in cJSON_SetNumberHelper, plus its missing type
 #               check                                 (set-nan-*, set-*-type-confusion)
@@ -457,17 +459,22 @@ done
 # (DIVERGENCES.md utils-cs-detach-*) — a divergence the port had carried,
 # unexamined, since module 9. `patch-cs` therefore fuzzes against the corrected
 # oracle, like `patch`; the rest have no intentional divergence.
-for um in merge genmerge genpatch findptr addpatch \
-          ptr-cs merge-cs genmerge-cs genpatch-cs findptr-cs sort-cs; do
+for um in genmerge genpatch findptr addpatch \
+          ptr-cs genmerge-cs genpatch-cs findptr-cs sort-cs; do
   "$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
       --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
       --args "$um" --matrix "$HERE/oracle/matrix-utils.json" \
       --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 > /dev/null
 done
-"$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
-    --oracle "$HERE/oracle/cjson_oracle_fixed" --rust "$RUST_DRIVER" \
-    --args patch-cs --matrix "$HERE/oracle/matrix-utils.json" \
-    --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 > /dev/null
+# merge / merge-cs act on every duplicate of a key where the C acts on one
+# (utils-merge-dup-key*, 2026-10-18), so they join patch-cs on the corrected
+# oracle: any document with a repeated key would otherwise reach the class.
+for um in patch-cs merge merge-cs; do
+  "$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
+      --oracle "$HERE/oracle/cjson_oracle_fixed" --rust "$RUST_DRIVER" \
+      --args "$um" --matrix "$HERE/oracle/matrix-utils.json" \
+      --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 > /dev/null
+done
 
 echo "===== 4a. oracle-sanitize — the C side of the differential is OUR C too ====="
 # LESSONS #40: `oracle/driver.c` + `oracle/cjson_modes.c` are ~1000 lines this
