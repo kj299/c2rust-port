@@ -10,6 +10,8 @@
 #   4. diff-fuzz          : differential fuzzing, seeds from the full matrix —
 #                           live since the recursive core landed (the parse
 #                           entry points now decide every non-minify input)
+#   4c. cargo-fuzz        : the Rust alone, in-process — no input may panic,
+#                           overflow or abort (rust/fuzz; loud SKIP without it)
 #   5. unsafe-audit       : every unsafe block // SAFETY:-documented (the core
 #                           FORBIDS unsafe; the ffi crate's C-ABI shim is the
 #                           only unsafe, and every block is audited)
@@ -47,9 +49,23 @@ echo "===== 0b. Phase-0 controls — re-run against the C actually ported ====="
 # library's entry points sat ungated — the gate's own scope was the next place
 # the hole moved to. `unported` rows and the declared ceiling in the manifest
 # keep that number honest and stop it growing.
+#
+# --matrix (LESSONS #61): a `ported` row's "driver mode `X`" is a claim until a
+# case runs X. Five `*CaseSensitive` rows named modes no case ran from module 9
+# until 2026-10-17, and the first case for one found an unexamined divergence.
+API_MATRICES=()
+for m in "$HERE"/oracle/matrix*.json; do API_MATRICES+=(--matrix "$m"); done
 "$PY" "$KIT/harnesses/api-coverage/check_api.py" \
     --header "$HERE/c/cJSON.h" --header "$HERE/c/cJSON_Utils.h" \
-    --manifest "$HERE/API-COVERAGE.md"
+    --manifest "$HERE/API-COVERAGE.md" "${API_MATRICES[@]}"
+
+# LESSONS #58: the mutants that prove this port's cases are committed as data
+# (mutants.toml). The full run builds the port once per mutant, so it is run on
+# demand, not here; what runs here is the write-nothing proof that every
+# mutant still FITS the code (each `old` occurs exactly once) and that none is
+# left applied — a mutant the code drifted away from would otherwise go
+# unnoticed until the day someone needed its kill.
+"$PY" "$KIT/harnesses/port-mutation/mutate_port.py" --check-clean "$HERE/mutants.toml"
 
 echo "===== 1. oracle (build + validate all vectors against C) ====="
 bash "$HERE/oracle/run.sh" > /dev/null
@@ -284,6 +300,8 @@ mkdir -p "$HERE/reports/fuzz"
 # intentional divergence cannot be fingerprint-pinned for a fuzzer, so those
 # modes fuzz against a C that shares the port's fix and every finding is real):
 #   patch     : cJSON_Utils.c's ~0/~1 pointer decode  (utils-tilde-*)
+#   patch-cs  : the same, plus detach_path's case-insensitive leaf
+#                                                     (utils-cs-detach-*)
 #   construct : cJSON.c's NaN -> int conversion       (construct-nan-*)
 #   set       : the same cast in cJSON_SetNumberHelper, plus its missing type
 #               check                                 (set-nan-*, set-*-type-confusion)
@@ -384,6 +402,18 @@ bash "$HERE/oracle/build_fixed.sh" > /dev/null
     --args opts --matrix "$HERE/oracle/matrix-opts.json" \
     --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
     --json > "$HERE/reports/fuzz/entry-opts.json"
+# parse mode: cJSON_Parse + cJSON_GetErrorPtr's offset, against the PRISTINE
+# oracle (nothing on this surface diverges; the stale-pointer fix is cdylib
+# STATE, which only the ABI vectors reach). Seeded twice, fail-closed: from the
+# 79-vector corpus, whose reject-* inputs put an error offset everywhere the
+# parser can stop, and from matrix-opts.json, which carries the BOM,
+# terminator and embedded-NUL cases the corpus has no reason to spell.
+for seeds in matrix.json matrix-opts.json; do
+  "$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
+      --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
+      --args parse --matrix "$HERE/oracle/$seeds" \
+      --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 > /dev/null
+done
 # parent mode: fuzz the non-container parent against the CORRECTED oracle --
 # the class is predicate-defined (EVERY non-container parent), and kind=doc lets
 # the fuzzer pick the target's TYPE from the mutated document, so the pristine
@@ -420,12 +450,24 @@ done
     --json > "$HERE/reports/fuzz/utils-sort.json"
 # merge / genmerge / genpatch share the utils-patch surface (RFC 6902/7396); run
 # them fail-closed — a finding exits nonzero and aborts under `set -e`.
-for um in merge genmerge genpatch; do
+#
+# The `-cs` twins and the two lookup modes run here too. Until 2026-10-17 no
+# gate drove five of the six `-cs` modes at all, and the first run of
+# `patch-cs` found the C detaching the leaf key case-INsensitively
+# (DIVERGENCES.md utils-cs-detach-*) — a divergence the port had carried,
+# unexamined, since module 9. `patch-cs` therefore fuzzes against the corrected
+# oracle, like `patch`; the rest have no intentional divergence.
+for um in merge genmerge genpatch findptr addpatch \
+          ptr-cs merge-cs genmerge-cs genpatch-cs findptr-cs sort-cs; do
   "$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
       --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
       --args "$um" --matrix "$HERE/oracle/matrix-utils.json" \
       --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 > /dev/null
 done
+"$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
+    --oracle "$HERE/oracle/cjson_oracle_fixed" --rust "$RUST_DRIVER" \
+    --args patch-cs --matrix "$HERE/oracle/matrix-utils.json" \
+    --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 > /dev/null
 
 echo "===== 4a. oracle-sanitize — the C side of the differential is OUR C too ====="
 # LESSONS #40: `oracle/driver.c` + `oracle/cjson_modes.c` are ~1000 lines this
@@ -482,6 +524,42 @@ else
   SAN_RAN=0
 fi
 
+echo "===== 4c. cargo-fuzz — no panic on input, the Rust ALONE ====="
+# CLAUDE.md's "no panic on input" control. Until 2026-10-17 this port had no
+# cargo-fuzz target at all, and its `fuzzed` rung rested on diff-fuzz alone —
+# which asks whether the port AGREES with the C, a different question from
+# whether any input makes it panic, overflow (overflow checks are on in fuzz
+# builds) or abort. Two targets: `parse_print` (the entry points, printers and
+# dom over raw bytes) and `modes` (every driver mode, selected by the first
+# byte). seed_corpus.py seeds both from every matrix case and fails if a matrix
+# uses a mode the `modes` target cannot select. Toolchain-optional in the same
+# LOUD way as the sanitizers: absence prints a SKIP, never a pass.
+#
+# The `fuzzed` rung still advances from the diff-fuzz reports above (progress.py
+# ingests diff_fuzz JSON); this step is fail-closed on top of it, not a rung.
+FUZZ_SECONDS="${FUZZ_SECONDS:-60}"
+if cargo +nightly fuzz --version >/dev/null 2>&1; then
+  ( cd "$HERE/rust/fuzz"
+    "$PY" seed_corpus.py "$HERE/oracle" .
+    targets="$(cargo +nightly fuzz list)"
+    [ -n "$targets" ] || { echo "FAIL  cargo-fuzz: no targets in rust/fuzz"; exit 1; }
+    for t in $targets; do
+      log="$(mktemp)"
+      # libFuzzer is loud; keep the log unless the run fails.
+      if ! cargo +nightly fuzz run "$t" -- -max_total_time="$FUZZ_SECONDS" > "$log" 2>&1; then
+        tail -60 "$log"
+        echo "FAIL  cargo-fuzz: target $t crashed — reproducer under rust/fuzz/artifacts/$t/"
+        exit 1
+      fi
+      grep -E "^Done [0-9]+ runs" "$log" | sed "s/^/  $t: /"
+      rm -f "$log"
+    done )
+  echo "cargo-fuzz: every target ran ${FUZZ_SECONDS}s with no crash"
+else
+  echo "SKIP  cargo-fuzz: no cargo-fuzz on nightly — no target ran, so \"no panic on"
+  echo "      input\" was NOT checked this run (cargo install cargo-fuzz)."
+fi
+
 echo "===== 5. unsafe-audit over the rust workspace ====="
 # The ffi crate's C-ABI shim is the only unsafe — and that sentence is a claim
 # only `core`'s forbid makes true. audit_unsafe.py below would pass unsafe in
@@ -514,6 +592,10 @@ echo "===== 5b. supply-chain — the dependency surface ====="
 # ARE present the harness's own fail-closed verdict stands (no `|| true` here).
 if command -v cargo-audit >/dev/null 2>&1 && command -v cargo-deny >/dev/null 2>&1; then
   bash "$KIT/harnesses/supply-chain/run_supply_chain.sh" "$HERE/rust"
+  # The fuzz crate is its own workspace with its own Cargo.lock — and the
+  # port's only REGISTRY dependencies (libfuzzer-sys and what it pulls in), so
+  # it is audited too rather than left outside the gate.
+  bash "$KIT/harnesses/supply-chain/run_supply_chain.sh" "$HERE/rust/fuzz"
   echo "supply-chain: dependency audit clean"
 else
   echo "SKIP  supply-chain: cargo-audit/cargo-deny absent — the dependency audit"

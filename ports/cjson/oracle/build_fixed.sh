@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Build the FUZZ oracle: the vendored C with its KNOWN DEFECTS CORRECTED —
-# cJSON_Utils.c's one-line pointer-decode fix (make_fixed_utils.py) and
+# cJSON_Utils.c's pointer-decode and leaf-detach fixes (make_fixed_utils.py) and
 # cJSON.c's NaN->int conversion (make_fixed_core.py).
 #
 # Used by diff-fuzz on the modes where the port's intentional fix would
 # otherwise make every affected input a (predicate-defined, unpinnable)
 # divergence against the pristine oracle — LESSONS #28:
 #   `patch`     : every ~0/~1-escaped child key       (utils-tilde-*)
+#   `patch-cs`  : the same, plus every differently-cased leaf of a
+#                 remove/replace/move                 (utils-cs-detach-*)
 #   `construct` : every NaN element of a number array (construct-nan-*)
 # Both classes are infinite, so there is nothing to fingerprint-pin; the finite
 # assertion lives in the MATRIX, which still runs against the pristine oracle

@@ -115,6 +115,14 @@ MUTATIONS = [
      "new": "    is_match = True",
      "why": "every vector MATCHes regardless of return/outputs",
      "cmd": ["harnesses/library-differential/lib_diff.py", "--self-test"]},
+    # LESSONS #63: an output buffer neither side wrote compared two zero-filled
+    # buffers. The cJSON port's ABI vectors omitted every shim's out_size and
+    # compared only lengths in 54 of 78 calls; neutralize this and they would again.
+    {"gate": "lib_diff-vacuous", "file": "harnesses/library-differential/lib_diff.py",
+     "old": "    vacuous = unwritten != (outbufs if declared else [])",
+     "new": "    vacuous = False",
+     "why": "an output buffer neither side wrote passes as compared",
+     "cmd": ["harnesses/library-differential/lib_diff.py", "--self-test"]},
 
     {"gate": "cando", "file": "harnesses/cando/cando_diff.py",
      "old": '        oracle_errored = r["oracle_rc"] != 0 or r["timed_out"]["oracle"]',
@@ -246,6 +254,15 @@ MUTATIONS = [
      "old": "    if actual == 0:\n        return declared in (None, 0)",
      "new": "    return True\n    if actual == 0:\n        return declared in (None, 0)",
      "why": "the unported ceiling never binds: the ungated API surface may grow",
+     "cmd": ["harnesses/api-coverage/check_api.py", "--self-test"]},
+
+    # LESSONS #61: the THIRD verdict. A `ported` row's "driver mode `X`" is a
+    # claim until a matrix case runs X; five cJSON rows named modes no case ran
+    # for seven weeks. Neutralize it and every named mode reads as driven.
+    {"gate": "api-coverage-modes", "file": "harnesses/api-coverage/check_api.py",
+     "old": "    return mode in driven",
+     "new": "    return True",
+     "why": "a ported row may name a driver mode no matrix case runs",
      "cmd": ["harnesses/api-coverage/check_api.py", "--self-test"]},
 
     # LESSONS #36: not a verdict — an INPUT path, and that is the point. If the

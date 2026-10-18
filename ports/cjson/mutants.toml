@@ -1,0 +1,229 @@
+# Port mutants for the cJSON port — one plausible WRONG version of each rule a
+# matrix case or ABI vector exists for, run by
+#
+#     python3 ../../harnesses/port-mutation/mutate_port.py mutants.toml
+#
+# Every mutant must be KILLED (LESSONS #58). A SURVIVED is a case that checks
+# nothing; a DOES-NOT-APPLY is a mutant the code has drifted away from — fix
+# the mutant's `old`, never delete the mutant. Run `--apply-only` on every
+# change so the committed mutants still fit the code.
+#
+# The gates are the DIFFERENTIAL checks only — not `cargo test`. A kill must
+# come from a case compared against the C, because proving the cases is the
+# point: a unit test written to agree with the port would kill a mutant the
+# matrix cannot see, and hide exactly the hole this file exists to find.
+#
+# Started 2026-10-17 with the change that put the six `-cs` utils modes,
+# cJSON_Parse and cJSON_GetErrorPtr on the compared contract; earlier modules'
+# rules are not yet here.
+
+[run]
+dir = "."
+build = [
+    ["bash", "oracle/build.sh"],
+    ["bash", "oracle/build_fixed.sh"],
+    ["bash", "ffi/build.sh"],
+    ["cargo", "build", "--release", "--quiet", "--manifest-path", "rust/Cargo.toml"],
+]
+
+[[run.gate]]
+name = "utils-differential"
+cmd = ["python3", "../../harnesses/differential/diff_run.py",
+       "--oracle", "oracle/cjson_oracle", "--rust", "rust/target/release/rjson_driver",
+       "--matrix", "oracle/matrix-utils.json", "--ledger", "DIVERGENCES.md"]
+infra = [2]
+timeout = 300
+
+[[run.gate]]
+name = "opts-differential"
+cmd = ["python3", "../../harnesses/differential/diff_run.py",
+       "--oracle", "oracle/cjson_oracle", "--rust", "rust/target/release/rjson_driver",
+       "--matrix", "oracle/matrix-opts.json", "--ledger", "DIVERGENCES.md"]
+infra = [2]
+timeout = 300
+
+[[run.gate]]
+name = "abi-differential"
+cmd = ["python3", "../../harnesses/library-differential/lib_diff.py",
+       "--c-lib", "ffi/libcjson_c.so", "--rust-lib", "rust/target/release/libcjson_rs.so",
+       "--vectors", "ffi/vectors.json", "--ledger", "DIVERGENCES.md"]
+infra = [2]
+timeout = 300
+
+# ---- the case flag reaches every -cs entry point ---------------------------
+
+[[mutant]]
+name = "ptr-cs-ignores-flag"
+rule = "GetPointerCaseSensitive matches keys exactly (u-ptr-cs-*)"
+[[mutant.edit]]
+file = "rust/crates/core/src/utils.rs"
+old = "    let path = locate(root, pointer, case_sensitive)?;"
+new = "    let path = locate(root, pointer, false)?;"
+
+[[mutant]]
+name = "findptr-cs-ignores-flag"
+rule = "findptr-cs resolves its pointer case-sensitively (u-findptr-cs-*)"
+[[mutant.edit]]
+file = "rust/crates/core/src/utils.rs"
+old = "            match locate(&doc, nul_trunc(a), cs) {"
+new = "            match locate(&doc, nul_trunc(a), false) {"
+
+[[mutant]]
+name = "patch-cs-members-ignore-flag"
+rule = "the op/path/value/from members are looked up with the flag (u-patch-cs-*-key-upper)"
+[[mutant.edit]]
+file = "rust/crates/core/src/utils.rs"
+old = "    dom::get_object_item(patch, field, cs)"
+new = "    dom::get_object_item(patch, field, false)"
+
+[[mutant]]
+name = "patch-cs-test-ignores-flag"
+rule = "test compares with the flag (u-patch-cs-test-keys, u-patch-cs-test-mismatch)"
+[[mutant.edit]]
+file = "rust/crates/core/src/utils.rs"
+old = "        return i32::from(!compare_json(target, &mut want, cs));"
+new = "        return i32::from(!compare_json(target, &mut want, false));"
+
+[[mutant]]
+name = "patch-cs-add-delete-ignores-flag"
+rule = "add deletes the existing member with the flag (u-patch-cs-add-other-case)"
+[[mutant.edit]]
+file = "rust/crates/core/src/utils.rs"
+old = "            entries.retain(|(k, _)| !key_matches(k, &child, cs));"
+new = "            entries.retain(|(k, _)| !key_matches(k, &child, false));"
+
+[[mutant]]
+name = "merge-cs-ignores-flag"
+rule = "merge-patch's null removal matches with the flag (u-merge-cs-null-*)"
+[[mutant.edit]]
+file = "rust/crates/core/src/utils.rs"
+old = "            if let Some(pos) = obj.iter().position(|(k, _)| key_matches(k, key, cs)) {"
+new = "            if let Some(pos) = obj.iter().position(|(k, _)| key_matches(k, key, false)) {"
+
+[[mutant]]
+name = "genpatch-cs-ignores-flag"
+rule = "GeneratePatchesCaseSensitive pairs members by exact key (u-genpatch-cs-*)"
+[[mutant.edit]]
+file = "rust/crates/core/src/utils.rs"
+old = "                    compare_keys(Some(&fe[i].0), Some(&te[j].0), cs)"
+new = "                    compare_keys(Some(&fe[i].0), Some(&te[j].0), false)"
+
+[[mutant]]
+name = "sort-cs-ignores-flag"
+rule = "SortObjectCaseSensitive orders by byte (u-sort-cs, u-sort-cs-ties)"
+[[mutant.edit]]
+file = "rust/crates/core/src/utils.rs"
+old = "        sort_object(&mut doc, cs);"
+new = "        sort_object(&mut doc, false);"
+
+# ---- the C's own case-flag quirks, reproduced ------------------------------
+
+[[mutant]]
+name = "genmerge-diff-honours-flag"
+rule = "the merge-patch key DIFF is strcmp whatever the flag (u-genmerge-sort-order)"
+[[mutant.edit]]
+file = "rust/crates/core/src/utils.rs"
+old = "                compare_keys(Some(&fe[i].0), Some(&te[j].0), true)"
+new = "                compare_keys(Some(&fe[i].0), Some(&te[j].0), cs)"
+
+[[mutant]]
+name = "genmerge-recursion-honours-flag"
+rule = "the C recurses through the case-INsensitive entry (u-genmerge-cs-nested-ci-recursion)"
+[[mutant.edit]]
+file = "rust/crates/core/src/utils.rs"
+old = "                if let Some(sub) = generate_merge_patch(&mut fe[i].1, &mut te[j].1, false) {"
+new = "                if let Some(sub) = generate_merge_patch(&mut fe[i].1, &mut te[j].1, cs) {"
+
+# ---- intentional divergences: reverting the fix must be caught -------------
+
+[[mutant]]
+name = "cs-detach-leaf-faithful"
+rule = "the leaf detach honours the flag (utils-cs-detach-*: LEDGER-STALE if reverted)"
+[[mutant.edit]]
+file = "rust/crates/core/src/utils.rs"
+old = "                .position(|(k, _)| key_matches(k, &child, cs))?;"
+new = "                .position(|(k, _)| key_matches(k, &child, false))?;"
+
+[[mutant]]
+name = "add-deletes-first-duplicate-only"
+rule = "an add replaces every duplicate of its key (utils-add-dup-key*: LEDGER-STALE if reverted)"
+[[mutant.edit]]
+file = "rust/crates/core/src/utils.rs"
+old = "            entries.retain(|(k, _)| !key_matches(k, &child, cs));"
+new = "            if let Some(pos) = entries.iter().position(|(k, _)| key_matches(k, &child, cs)) {\n                entries.remove(pos);\n            }"
+
+# ---- compare_json's side effects, in the C's order --------------------------
+
+[[mutant]]
+name = "compare-arrays-length-first"
+rule = "pairs are walked (and sorted) before the leftover check (u-patch-test-sorts-before-length)"
+[[mutant.edit]]
+file = "rust/crates/core/src/utils.rs"
+old = "            for (x, y) in ia.iter_mut().zip(ib.iter_mut()) {"
+new = "            if ia.len() != ib.len() {\n                return false;\n            }\n            for (x, y) in ia.iter_mut().zip(ib.iter_mut()) {"
+
+[[mutant]]
+name = "compare-objects-length-first"
+rule = "members are walked (and sorted) before the leftover check (u-patch-test-sorts-before-count)"
+[[mutant.edit]]
+file = "rust/crates/core/src/utils.rs"
+old = "            for ((ka, va), (kb, vb)) in ea.iter_mut().zip(eb.iter_mut()) {"
+new = "            if ea.len() != eb.len() {\n                return false;\n            }\n            for ((ka, va), (kb, vb)) in ea.iter_mut().zip(eb.iter_mut()) {"
+
+[[mutant]]
+name = "genmerge-compares-clones"
+rule = "compare_json's in-place sort is seen by the recursion (u-genmerge-tie-sorted-twice)"
+[[mutant.edit]]
+file = "rust/crates/core/src/utils.rs"
+old = "            if !compare_json(&mut fe[i].1, &mut te[j].1, cs) {"
+new = "            if !compare_json(&mut fe[i].1.clone(), &mut te[j].1.clone(), cs) {"
+
+# ---- cJSON_Parse and cJSON_GetErrorPtr --------------------------------------
+
+[[mutant]]
+name = "parse-mode-strlen"
+rule = "cJSON_Parse's buffer counts the terminator (parse-bom-terminator, parse-embedded-nul)"
+[[mutant.edit]]
+file = "rust/crates/core/src/modes.rs"
+old = "    match crate::parse_with_opts(input, false) {"
+new = "    match crate::parse_with_length(input) {"
+
+[[mutant]]
+name = "ffi-parse-strlen"
+rule = "the cdylib's cJSON_Parse counts the terminator (ABI parse-bom-terminator) — the bug this change fixed"
+[[mutant.edit]]
+file = "rust/crates/ffi/src/lib.rs"
+old = "        Some(bytes) => finish_parse(value, parse_with_opts(bytes, false)),"
+new = "        Some(bytes) => finish_parse(value, parse_with_length(bytes)),"
+
+[[mutant]]
+name = "ffi-errptr-stale-after-null"
+rule = "cJSON_Parse resets the error even for NULL (errptr-null-input-resets: LEDGER-STALE if reverted)"
+[[mutant.edit]]
+file = "rust/crates/ffi/src/lib.rs"
+old = "    // failure's pointer — likely into a freed buffer — for GetErrorPtr.\n    reset_error();\n"
+new = "    // failure's pointer — likely into a freed buffer — for GetErrorPtr.\n    if value.is_null() {\n        return ptr::null_mut();\n    }\n    reset_error();\n"
+
+[[mutant]]
+name = "ffi-errptr-never-reset"
+rule = "every parse clears the last error first (ABI parse-err-reset-by-success)"
+[[mutant.edit]]
+file = "rust/crates/ffi/src/lib.rs"
+old = "fn reset_error() {\n    LAST_ERROR.with(|c| c.set(ptr::null()));\n}"
+new = "fn reset_error() {}"
+
+[[mutant]]
+name = "ffi-errptr-length-path-not-reset"
+rule = "cJSON_ParseWithLength clears the error too (ABI parse-len-err-reset-by-success)"
+[[mutant.edit]]
+file = "rust/crates/ffi/src/lib.rs"
+old = "    buffer_length: usize,\n) -> Handle {\n    reset_error();\n"
+new = "    buffer_length: usize,\n) -> Handle {\n"
+
+[[mutant]]
+name = "ffi-errptr-off-by-one"
+rule = "the error points AT the failing byte (ABI parse-err-offsets)"
+[[mutant.edit]]
+file = "rust/crates/ffi/src/lib.rs"
+old = "            LAST_ERROR.with(|c| c.set(value.wrapping_add(e.position)));"
+new = "            LAST_ERROR.with(|c| c.set(value.wrapping_add(e.position.wrapping_add(1))));"

@@ -5,16 +5,63 @@
 //! `audit_unsafe.py` enforces a `// SAFETY:` on every block.
 //!
 //! Scope (honest): the parse / serialize / minify / compare / duplicate pipeline
-//! as real `cJSON_*` symbols over an OPAQUE handle (`Box<Value>`), plus the
-//! single-shot shims `cjson_rt`/`cjson_rt_fmt` that let `lib_diff` drive the
-//! whole parse→print pipeline in one call and compare it against the C `.so`.
+//! as real `cJSON_*` symbols over an OPAQUE handle (`Box<Value>`), with
+//! `cJSON_GetErrorPtr` kept per thread, plus the single-shot shims
+//! `cjson_rt`/`cjson_rt_fmt` (and `cjson_parse_seq`, for the error STATE) that
+//! let `lib_diff` drive the pipeline in one call and compare it against the C
+//! `.so`.
 //! The struct-field-access ABI (a caller reading `item->valueint` directly) and
 //! the full `Add*`/`Get*` builder surface over FFI are the documented remainder
 //! — most consumers use the accessor functions, which can be added as needed.
 
-use cjson_core::{dom, minify as core_minify, parse_with_length, print_value, Value};
+use cjson_core::{
+    dom, minify as core_minify, parse_with_length, parse_with_opts, print_value, ParseError, Value,
+};
+use std::cell::Cell;
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::ptr;
+
+thread_local! {
+    /// cJSON.c:92 `global_error`, kept PER THREAD rather than per process
+    /// (DIVERGENCES.md `errptr-thread-local`): in the C, one thread's parse
+    /// overwrites the error another thread is about to read, with no
+    /// synchronization. Holds the address `cJSON_GetErrorPtr` returns — a
+    /// position inside the caller's last failed parse buffer, or null.
+    static LAST_ERROR: Cell<*const c_char> = const { Cell::new(ptr::null()) };
+}
+
+/// Mint a handle from a parse result, recording a failure's position the way
+/// cJSON.c:1177 does (`global_error = local_error`) — `value + position`.
+/// `wrapping_add`, not `add`: the address is only handed back to the caller,
+/// never dereferenced here, so no in-bounds proof is needed to compute it.
+fn finish_parse(value: *const c_char, result: Result<(Value, usize), ParseError>) -> Handle {
+    match result {
+        Ok((v, _)) => Box::into_raw(Box::new(v)),
+        Err(e) => {
+            LAST_ERROR.with(|c| c.set(value.wrapping_add(e.position)));
+            ptr::null_mut()
+        }
+    }
+}
+
+/// cJSON.c:1110: `cJSON_ParseWithLengthOpts` resets the error before anything
+/// else. The port resets on EVERY entry, including a NULL `cJSON_Parse`.
+fn reset_error() {
+    LAST_ERROR.with(|c| c.set(ptr::null()));
+}
+
+/// cJSON.c:94 `cJSON_GetErrorPtr`: where the last failed parse ON THIS THREAD
+/// stopped, as a pointer into the buffer that parse was given; null after a
+/// successful parse, and before any parse at all.
+///
+/// The pointer is the caller's own memory, so it dangles once the caller frees
+/// that buffer — exactly as in the C, which has no way to know either. What
+/// the port does NOT reproduce is the C leaving a STALE pointer in place across
+/// a `cJSON_Parse(NULL)` (DIVERGENCES.md `errptr-null-input-resets`).
+#[no_mangle]
+pub extern "C" fn cJSON_GetErrorPtr() -> *const c_char {
+    LAST_ERROR.with(Cell::get)
+}
 
 /// Opaque handle = a leaked `Box<Value>`. The C sees `cJSON *`; we see this.
 type Handle = *mut Value;
@@ -49,30 +96,37 @@ pub unsafe extern "C" fn cJSON_ParseWithLength(
     value: *const c_char,
     buffer_length: usize,
 ) -> Handle {
+    reset_error();
     if value.is_null() {
         return ptr::null_mut();
     }
     // SAFETY: caller guarantees `value` is valid for `buffer_length` bytes; we
     // only read them. The slice does not outlive this call.
     let bytes = unsafe { std::slice::from_raw_parts(value.cast::<u8>(), buffer_length) };
-    match parse_with_length(bytes) {
-        Ok((v, _)) => Box::into_raw(Box::new(v)),
-        Err(_) => ptr::null_mut(),
-    }
+    finish_parse(value, parse_with_length(bytes))
 }
 
-/// cJSON.c `cJSON_Parse` — like `ParseWithLength` using `strlen(value)`.
+/// cJSON.c:1184 `cJSON_Parse` = `cJSON_ParseWithOpts(value, 0, 0)`, whose
+/// buffer is `strlen(value) + 1` — the terminator INCLUDED.
+///
+/// That `+ 1` is observable. This function used to parse `strlen` bytes, and
+/// cJSON's BOM rule (skip_utf8_bom needs five readable bytes) then rejected
+/// `"\xEF\xBB\xBF1"` that the C accepts. It went unseen because cJSON_Parse
+/// was "compared transitively" through the core's `parse_with_opts` — which
+/// was right — while this export never called it. Driver mode `parse` and the
+/// ABI vectors `parse-*` now compare THIS function.
 ///
 /// # Safety
 /// `value` must be null or a valid NUL-terminated C string.
 #[no_mangle]
 pub unsafe extern "C" fn cJSON_Parse(value: *const c_char) -> Handle {
+    // DIVERGENCES.md `errptr-null-input-resets`: the C's cJSON_ParseWithOpts
+    // returns before the reset when `value` is NULL, leaving the previous
+    // failure's pointer — likely into a freed buffer — for GetErrorPtr.
+    reset_error();
     // SAFETY: forwarded contract; cstr_bytes validates null + walks to NUL.
     match unsafe { cstr_bytes(value) } {
-        Some(bytes) => match parse_with_length(bytes) {
-            Ok((v, _)) => Box::into_raw(Box::new(v)),
-            Err(_) => ptr::null_mut(),
-        },
+        Some(bytes) => finish_parse(value, parse_with_opts(bytes, false)),
         None => ptr::null_mut(),
     }
 }
@@ -331,6 +385,112 @@ pub unsafe extern "C" fn cjson_query_desc(
     unsafe { emit_bytes(&desc, out, out_size) }
 }
 
+/// Where `cJSON_GetErrorPtr` points, spelled as `../../../ffi/shim.c` spells
+/// it: `null`; `a<n>`/`b<n>` for byte `n` of the first/second input (the
+/// terminator counts — it is where a truncated document's error lands); or
+/// `other`. An address, not a dereference: comparing positions is the whole
+/// point, and a stale pointer is exactly the case that must not be read.
+fn locate_error(err: *const c_char, inputs: [(u8, *const c_char, usize); 2]) -> Vec<u8> {
+    if err.is_null() {
+        return b"null".to_vec();
+    }
+    for (tag, base, len) in inputs {
+        if base.is_null() {
+            continue;
+        }
+        if let Some(off) = (err as usize).checked_sub(base as usize) {
+            if off <= len {
+                let mut out = vec![tag];
+                out.extend_from_slice(off.to_string().as_bytes());
+                return out;
+            }
+        }
+    }
+    b"other".to_vec()
+}
+
+/// One `cJSON_Parse` (or, with `use_length`, `cJSON_ParseWithLength(input,
+/// strlen(input))`) through THIS library's exports, then `cJSON_GetErrorPtr`:
+/// `ok:<printed>@<where>` or `fail@<where>`.
+///
+/// # Safety
+/// `input` is null or a valid NUL-terminated C string; `inputs` hold the
+/// addresses and lengths `locate_error` compares against (never read).
+unsafe fn parse_step(
+    input: *const c_char,
+    use_length: bool,
+    inputs: [(u8, *const c_char, usize); 2],
+) -> Vec<u8> {
+    let item = if use_length {
+        // SAFETY: forwarded contract; cstr_bytes accepts null.
+        let len = unsafe { cstr_bytes(input) }.map_or(0, <[u8]>::len);
+        // SAFETY: `input` is null or valid for `len` bytes (its strlen).
+        unsafe { cJSON_ParseWithLength(input, len) }
+    } else {
+        // SAFETY: forwarded contract on `input`.
+        unsafe { cJSON_Parse(input) }
+    };
+    let err = cJSON_GetErrorPtr();
+    let mut out = Vec::new();
+    if item.is_null() {
+        out.extend_from_slice(b"fail");
+    } else {
+        out.extend_from_slice(b"ok:");
+        // SAFETY: `item` is the live handle cJSON_Parse just returned.
+        let printed = unsafe { cJSON_PrintUnformatted(item) };
+        if !printed.is_null() {
+            // SAFETY: `printed` is a live CString pointer from PrintUnformatted.
+            out.extend_from_slice(unsafe { CStr::from_ptr(printed) }.to_bytes());
+            // SAFETY: freed exactly once, by the library that allocated it.
+            unsafe { cJSON_free(printed.cast::<c_void>()) };
+        }
+        // SAFETY: `item` is live and deleted exactly once.
+        unsafe { cJSON_Delete(item) };
+    }
+    out.push(b'@');
+    out.extend_from_slice(&locate_error(err, inputs));
+    out
+}
+
+/// `cJSON_Parse(first)` then `cJSON_Parse(second)` (NULL when
+/// `second_is_null != 0`; both through `cJSON_ParseWithLength` when
+/// `use_length != 0`), reading `cJSON_GetErrorPtr` after each:
+/// `first=<step>;second=<step>`. Two calls, because the error is STATE — it
+/// outlives the call that set it — and `lib_diff` runs every vector in a fresh
+/// process, so a sequence must live inside one shim to be compared at all.
+///
+/// # Safety
+/// `first` is a valid NUL-terminated C string; `second` is one too unless
+/// `second_is_null != 0`; `out` is valid for writes of `out_size` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn cjson_parse_seq(
+    first: *const c_char,
+    second: *const c_char,
+    second_is_null: c_int,
+    use_length: c_int,
+    out: *mut c_char,
+    out_size: c_int,
+) -> c_int {
+    let second = if second_is_null != 0 {
+        ptr::null()
+    } else {
+        second
+    };
+    // SAFETY: forwarded contracts; cstr_bytes accepts null.
+    let first_len = unsafe { cstr_bytes(first) }.map_or(0, <[u8]>::len);
+    // SAFETY: as above.
+    let second_len = unsafe { cstr_bytes(second) }.map_or(0, <[u8]>::len);
+    let inputs = [(b'a', first, first_len), (b'b', second, second_len)];
+    let mut desc = b"first=".to_vec();
+    // SAFETY: forwarded contract on `first`.
+    desc.extend_from_slice(&unsafe { parse_step(first, use_length != 0, inputs) });
+    desc.extend_from_slice(b";second=");
+    // SAFETY: forwarded contract on `second` (null is allowed).
+    desc.extend_from_slice(&unsafe { parse_step(second, use_length != 0, inputs) });
+    // SAFETY: forwarded contract on `out`/`out_size`.
+    unsafe { emit_bytes(&desc, out, out_size) }
+}
+
 #[cfg(test)]
 mod tests {
     //! These tests exist to give MIRI something to check. The unsafe in this
@@ -436,6 +596,85 @@ mod tests {
         let bad = c("{not json");
         // SAFETY: live CString; a parse failure must return null, not UB.
         assert!(unsafe { cJSON_Parse(bad.as_ptr()) }.is_null());
+    }
+
+    /// cJSON_Parse's buffer is `strlen + 1`, and the BOM rule needs five
+    /// readable bytes, so a BOM plus one digit parses here and NOT through
+    /// ParseWithLength(strlen). This export parsed `strlen` bytes until driver
+    /// mode `parse` compared it.
+    #[test]
+    fn parse_counts_the_terminator() {
+        let bom1 = c("\u{feff}1");
+        // SAFETY: live CString.
+        let item = unsafe { cJSON_Parse(bom1.as_ptr()) };
+        assert!(!item.is_null(), "the C accepts a BOM plus one digit");
+        // SAFETY: live handle, deleted once.
+        unsafe { cJSON_Delete(item) };
+        // SAFETY: `bom1` is valid for its 4 bytes.
+        let item = unsafe { cJSON_ParseWithLength(bom1.as_ptr(), 4) };
+        assert!(
+            item.is_null(),
+            "four bytes keep the BOM, so the parse fails"
+        );
+    }
+
+    #[test]
+    fn error_ptr_is_reset_by_every_parse() {
+        let bad = c("[1,");
+        let good = c("1");
+        // SAFETY: every pointer below is a live CString or null, and every
+        // handle returned is null (a failed parse) or deleted once.
+        unsafe {
+            assert!(cJSON_Parse(bad.as_ptr()).is_null());
+            // the C's offset for "[1,": the NUL at index 3, inside its buffer
+            assert_eq!(cJSON_GetErrorPtr(), bad.as_ptr().wrapping_add(3));
+            cJSON_Delete(cJSON_Parse(good.as_ptr()));
+            assert!(cJSON_GetErrorPtr().is_null(), "success clears it");
+            assert!(cJSON_Parse(bad.as_ptr()).is_null());
+            assert!(cJSON_ParseWithLength(bad.as_ptr(), 0).is_null());
+            assert_eq!(cJSON_GetErrorPtr(), bad.as_ptr(), "empty buffer: offset 0");
+            assert!(cJSON_Parse(bad.as_ptr()).is_null());
+            // DIVERGENCES.md errptr-null-input-resets: the C keeps the stale
+            // pointer here, into a buffer its caller has typically freed.
+            assert!(cJSON_Parse(ptr::null()).is_null());
+            assert!(cJSON_GetErrorPtr().is_null());
+        }
+    }
+
+    #[test]
+    fn error_ptr_is_per_thread() {
+        let bad = c("x");
+        // SAFETY: live CString; the parse fails and returns null.
+        assert!(unsafe { cJSON_Parse(bad.as_ptr()) }.is_null());
+        let other = std::thread::spawn(|| cJSON_GetErrorPtr().is_null())
+            .join()
+            .expect("thread ran");
+        assert!(other, "another thread does not see this thread's error");
+        assert_eq!(cJSON_GetErrorPtr(), bad.as_ptr());
+    }
+
+    #[test]
+    fn parse_seq_shim_describes_both_steps() {
+        let a = c("[1,");
+        let b = c("{\"k\":2}");
+        let mut out = [0 as c_char; 64];
+        // SAFETY: live CStrings in; `out` is valid for 64 writes.
+        let n = unsafe { cjson_parse_seq(a.as_ptr(), b.as_ptr(), 0, 0, out.as_mut_ptr(), 64) };
+        // SAFETY: the shim NUL-terminates `out`.
+        let got = unsafe { CStr::from_ptr(out.as_ptr()) }.to_bytes();
+        assert_eq!(got, b"first=fail@a3;second=ok:{\"k\":2}@null");
+        assert_eq!(usize::try_from(n).ok(), Some(got.len()));
+        // SAFETY: as above; `second` is ignored when second_is_null != 0.
+        unsafe { cjson_parse_seq(a.as_ptr(), ptr::null(), 1, 0, out.as_mut_ptr(), 64) };
+        // SAFETY: NUL-terminated by the shim.
+        let got = unsafe { CStr::from_ptr(out.as_ptr()) }.to_bytes();
+        assert_eq!(got, b"first=fail@a3;second=fail@null");
+        // the length path: `[1,` without its NUL fails at 2, the last byte
+        // SAFETY: as above.
+        unsafe { cjson_parse_seq(a.as_ptr(), b.as_ptr(), 0, 1, out.as_mut_ptr(), 64) };
+        // SAFETY: NUL-terminated by the shim.
+        let got = unsafe { CStr::from_ptr(out.as_ptr()) }.to_bytes();
+        assert_eq!(got, b"first=fail@a2;second=ok:{\"k\":2}@null");
     }
 
     #[test]

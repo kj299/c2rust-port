@@ -16,6 +16,11 @@
 //!               the Is* predicates and the struct fields a C caller reads
 //!               directly (type / valueint / valuestring)
 //!
+//!     parse     stdin is a C string: cJSON_Parse it and report
+//!               cJSON_GetErrorPtr's offset (`ok;err=null;<printed>` or
+//!               `fail;err=<n>`)
+//!     (and every other mode `cjson_core::modes::run` dispatches)
+//!
 //!   success        → canonical result on stdout, exit 0
 //!   parse failure  → NOTHING on stdout, a diagnostic on stderr (stderr is off
 //!                    the compared contract), exit 1
@@ -32,7 +37,7 @@ fn main() -> ExitCode {
     let Some(mode) = std::env::args().nth(1) else {
         eprintln!(
             "usage: rjson_driver \
-             <print|print-unformatted|roundtrip|minify|dup|dup-eq|build|query>"
+             <print|print-unformatted|roundtrip|minify|dup|dup-eq|build|query|parse|...>"
         );
         return ExitCode::from(2);
     };

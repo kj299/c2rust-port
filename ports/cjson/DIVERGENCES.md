@@ -51,6 +51,90 @@ Format:
   The separate GetPointer decoder (`decode_token`, mirroring `compare_pointers`)
   was already correct in the C and is ported as-is.
 
+- [x] `utils-cs-detach-remove` [sha256:8502c24378c7]: **`cJSONUtils_ApplyPatchesCaseSensitive`
+  detaches the LEAF key case-INsensitively** (CWE-178, improper handling of
+  case sensitivity → wrong-target write). Every other step of the
+  case-sensitive entry point honours its flag: the `op`/`path`/`value`/`from`
+  members, the parent pointer (`get_item_from_pointer`), `add`'s
+  delete-before-insert and `test`'s compare. But `detach_path` — the first step
+  of `remove`, `replace` and `move` — ends with `cJSON_DetachItemFromObject`
+  (cJSON_Utils.c:466), the case-insensitive call, whatever the flag says. So
+  under the case-sensitive API `remove /A` on `{"a":1}` deletes `a` (status 0)
+  where the port reports status 13 and leaves the document alone. A caller picks
+  the case-sensitive entry point to make a path mean exactly one key — a policy
+  that refuses patches touching `/Role` relies on that — and the C lets
+  `remove /role` delete `Role`. The port detaches the key the path names.
+  Found 2026-10-17, the first time anything drove a `-cs` mode
+  (`API-COVERAGE.md`'s open gap); fixed in the port before it was ever pinned,
+  so this records a divergence the port had, unexamined, since module 9.
+- [x] `utils-cs-detach-remove-first` [sha256:ab5b06f874b1]: the same defect with
+  both spellings present: `remove /A` on `{"a":1,"A":2}` — the C deletes the
+  FIRST case-insensitive match, `a`, and keeps the `A` the patch named.
+- [x] `utils-cs-detach-replace` [sha256:b11891233af2]: `replace` detaches through
+  the same path, and then re-adds with the flag honoured, so `replace /a` on
+  `{"A":1,"a":2}` destroys `A` (detached case-insensitively) and then deletes
+  and re-adds `a` (case-sensitively): two keys touched for a one-key replace.
+- [x] `utils-cs-detach-move` [sha256:34d5432268e1]: `move` detaches its `from`
+  through the same path: `move from:/A` on `{"a":1,"A":2}` moves `a`'s value.
+- [x] `utils-cs-detach-nested` [sha256:c63e1516d107]: only the LEAF is affected:
+  `remove /O/a` resolves the parent `O` case-sensitively, then detaches its
+  `A` — the C answers status 0 having deleted a key the pointer does not name.
+
+  All five are one call at one line. The `patch` (case-insensitive) mode is
+  unaffected — the leaf detach IS case-insensitive there — and the matrix pins
+  that too: each row has a `u-patch-detach-*` twin that matches. The control
+  `u-patch-cs-remove-exact-first` (the exact spelling FIRST) matches as well,
+  which is how the matrix shows the fix is no wider than the leaf lookup. The
+  fuzzer cannot use these rows (any differently-cased key reaches the class),
+  so `patch-cs` fuzzes against the corrected oracle, whose
+  `make_fixed_utils.py` makes the same one-call change.
+
+- [x] `utils-add-dup-key` [sha256:33a1ba0ecfd7]: **a JSON Patch `add` to a
+  DUPLICATED key leaves the old value first** (CWE-694, use of multiple
+  resources with duplicate identifier). `apply_patch` (cJSON_Utils.c:1005)
+  deletes ONE member with the key and appends the new one. Every cJSON lookup
+  is first-match, so on `{"role":"admin","role":"admin"}` the patch
+  `add /role "user"` returns status 0 and leaves `{"role":"admin","role":"user"}`
+  — and `cJSON_GetObjectItem(doc, "role")` still answers `"admin"`. A service
+  that enforces a field by patching it is bypassed by a document that carries
+  the field twice. The port deletes every member the key names before it
+  appends, so the patched value is the only one. Undecided until 2026-10-17:
+  the port's `retain` had always done this, uncommented and unpinned; the
+  first fuzz seeds with duplicated keys in `matrix-utils.json` reached it.
+- [x] `utils-add-dup-key-cs` [sha256:23b84f30a239]: the same through
+  `cJSONUtils_ApplyPatchesCaseSensitive`.
+- [x] `utils-add-dup-key-move` [sha256:ca4e6f292a2d]: `move` and `copy` end in
+  the same add, so `move from:/x path:/role` leaves the stale `role` first too.
+
+  The control `u-patch-add-single-key` (and its `-cs` twin) matches: with the
+  key once, deleting one match IS deleting them all. NOT extended here to
+  merge-patch, which has the same shape — `{"role":"user"}` merged into the
+  same document gives `{"role":"admin","role":"user"}`, and `{"role":null}`
+  leaves one `role` behind — because the port reproduces those on purpose
+  (`utils::tests::merge_null_removes_only_the_first_duplicate`). That earlier
+  decision predates this entry and is left for its own change rather than
+  reversed in passing.
+
+- [x] `errptr-null-input-resets` [sha256:f5ab9a820486]: **`cJSON_GetErrorPtr`
+  hands back a STALE pointer after `cJSON_Parse(NULL)`** (CWE-825, expired
+  pointer dereference — in the caller, by the library's documented idiom).
+  `cJSON_ParseWithLengthOpts` clears the error before it does anything else
+  (cJSON.c:1110), but `cJSON_ParseWithOpts` — and so `cJSON_Parse` — returns
+  early on a NULL `value` (cJSON.c:1092), before that reset. Whatever the last
+  failed parse left behind survives: a pointer into THAT call's buffer, which
+  its caller has usually freed by then. cJSON's own README parses with
+  `json = cJSON_Parse(string); if (json == NULL) { error_ptr =
+  cJSON_GetErrorPtr(); if (error_ptr != NULL) fprintf(stderr, "Error before:
+  %s\n", error_ptr); }` (`c/README.md:497`) — so a NULL `string` (a failed
+  file read) turns the recommended error report into a read of freed memory. The port resets on
+  every parse entry, NULL included, so the README's own NULL check is enough.
+  ABI vector `errptr-null-input-resets` asserts it against the C .so: first
+  `[1,` fails (`fail@a3` on both sides), then `cJSON_Parse(NULL)` — the C still
+  answers `a3`, the port `null`. Its control `parse-null-after-success` (a
+  success first, so nothing is stale) matches. Found 2026-10-17, the first
+  time anything called `cJSON_GetErrorPtr` through either library, which until
+  then the port did not export at all.
+
 - [x] `construct-nan-double-quiet` [sha256:ff80ae78004c]: **`cJSON_CreateNumber(NaN)`
   converts a NaN to `int`** (CWE-758, reliance on undefined behavior).
   `cJSON_CreateNumber` saturates `valuedouble` into `valueint` with two guards
@@ -377,6 +461,19 @@ the port diverges and the divergence is judged an intentional fix-of-C-defect.
   future contract puts error detail on stdout, expect divergences here.
 
 ## Structural eliminations (NOT divergences — no output change)
+
+- **`global_error` is per thread, not per process** (`errptr-thread-local`;
+  cJSON.c:92). cJSON keeps the last parse error in one unsynchronized static
+  that every parse writes, so a thread reading `cJSON_GetErrorPtr` races any
+  other thread's parse (CWE-362) — and even without a torn read, gets an
+  address in a buffer it never owned. cJSON's README says so itself
+  (`c/README.md:300`, `:574`: "not thread safe" unless `cJSON_GetErrorPtr` is
+  never used). The cdylib keeps it in a
+  `thread_local!`: each thread sees its own last failure. A single-threaded
+  caller cannot tell the two apart, which is why this is not a ledgered row;
+  `crates/ffi`'s `error_ptr_is_per_thread` test (run under miri) is the
+  assertion. Same decision as `custom-allocator-dropped`, for the library's
+  other mutable static.
 
 - **`cJSON_PrintPreallocated`'s `buffer == NULL` and `length < 0` guards
   (cJSON.c:1309).** Two of the function's three refusals exist only because C

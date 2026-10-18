@@ -58,7 +58,7 @@ repo-root `porting-kit/`; adjust the paths inside if you vendor it elsewhere).
 | `harnesses/differential/diff_run.py` (+`normalize.py`) | diff Rust vs C oracle; triage divergences via a ledger; timeout = liveness backstop; a case may name the `cwd` it starts in (LESSONS #56) | CI |
 | `harnesses/diff-fuzz/diff_fuzz.py` | differential fuzzing: same generated input to C & Rust, minimize divergences; on stdin, or on argv from the C's option letters (`--argv-inventory`, LESSONS #59) | CI + nightly |
 | `harnesses/cando/cando_diff.py` (+ driver templates) | function-level differential for C-ABI **libraries**; C-baseline-validated vectors | CI |
-| `harnesses/library-differential/lib_diff.py` | complementary ctypes library differential — no driver, auto return + output-buffer/ptr compare | CI |
+| `harnesses/library-differential/lib_diff.py` | complementary ctypes library differential — no driver, auto return + output-buffer/ptr compare; an output buffer neither side wrote is VACUOUS unless declared `untouched` | CI |
 | `harnesses/port-mutation/mutate_port.py` | the port's own mutants, committed as data: each a plausible way to get one rule wrong, run against the port's gates; KILLED / SURVIVED / DOES-NOT-APPLY / NOBUILD / INFRA, files restored and checked, `--apply-only` to check every mutant still fits the code. A journal on disk, so a run killed outright is named by the next and undone by `--restore`; `--check-clean` proves no mutant is left in the tree (LESSONS #58) | per change; `--apply-only` suits every PR |
 | `harnesses/perf/perf_gate.py` | fail a module >1.3× the C median runtime (a perf bug, not "the cost of Rust"); NOISY when repeats disagree; `--warn` advisory mode for shared/noisy runners | CI (advisory on shared runners) |
 | `harnesses/golden/golden.py` | capture/version/replay the oracle; flag oracle nondeterminism | CI |
@@ -67,7 +67,7 @@ repo-root `porting-kit/`; adjust the paths inside if you vendor it elsewhere).
 | `harnesses/supply-chain/run_supply_chain.sh` | `cargo audit` + `cargo deny` | CI |
 | `harnesses/c-flaw-scan/scan_c_flaws.py` | find C vuln classes *before* porting, and re-run on the C every gate | Phase 0 + every gate |
 | `harnesses/threat-model/check_threat_model.py` | the threat model must be filled in, not the shipped blank | Phase 0 + CI |
-| `harnesses/api-coverage/check_api.py` | every exported symbol of every public header is `ported`, or recorded as out of scope with a reason | **hard-fail CI** |
+| `harnesses/api-coverage/check_api.py` | every exported symbol of every public header is `ported`, or recorded as out of scope with a reason; with `--matrix`, every driver mode a `ported` row names is run by some case | **hard-fail CI** |
 | `harnesses/control-coverage/check_controls.py` | every control `CLAUDE.md` declares is invoked by the port's gate (a `--self-test` or `--check` run is not the control) | **hard-fail CI** |
 | `harnesses/oracle-sanitize/sanitize_oracle.py` | drive every matrix case through a sanitized build of the C oracle: its driver is code the port wrote | CI |
 | `harnesses/probe/probe.py` | pin the C's bytes for a module's edge cases and generate the Rust test expectations from them; `coverage` fails a module with no probes | port gate |

@@ -48,8 +48,19 @@ Vector suite (JSON or TOML) — a list of vectors, each:
       {"type": "outbuf", "size": 16, "id": "dst"},       # buffer the fn writes → compared
       {"type": "inoutbuf", "size": 16, "value": "..", "id": "io"}  # seeded + compared
     ],
-    "timeout": 10                  # optional per-vector liveness cap (seconds)
+    "timeout": 10,                 # optional per-vector liveness cap (seconds)
+    "untouched": true              # optional: writing NOTHING is this call's contract
   }
+
+An `outbuf` is ONE pointer argument. If the C signature also takes the buffer's
+size, the vector must pass it as its own `int`/`size_t` arg — ctypes cannot see
+the C arity, so an omitted argument is read from whatever the register holds,
+and the function writes into the buffer only when that garbage happens to be a
+usable size (LESSONS #63). So an `outbuf` NEITHER side wrote is a comparison of
+two zero-filled buffers: it compares nothing, and the verdict is VACUOUS, a
+failure, unless the vector declares `"untouched": true` (a failure path that
+must write nothing, say). A declared vector that does write is VACUOUS too: the
+declaration has to stay true. (A write of only zero bytes reads as untouched.)
 
 Return-value fidelity: floats are compared by IEEE-754 bit pattern (so -0.0 ≠ 0.0
 and NaN == NaN); a pointer return that lands inside a tracked input/output buffer
@@ -306,6 +317,17 @@ def compare_call(vector, c_res, r_res, known):
     out_match = c_res["outputs"] == r_res["outputs"]
     c_bad = c_res["status"] in ("crash", "timeout")
     pin = known.get(name)
+    # LESSONS #63: an `outbuf` neither side wrote compared two zero-filled
+    # buffers. The cJSON port's ABI vectors omitted every shim's `out_size`, so
+    # in 54 of 78 calls nothing was written and only the returned length was
+    # compared. Untouched must be DECLARED, and a declaration must stay true.
+    outbufs = [a.get("id", f"arg{i}") for i, a in enumerate(vector.get("args", []))
+               if a.get("type") == "outbuf"]
+    unwritten = [o for o in outbufs
+                 if not any(c_res["outputs"].get(o, b""))
+                 and not any(r_res["outputs"].get(o, b""))]
+    declared = bool(vector.get("untouched"))
+    vacuous = unwritten != (outbufs if declared else [])
 
     is_match = (not c_bad) and ret_match and out_match
     if r_res["status"] == "timeout":
@@ -314,6 +336,20 @@ def compare_call(vector, c_res, r_res, known):
         verdict = "CRASH"
     elif r_res["status"] == "error" or c_res["status"] == "error":
         verdict = "ERROR"
+    elif vacuous:
+        # Before the ledger: a comparison that compared nothing cannot be
+        # excused as a known divergence, nor read as one that went stale.
+        verdict = "VACUOUS"
+        if declared:
+            text += (f"vector {name!r} declares \"untouched\", but these output "
+                     f"buffers were written: "
+                     f"{[o for o in outbufs if o not in unwritten]}\n")
+        else:
+            text += (f"output buffer(s) {unwritten} were written by NEITHER side, so "
+                     f"the call compared nothing there. If the C signature takes the "
+                     f"buffer's size, pass it as its own arg (ctypes reads an omitted "
+                     f"one from a register). If writing nothing IS the contract, "
+                     f"declare \"untouched\": true.\n")
     elif name in known and is_match:
         # A ledger entry ASSERTS this function call diverges (a fix-of-C-defect).
         # If it now MATCHes, the intentional divergence is gone — the fix was
@@ -372,7 +408,7 @@ def compare(c_lib, rust_lib, vectors, c_symbols, rust_symbols, ledger,
     return results
 
 
-_FAIL_VERDICTS = ("DIVERGE", "CRASH", "TIMEOUT", "ERROR", "LEDGER-STALE")
+_FAIL_VERDICTS = ("DIVERGE", "CRASH", "TIMEOUT", "ERROR", "LEDGER-STALE", "VACUOUS")
 
 
 def _report(results, as_json):
@@ -389,7 +425,7 @@ def _report(results, as_json):
             if r["verdict"] in _FAIL_VERDICTS and r["diff"]:
                 sys.stdout.write(r["diff"])
         print(f"\n{len(results)} vector(s), {len(fails)} failing "
-              f"(DIVERGE/CRASH/TIMEOUT/ERROR)")
+              f"(DIVERGE/CRASH/TIMEOUT/ERROR/LEDGER-STALE/VACUOUS)")
         if any(r["verdict"] == "DIVERGE" for r in results):
             print("Triage each DIVERGE: fix the Rust, OR record an intentional "
                   "fix-of-C-defect in the ledger as `- [x] <name> [sha256:<fp>]: <why>`.")
@@ -584,6 +620,46 @@ def _self_test():
           compare_call(vs, synth(ret=1), synth(status="error", ret=1), {})["verdict"] == "ERROR")
     check("an error on the C side is ERROR",
           compare_call(vs, synth(status="error", ret=1), synth(ret=1), {})["verdict"] == "ERROR")
+
+    # --- an output buffer neither side wrote compares nothing (LESSONS #63) ---
+    z, w = b"\0" * 8, b"abc" + b"\0" * 5
+    vo = {"name": "out", "function": "f", "returns": "int",
+          "args": [{"type": "outbuf", "size": 8, "id": "b"}]}
+    vo_decl = dict(vo, untouched=True)
+    vio = {"name": "io", "function": "f", "returns": "int",
+           "args": [{"type": "inoutbuf", "size": 8, "id": "b"}]}
+    def out(b):
+        return synth(ret=1, outputs={"b": b})
+    r_vac = compare_call(vo, out(z), out(z), {})
+    check("an outbuf NEITHER side wrote → VACUOUS (the omitted out_size class)",
+          r_vac["verdict"] == "VACUOUS")
+    check("...and the report says which buffer and how to fix it",
+          "NEITHER" in (r_vac["diff"] or "") and "['b']" in (r_vac["diff"] or ""))
+    check("...unless the vector declares it untouched → MATCH",
+          compare_call(vo_decl, out(z), out(z), {})["verdict"] == "MATCH")
+    r_stale = compare_call(vo_decl, out(w), out(w), {})
+    check("a declared-untouched outbuf that IS written → VACUOUS (stale declaration)",
+          r_stale["verdict"] == "VACUOUS")
+    check("...and the report names the declaration, not a missing write",
+          "declares" in (r_stale["diff"] or "") and "NEITHER" not in (r_stale["diff"] or ""))
+    check("only the C wrote → DIVERGE, not VACUOUS (one side wrote)",
+          compare_call(vo, out(w), out(z), {})["verdict"] == "DIVERGE")
+    check("only the Rust wrote → DIVERGE, not VACUOUS",
+          compare_call(vo, out(z), out(w), {})["verdict"] == "DIVERGE")
+    check("an untouched INOUT buffer is not vacuous (it was seeded)",
+          compare_call(vio, out(z), out(z), {})["verdict"] == "MATCH")
+    with tempfile.TemporaryDirectory() as d:
+        led = os.path.join(d, "DIVERGENCES.md")
+        open(led, "w").write("- [x] out: pretend this is known\n")
+        check("a ledger entry cannot excuse a vacuous comparison",
+              compare_call(vo, out(z), out(z), D.load_ledger(led))["verdict"] == "VACUOUS")
+    # real FFI: memset writing zero bytes is indistinguishable from no write
+    v_set0 = {"name": "set0", "function": "memset", "returns": "ptr", "returns_ignore": True,
+              "args": [{"type": "outbuf", "size": 8, "id": "b"}, {"type": "int", "value": 0},
+                       {"type": "size_t", "value": 8}]}
+    check("real call: an outbuf left all-zero is VACUOUS until declared",
+          verdict(v_set0)["verdict"] == "VACUOUS"
+          and verdict(dict(v_set0, untouched=True))["verdict"] == "MATCH")
 
     print("\nself-test:", "OK" if ok else "FAILED")
     return 0 if ok else 1

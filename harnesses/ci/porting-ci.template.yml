@@ -110,10 +110,14 @@ jobs:
       # (LESSONS #54). Point it at the C sources the port reads.
       - run: python3 porting-kit/harnesses/c-flaw-scan/scan_c_flaws.py c/
       # Every exported symbol accounted for (LESSONS #34/#35): one --header per
-      # public header, all in one run against one manifest.
+      # public header, all in one run against one manifest. One --matrix per
+      # matrix file, too — the same files the differential job below reads — so
+      # a `ported` row naming a driver mode no case runs fails instead of
+      # passing as a claim (LESSONS #61).
       - run: >
           python3 porting-kit/harnesses/api-coverage/check_api.py
           --header c/<lib>.h --manifest API-COVERAGE.md
+          --matrix porting-kit/harnesses/differential/input-matrix.example.toml
       # The gate above the gates: every control CLAUDE.md declares is invoked
       # by this workflow (LESSONS #31). It reads this file, so dropping a step
       # above turns it red.

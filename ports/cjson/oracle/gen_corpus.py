@@ -316,6 +316,82 @@ def main():
         ucase("utils-tilde-add0", "patch", '[{"op":"add","path":"/a~0b","value":1}]', "{}", ["utils-patch"]),
         ucase("utils-tilde-remove", "patch", '[{"op":"remove","path":"/a~1b"}]', '{"a/b":1,"x":2}', ["utils-patch"]),
     ]
+    # LESSONS #61/#62 (2026-10-17): every input below goes in TWICE, under the
+    # case-insensitive mode and its `-cs` twin, so the case flag is pinned in
+    # both directions. Each input's note lives with its probe in
+    # probes-utils.json. Matching cases only: the `-cs` divergences are below.
+    cs_pairs = [
+        ('ptr', 'case-miss', '/A\n{"a":1}', 'utils-pointer'),
+        ('ptr', 'exact-second', '/A\n{"a":1,"A":2}', 'utils-pointer'),
+        ('ptr', 'exact-first', '/a\n{"A":1,"a":2}', 'utils-pointer'),
+        ('ptr', 'nested-leaf', '/a/B\n{"a":{"b":1,"B":2}}', 'utils-pointer'),
+        ('ptr', 'parent-seg', '/O/x\n{"o":{"x":1},"O":{"x":2}}', 'utils-pointer'),
+        ('ptr', 'escaped', '/A~1B\n{"a/b":1,"A/B":2}', 'utils-pointer'),
+        ('ptr', 'non-ascii', '/Ä\n{"ä":1}', 'utils-pointer'),
+        ('findptr', 'exact-second', '/A\n{"a":1,"A":2}', 'utils-pointer'),
+        ('findptr', 'nested', '/b/A\n{"b":{"a":1,"A":2}}', 'utils-pointer'),
+        ('patch', 'op-key-upper', '[{"OP":"add","path":"/x","value":1}]\n{}', 'utils-patch'),
+        ('patch', 'path-key-upper', '[{"op":"add","PATH":"/x","value":1}]\n{}', 'utils-patch'),
+        ('patch', 'value-key-upper', '[{"op":"add","path":"/x","VALUE":1}]\n{}', 'utils-patch'),
+        ('patch', 'from-key-upper', '[{"op":"copy","FROM":"/a","path":"/z"}]\n{"a":1}', 'utils-patch'),
+        ('patch', 'add-other-case', '[{"op":"add","path":"/A","value":3}]\n{"a":1}', 'utils-patch'),
+        ('patch', 'test-keys', '[{"op":"test","path":"/o","value":{"a":1,"A":2}}]\n{"o":{"A":2,"a":1}}', 'utils-patch'),
+        ('patch', 'test-mismatch', '[{"op":"test","path":"/o","value":{"A":1}}]\n{"o":{"a":1}}', 'utils-patch'),
+        ('patch', 'copy-from-exact', '[{"op":"copy","from":"/A","path":"/z"}]\n{"a":1,"A":2}', 'utils-patch'),
+        ('patch', 'remove-parent-seg', '[{"op":"remove","path":"/O/A"}]\n{"o":{"A":1},"O":{"A":2}}', 'utils-patch'),
+        ('patch', 'remove-exact-first', '[{"op":"remove","path":"/A"}]\n{"A":1,"a":2}', 'utils-patch'),
+        ('merge', 'null-exact', '{"A":null}\n{"a":1,"A":2}', 'utils-patch'),
+        ('merge', 'null-other-case', '{"a":null}\n{"A":1}', 'utils-patch'),
+        ('merge', 'add-other-case', '{"A":5}\n{"a":1}', 'utils-patch'),
+        ('merge', 'nested', '{"o":{"B":2}}\n{"o":{"b":1}}', 'utils-patch'),
+        ('merge', 'object-other-case', '{"A":{"x":1}}\n{"a":{"y":2}}', 'utils-patch'),
+        ('genmerge', 'nested-case', '{"o":{"a":1}}\n{"o":{"A":1}}', 'utils-patch'),
+        ('genmerge', 'sort-order', '{"a":1,"B":2}\n{"B":2,"c":3}', 'utils-patch'),
+        ('genmerge', 'nested-ci-recursion', '{"o":{"a":1,"B":2}}\n{"o":{"B":2,"c":3}}', 'utils-patch'),
+        ('genpatch', 'rename-case', '{"a":1}\n{"A":1}', 'utils-patch'),
+        ('genpatch', 'both-spellings', '{"a":1,"A":2}\n{"A":2,"a":3}', 'utils-patch'),
+        ('genpatch', 'nested', '{"o":{"b":1,"B":2}}\n{"o":{"B":2,"b":1}}', 'utils-patch'),
+        ('genpatch', 'array-child', '[{"a":1}]\n[{"A":1}]', 'utils-patch'),
+        ('sort', 'ties', '{"b":1,"A":2,"a":3,"B":4}', 'utils-sort'),
+        ('patch', 'test-sorts-before-length', '[{"op":"test","path":"","value":[{"b":1,"a":2}]}]\n[{"b":1,"a":2},5]', 'utils-patch'),
+        ('patch', 'test-sorts-before-count', '[{"op":"test","path":"","value":{"o":{"b":1,"a":2}}}]\n{"o":{"b":1,"a":2},"p":1}', 'utils-patch'),
+        ('genmerge', 'tie-sorted-twice', '{"o":{"b":5,"B":2}}\n{"o":{"":1}}', 'utils-patch'),
+        ('genmerge', 'tie-nested-array', '{"o":{"x":[{"b":1,"B":2}],"y":1}}\n{"o":{"x":[{"b":1,"B":3}]}}', 'utils-patch'),
+        ('genmerge', 'duplicate-key-ties', '{"o":{"":1,"":2}}\n{"o":{"":9,"":1}}', 'utils-patch'),
+    ]
+    for mode, label, stdin, mod in cs_pairs:
+        for m in (mode, mode + "-cs"):
+            utils.append({"name": f"u-{m}-{label}", "args": [m], "stdin": stdin,
+                          "expect_rc": 0, "mods": [mod]})
+    # The C detaches a patch's LEAF case-insensitively even under the
+    # case-sensitive entry point; the port does not (DIVERGENCES.md
+    # `utils-cs-detach-*`). The `patch` twin matches; the `-cs` row diverges.
+    cs_detach = [
+        ('remove', '[{"op":"remove","path":"/A"}]\n{"a":1}'),
+        ('remove-first', '[{"op":"remove","path":"/A"}]\n{"a":1,"A":2}'),
+        ('replace', '[{"op":"replace","path":"/a","value":9}]\n{"A":1,"a":2}'),
+        ('move', '[{"op":"move","from":"/A","path":"/z"}]\n{"a":1,"A":2}'),
+        ('nested', '[{"op":"remove","path":"/O/a"}]\n{"o":{"a":1},"O":{"A":2}}'),
+    ]
+    for label, stdin in cs_detach:
+        utils.append({"name": f"u-patch-detach-{label}", "args": ["patch"],
+                      "stdin": stdin, "expect_rc": 0, "mods": ["utils-patch"]})
+        utils_diverge.append({"name": f"utils-cs-detach-{label}", "args": ["patch-cs"],
+                              "stdin": stdin, "expect_rc": 0, "mods": ["utils-patch"]})
+    # An add replaces EVERY duplicate of its key; the C replaces one
+    # (DIVERGENCES.md `utils-add-dup-key*`). Single-key controls match.
+    dup = '[{"op":"add","path":"/role","value":"user"}]\n{"role":"admin","role":"admin"}'
+    utils_diverge += [
+        {"name": "utils-add-dup-key", "args": ["patch"], "stdin": dup, "expect_rc": 0, "mods": ["utils-patch"]},
+        {"name": "utils-add-dup-key-cs", "args": ["patch-cs"], "stdin": dup, "expect_rc": 0, "mods": ["utils-patch"]},
+        {"name": "utils-add-dup-key-move", "args": ["patch"],
+         "stdin": '[{"op":"move","from":"/x","path":"/role"}]\n{"role":"admin","x":"user","role":"admin"}',
+         "expect_rc": 0, "mods": ["utils-patch"]},
+    ]
+    for m in ("patch", "patch-cs"):
+        utils.append({"name": f"u-{m}-add-single-key", "args": [m],
+                      "stdin": '[{"op":"add","path":"/role","value":"user"}]\n{"role":"admin","x":1}',
+                      "expect_rc": 0, "mods": ["utils-patch"]})
     with open(os.path.join(HERE, "matrix-utils.json"), "w") as f:
         json.dump(utils + utils_diverge, f, indent=2)
 
