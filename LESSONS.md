@@ -2842,3 +2842,38 @@ points.)*
   and two mutants pin it.
 - **Section amended:** ports/cjson only (DIVERGENCES.md, API-COVERAGE.md,
   mutants.toml).
+
+---
+
+## 065. The dependency gate had never run, and its policy file did not parse
+
+- **Date:** 2026-10-24
+- **Codebase:** the Porting Kit's supply-chain harness, through the cJSON port
+- **What happened:** `check.sh` step 5b runs `run_supply_chain.sh` when
+  `cargo-audit` and `cargo-deny` are installed and prints a loud SKIP when they
+  are not. Neither was installed locally or in CI, so the step had SKIPped on
+  every run since the port began, and the "clean deps" control in CLAUDE.md's
+  table — counted as wired by control-coverage, because the script is invoked —
+  had never produced a verdict. The first real run failed before checking
+  anything: the kit's `deny.template.toml` used `wildcard-dependencies`, a key
+  `cargo-deny` rejects, so the policy every port is told to copy had never
+  loaded anywhere. The harness's own `--check` passed it throughout, because it
+  only asked Python's TOML parser. Past that, the run found what a real policy
+  finds: workspace path dependencies read as wildcards, the fuzz crate had no
+  license, and `libfuzzer-sys` carries LLVM's NCSA license, which the allow-list
+  lacked. No advisories on either lockfile.
+- **The rule.** A SKIP is a gate that has not run, however loud. A control is
+  wired only when some run, somewhere, executes it; and a config file is
+  validated by the tool that reads it, never by a parser for its syntax.
+- **Kit change:** `deny.template.toml` uses `wildcards`, allows wildcard paths
+  to `publish = false` crates, and allow-lists NCSA with the reason.
+  `run_supply_chain.sh --check` loads the template with `cargo-deny` itself,
+  where it is present, against a one-crate fixture, and requires a copy with a
+  misspelt key to be refused (failing on the old template, passing on the new).
+  The skeleton's crates are `publish = false`, so a port copied from it starts
+  green. CI installs both tools as release binaries pinned by SHA-256 (about a
+  minute, against five to build them); SECURITY-CHECKLIST says to check the
+  gate ran and to audit every lockfile.
+- **Section amended:** harnesses/supply-chain/run_supply_chain.sh;
+  harnesses/supply-chain/deny.template.toml; ports/cjson/check.sh;
+  skeleton/crates · Cargo.toml; SECURITY-CHECKLIST · Per release.

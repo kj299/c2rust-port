@@ -4,6 +4,7 @@
 # `core::parse` read like libcore to every reviewer. Rename per project
 # (keep a suffix/prefix, e.g. lsof_core).
 name = "port_core"
+publish = false
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true

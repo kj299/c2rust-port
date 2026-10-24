@@ -52,9 +52,14 @@ to safety and security" — this is that list.
 
 - [ ] **Supply chain clean.** `supply-chain/run_supply_chain.sh`: `cargo audit`
       (no open RUSTSEC advisories) + `cargo deny` (licenses allow-listed, sources
-      restricted to crates.io, no wildcard dependencies; duplicate versions only
-      warn, and the template bans nothing — add bans yourself). Dependency count is
-      justifiable — a safety rewrite doesn't import unsafety through its deps.
+      restricted to crates.io, no wildcard dependencies except a path to a
+      `publish = false` crate; duplicate versions only warn, and the template bans
+      nothing — add bans yourself). Dependency count is justifiable — a safety
+      rewrite doesn't import unsafety through its deps. **Check it RAN**: a SKIP is
+      not a pass, and this gate skipped on every cJSON run until its tools were
+      installed in CI, where the first real run showed the template had never
+      loaded (LESSONS #65). Audit every lockfile the port has — a cargo-fuzz crate
+      is its own workspace with its own.
 - [ ] **Least privilege.** Privileges acquired just-in-time and scoped to the one
       call that needs them (RAII guard), never held globally. Runs unprivileged
       by default; degrades rather than fails when it can't reach something.

@@ -51,6 +51,34 @@ tomllib.load(open(sys.argv[1], "rb"))
 print("PASS  deny.template.toml parses")
 PY
   fi
+  # tomllib only proves the file is TOML. cargo-deny is the parser that matters:
+  # until 2026-10-24 this template said `wildcard-dependencies`, a key cargo-deny
+  # rejects outright, and this self-test passed it for as long as nothing ever
+  # ran the real tool (LESSONS #65). So where cargo-deny exists, load the
+  # template the way the gate does, against a one-crate fixture — and a copy
+  # with a misspelt key must be REFUSED, or the check proves nothing.
+  if have cargo && have cargo-deny; then
+    _fx="$(mktemp -d)"
+    mkdir -p "$_fx/src"
+    printf '[package]\nname = "fx"\nversion = "0.1.0"\nedition = "2021"\nlicense = "MIT"\npublish = false\n' > "$_fx/Cargo.toml"
+    : > "$_fx/src/lib.rs"
+    if ( cd "$_fx" && cargo generate-lockfile -q --offline 2>/dev/null || cargo generate-lockfile -q ) \
+       && ( cd "$_fx" && cargo deny --config "$HERE/deny.template.toml" check bans licenses sources >/dev/null 2>&1 ); then
+      echo "PASS  cargo-deny loads deny.template.toml and a clean crate passes it"
+    else
+      echo "FAIL  cargo-deny rejects deny.template.toml (or a clean crate fails it)" >&2; ok=0
+    fi
+    sed 's/^wildcards = /wildcard-dependencies = /' "$HERE/deny.template.toml" > "$_fx/bad.toml"
+    if ( cd "$_fx" && cargo deny --config "$_fx/bad.toml" check bans >/dev/null 2>&1 ); then
+      echo "FAIL  cargo-deny accepted a template with an unknown key — the check above proves nothing" >&2; ok=0
+    else
+      echo "PASS  cargo-deny refuses a template with an unknown key"
+    fi
+    rm -rf "$_fx"
+  else
+    echo "note: cargo-deny absent — the template was NOT loaded by the tool that reads it"
+  fi
+  [[ "$ok" == "1" ]] || { echo "self-test: FAILED"; exit 1; }
   for t in cargo cargo-audit cargo-deny; do
     if have "$t"; then echo "note: $t available"; else echo "note: $t NOT installed (install for the real gate)"; fi
   done
