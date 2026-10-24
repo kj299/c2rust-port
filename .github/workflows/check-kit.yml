@@ -113,6 +113,28 @@ jobs:
       # (LESSONS #61 records the change that added them).
       # --locked: the tool's own dependency tree, as published. Built with stable.
       - run: cargo install cargo-fuzz --locked
+      # cargo-audit + cargo-deny so check.sh step 5b ("clean deps") RUNS here.
+      # It had printed SKIP on every run since the port began — and the first
+      # real run found the kit's deny template did not even parse (LESSONS #65).
+      # Release binaries, not `cargo install`: building the two from source is
+      # ~5 minutes. Each archive is pinned by SHA-256 so this step cannot run
+      # an unverified download. cargo-deny's pin matches the checksum its
+      # release publishes; cargo-audit publishes none, so its pin is the hash
+      # of the archive as first fetched (2026-10-24). Bump both together.
+      - name: install cargo-audit + cargo-deny (pinned release binaries)
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl -sSfLo deny.tgz https://github.com/EmbarkStudios/cargo-deny/releases/download/0.20.2/cargo-deny-0.20.2-x86_64-unknown-linux-musl.tar.gz
+          curl -sSfLo audit.tgz "https://github.com/rustsec/rustsec/releases/download/cargo-audit%2Fv0.22.2/cargo-audit-x86_64-unknown-linux-musl-v0.22.2.tgz"
+          printf '%s  %s\n' \
+            9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f deny.tgz \
+            7fb9497f8594b389e5fce5ef9b92db08432996895b2e0c5a0167a69ed445c428 audit.tgz \
+            | sha256sum -c -
+          tar xzf deny.tgz && tar xzf audit.tgz
+          install -m 0755 cargo-deny-0.20.2-x86_64-unknown-linux-musl/cargo-deny "$HOME/.cargo/bin/"
+          install -m 0755 cargo-audit-x86_64-unknown-linux-musl-v0.22.2/cargo-audit "$HOME/.cargo/bin/"
+          cargo deny --version && cargo audit --version
 
       # The keystone port's live gate: locks the C oracle (build + validate all
       # vectors against the vendored cJSON), then diffs the Rust port over the

@@ -597,6 +597,9 @@ echo "===== 5b. supply-chain — the dependency surface ====="
 # been audited at all. Toolchain-optional like the sanitizers, and for the same
 # reason: absence of the tool must be LOUD, never silently green. When the tools
 # ARE present the harness's own fail-closed verdict stands (no `|| true` here).
+# Ran for the first time 2026-10-24, once CI installed the tools (LESSONS #65):
+# the kit's deny template did not parse, and the port's crates and the fuzz
+# crate each needed a manifest fix. Locally a missing tool still SKIPs, loudly.
 if command -v cargo-audit >/dev/null 2>&1 && command -v cargo-deny >/dev/null 2>&1; then
   bash "$KIT/harnesses/supply-chain/run_supply_chain.sh" "$HERE/rust"
   # The fuzz crate is its own workspace with its own Cargo.lock — and the
