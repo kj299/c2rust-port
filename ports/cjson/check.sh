@@ -601,11 +601,11 @@ echo "===== 5b. supply-chain — the dependency surface ====="
 # the kit's deny template did not parse, and the port's crates and the fuzz
 # crate each needed a manifest fix. Locally a missing tool still SKIPs, loudly.
 if command -v cargo-audit >/dev/null 2>&1 && command -v cargo-deny >/dev/null 2>&1; then
+  # One call: the harness audits every lockfile under rust/, the fuzz crate's
+  # too (its own workspace, and the port's only REGISTRY dependencies), each
+  # held to rust/deny.toml (LESSONS #66). This step used to name the fuzz
+  # workspace by hand, which a port copied from the CI template did not.
   bash "$KIT/harnesses/supply-chain/run_supply_chain.sh" "$HERE/rust"
-  # The fuzz crate is its own workspace with its own Cargo.lock — and the
-  # port's only REGISTRY dependencies (libfuzzer-sys and what it pulls in), so
-  # it is audited too rather than left outside the gate.
-  bash "$KIT/harnesses/supply-chain/run_supply_chain.sh" "$HERE/rust/fuzz"
   echo "supply-chain: dependency audit clean"
 else
   echo "SKIP  supply-chain: cargo-audit/cargo-deny absent — the dependency audit"

@@ -2877,3 +2877,54 @@ points.)*
 - **Section amended:** harnesses/supply-chain/run_supply_chain.sh;
   harnesses/supply-chain/deny.template.toml; ports/cjson/check.sh;
   skeleton/crates · Cargo.toml; SECURITY-CHECKLIST · Per release.
+
+---
+
+## 066. The gate audited one lockfile, and the template every port copies ran it on one
+
+- **Date:** 2026-11-14
+- **Codebase:** the Porting Kit's supply-chain harness and CI template, from
+  the lsof line's entry 089
+- **What happened:** `run_supply_chain.sh DIR` ran `cargo audit` and
+  `cargo deny check` in DIR, so it audited DIR's own lockfile and nothing
+  else. A workspace nested under DIR has a lockfile of its own, and cargo-fuzz
+  makes `fuzz/` one. The cJSON gate called the harness a second time for
+  `rust/fuzz` by hand (LESSONS #65), but the CI template, the one a new port
+  copies, ran it once on `.`. The lsof line, bringing #65 over, found the hole
+  live in its port: lsof-rs's CI ran `cargo deny check` at the workspace root
+  only, so its fuzz lockfile (libfuzzer-sys, and the `cc` build script that
+  compiles libFuzzer) had never been read by an audit, and it failed lsof-rs's
+  own policy on NCSA. Two more defects stood behind it. A nested workspace
+  with no `deny.toml` of its own was held to the kit's template instead of the
+  policy its port shipped a directory up, because the harness looked for one
+  in DIR alone. And the template installed both tools with
+  `cargo install cargo-audit cargo-deny`: the newest version of each, its
+  dependencies re-resolved without `--locked`, so the tools judging a port's
+  dependencies were the least pinned code in its job, though #65 had pinned
+  them in this kit's own workflow. Separately, every cJSON gate run printed
+  seven `license-not-encountered` warnings, because the port was held to the
+  template's eight-licence list and uses two.
+- **The rule.** "The dependencies are audited" means every lockfile the
+  repository tracks, found by the gate rather than listed by its caller, and
+  each held to the port's policy. Pin the auditing tools as the dependencies
+  are pinned. And a warning a gate prints on every run is a warning nobody
+  reads: hold the port to a policy trimmed to what it uses, so that one means
+  something changed.
+- **Kit change:** `run_supply_chain.sh` audits every lockfile git tracks under
+  DIR (outside a work tree, every one not under `target/`) and skips a
+  vendored kit's own; holds each to the nearest `deny.toml` from its workspace
+  up to DIR, else the template; fails when it finds none; and ends with the
+  count. Five `--check` fixtures and seven gate-mutation rows pin the listing
+  and the policy search, each shown red under its mutant. The CI template
+  installs both tools as release binaries checked against SHA-256. The
+  template excepts NCSA for `libfuzzer-sys` alone, as the lsof line's copy
+  does, and says to trim the allow-list. The cJSON port has a `deny.toml` of
+  its own (MIT and Apache-2.0, NCSA for libfuzzer-sys alone), its gate prints
+  no warning, and it calls the harness once.
+- **Section amended:** harnesses/supply-chain/run_supply_chain.sh ·
+  port_lockfiles, deny_config, --check, the gate;
+  harnesses/supply-chain/deny.template.toml;
+  harnesses/gate-mutation/mutate_gates.py · MUTATIONS;
+  harnesses/ci/porting-ci.template.yml · supply-chain; ports/cjson/check.sh ·
+  step 5b; ports/cjson/rust/deny.toml; SECURITY-CHECKLIST · Per release;
+  README · harness table.

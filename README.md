@@ -64,7 +64,7 @@ repo-root `porting-kit/`; adjust the paths inside if you vendor it elsewhere).
 | `harnesses/golden/golden.py` | capture/version/replay the oracle; flag oracle nondeterminism | CI |
 | `harnesses/fuzz/gen_fuzz_target.sh` | scaffold a cargo-fuzz target per module | CI smoke + nightly |
 | `harnesses/sanitizers/run_sanitizers.sh` | Miri / ASan / TSan over the unsafe layer (`ubsan` runs Miri: rustc has no UB sanitizer); `--json` feeds the `sanitized` rung | CI |
-| `harnesses/supply-chain/run_supply_chain.sh` | `cargo audit` + `cargo deny` | CI |
+| `harnesses/supply-chain/run_supply_chain.sh` | `cargo audit` + `cargo deny` over every lockfile under the directory, each to the nearest `deny.toml` | CI |
 | `harnesses/c-flaw-scan/scan_c_flaws.py` | find C vuln classes *before* porting, and re-run on the C every gate | Phase 0 + every gate |
 | `harnesses/threat-model/check_threat_model.py` | the threat model must be filled in, not the shipped blank | Phase 0 + CI |
 | `harnesses/api-coverage/check_api.py` | every exported symbol of every public header is `ported`, or recorded as out of scope with a reason; with `--matrix`, every driver mode a `ported` row names is run by some case | **hard-fail CI** |
