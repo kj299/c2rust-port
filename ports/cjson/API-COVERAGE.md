@@ -224,7 +224,7 @@ wired into the gate. Two notes on getting the *number* right first:
 | `cJSON_Delete` | ported | cdylib export; every mode's teardown, checked under miri/ASan |
 | `cJSON_Minify` | ported | cdylib export; driver mode `minify`, 4 ABI vectors |
 | `cJSON_Duplicate` | ported | cdylib export; driver mode `dup` |
-| `cJSON_Compare` | ported | cdylib export; driver modes `dup-eq` (original vs its duplicate) and `parent` (field `cmp`) — both call it with `case_sensitive = 1` only |
+| `cJSON_Compare` | ported | cdylib export; driver modes `dup-eq` (original vs its duplicate) and `parent` (field `cmp`), both with `case_sensitive = 1`; and since 2026-11-14 ABI vectors `compare-*` (shim `cjson_compare_docs`), two different documents under both flag values. Its 2^depth object compare is not reproduced (DIVERGENCES, `compare-exponential-nesting`) |
 | `cJSON_free` | ported | cdylib export; frees every string the print modes return |
 | `cJSON_GetErrorPtr` | ported | driver mode `parse` (field `err`: the offset it returns after `cJSON_Parse`) and, since 2026-10-17, a cdylib export compared by ABI vectors `parse-*`/`parse-len-*`/`errptr-*`. The error is STATE, so the shim runs two parses in one call and reads it after each: the reset on success, the length path, and the NULL input — where the C hands back a stale pointer into the previous call's buffer and the port answers NULL (DIVERGENCES.md `errptr-null-input-resets`). Kept per thread, not per process (`errptr-thread-local`, Structural eliminations) |
 | `cJSON_GetArraySize` | ported | `cjson_modes_query` — driver mode `query`, 8 ABI vectors |

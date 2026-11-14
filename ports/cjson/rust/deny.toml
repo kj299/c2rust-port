@@ -1,0 +1,43 @@
+# cargo-deny policy for the cJSON port: the kit's template
+# (harnesses/supply-chain/deny.template.toml), trimmed to what the port's two
+# lockfiles use. The supply-chain gate holds both to it: this workspace's and
+# fuzz/'s, which is a workspace of its own (LESSONS #66).
+#
+# The port's own crates are MIT. Its only registry dependencies are the fuzz
+# workspace's: libfuzzer-sys and arbitrary, and the crates libfuzzer-sys's build
+# script compiles libFuzzer with (cc, with find-msvc-tools, jobserver, libc and
+# shlex; and for other targets only, getrandom and r-efi under jobserver). Each
+# is MIT OR Apache-2.0 at least, except libfuzzer-sys, excepted by name below.
+
+[advisories]
+# Fail on any RUSTSEC advisory, and on a yanked crate in a lockfile.
+yanked = "deny"
+ignore = []            # add "RUSTSEC-XXXX-YYYY" only with a written justification
+
+[bans]
+multiple-versions = "warn"
+# A `*` version is an unreviewed upgrade path; deny it, except a path
+# dependency on one of the port's own crates, which are all `publish = false`.
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[licenses]
+allow = ["MIT", "Apache-2.0"]
+# libfuzzer-sys is `(MIT OR Apache-2.0) AND NCSA`: it vendors and builds LLVM's
+# libFuzzer (NCSA: permissive, OSI-approved). Excepted for that crate alone.
+exceptions = [
+    { allow = ["NCSA"], crate = "libfuzzer-sys" },
+]
+# One policy covers two trees, and each lacks something the other uses: the
+# root workspace has no Apache-2.0 crate and no libfuzzer-sys. Left at "warn",
+# every run would warn about those, by design, and a warning every run is a
+# warning nobody reads.
+unused-allowed-license = "allow"
+unused-license-exception = "allow"
+confidence-threshold = 0.9
+
+[sources]
+# Only crates.io. A git or unknown-registry dependency is a reviewed decision.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-git = []

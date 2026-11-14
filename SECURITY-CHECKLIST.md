@@ -58,8 +58,10 @@ to safety and security" — this is that list.
       rewrite doesn't import unsafety through its deps. **Check it RAN**: a SKIP is
       not a pass, and this gate skipped on every cJSON run until its tools were
       installed in CI, where the first real run showed the template had never
-      loaded (LESSONS #65). Audit every lockfile the port has — a cargo-fuzz crate
-      is its own workspace with its own.
+      loaded (LESSONS #65). Every lockfile the port has is audited — a cargo-fuzz
+      crate is its own workspace with its own — and the harness now finds them
+      itself and ends with the count (`audited N lockfile(s)`): check it is
+      every one you have (LESSONS #66).
 - [ ] **Least privilege.** Privileges acquired just-in-time and scoped to the one
       call that needs them (RAII guard), never held globally. Runs unprivileged
       by default; degrades rather than fails when it can't reach something.

@@ -35,6 +35,18 @@ kit did not write (`RETROSPECTIVE-kit-audit.md` §6, keystone item).
 > `out_size`, compared only the returned LENGTH in most calls since they were
 > written (54 of 78 measured): they pass it now, and `lib_diff` fails an output
 > buffer neither side wrote (LESSONS #61–#63).]
+> [2026-11-14: `mutants.toml` now covers the earlier modules as well: a wrong
+> version of every ledgered divergence family and of the ported rules of
+> modules 1–8 and the DOM, with a gate per compared matrix. The first full run
+> left five alive. One was equivalent and is gone. The other four were rules no
+> case could see: an object nested past the limit, a double that needs 17
+> digits, a control byte whose escape has hex letters, and `cJSON_Compare` on
+> two DIFFERENT documents, which every gate had only compared with their own
+> duplicate. Writing the first of those cases showed `cJSON_Compare` doubling
+> its time with each level of object nesting, 6 s at depth 28 and no answer at
+> the depth the parser accepts, in the C and in the port, which had copied it.
+> The port no longer does (DIVERGENCES, `compare-exponential-nesting`;
+> LESSONS #67).]
 
 **Module 15 (`entry-opts`) closed the ratchet** — `cJSON_ParseWithOpts`,
 `cJSON_ParseWithLengthOpts`, `cJSON_PrintBuffered`, `cJSON_PrintPreallocated`,

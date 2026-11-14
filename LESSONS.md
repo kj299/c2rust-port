@@ -2877,3 +2877,114 @@ points.)*
 - **Section amended:** harnesses/supply-chain/run_supply_chain.sh;
   harnesses/supply-chain/deny.template.toml; ports/cjson/check.sh;
   skeleton/crates · Cargo.toml; SECURITY-CHECKLIST · Per release.
+
+---
+
+## 066. The gate audited one lockfile, and the template every port copies ran it on one
+
+- **Date:** 2026-11-14
+- **Codebase:** the Porting Kit's supply-chain harness and CI template, from
+  the lsof line's entry 089
+- **What happened:** `run_supply_chain.sh DIR` ran `cargo audit` and
+  `cargo deny check` in DIR, so it audited DIR's own lockfile and nothing
+  else. A workspace nested under DIR has a lockfile of its own, and cargo-fuzz
+  makes `fuzz/` one. The cJSON gate called the harness a second time for
+  `rust/fuzz` by hand (LESSONS #65), but the CI template, the one a new port
+  copies, ran it once on `.`. The lsof line, bringing #65 over, found the hole
+  live in its port: lsof-rs's CI ran `cargo deny check` at the workspace root
+  only, so its fuzz lockfile (libfuzzer-sys, and the `cc` build script that
+  compiles libFuzzer) had never been read by an audit, and it failed lsof-rs's
+  own policy on NCSA. Two more defects stood behind it. A nested workspace
+  with no `deny.toml` of its own was held to the kit's template instead of the
+  policy its port shipped a directory up, because the harness looked for one
+  in DIR alone. And the template installed both tools with
+  `cargo install cargo-audit cargo-deny`: the newest version of each, its
+  dependencies re-resolved without `--locked`, so the tools judging a port's
+  dependencies were the least pinned code in its job, though #65 had pinned
+  them in this kit's own workflow. Separately, every cJSON gate run printed
+  seven `license-not-encountered` warnings, because the port was held to the
+  template's eight-licence list and uses two.
+- **The rule.** "The dependencies are audited" means every lockfile the
+  repository tracks, found by the gate rather than listed by its caller, and
+  each held to the port's policy. Pin the auditing tools as the dependencies
+  are pinned. And a warning a gate prints on every run is a warning nobody
+  reads: hold the port to a policy trimmed to what it uses, so that one means
+  something changed.
+- **Kit change:** `run_supply_chain.sh` audits every lockfile git tracks under
+  DIR (outside a work tree, every one not under `target/`) and skips a
+  vendored kit's own; holds each to the nearest `deny.toml` from its workspace
+  up to DIR, else the template; fails when it finds none; and ends with the
+  count. Five `--check` fixtures and seven gate-mutation rows pin the listing
+  and the policy search, each shown red under its mutant. The CI template
+  installs both tools as release binaries checked against SHA-256. The
+  template excepts NCSA for `libfuzzer-sys` alone, as the lsof line's copy
+  does, and says to trim the allow-list. The cJSON port has a `deny.toml` of
+  its own (MIT and Apache-2.0, NCSA for libfuzzer-sys alone), its gate prints
+  no warning, and it calls the harness once.
+- **Section amended:** harnesses/supply-chain/run_supply_chain.sh ·
+  port_lockfiles, deny_config, --check, the gate;
+  harnesses/supply-chain/deny.template.toml;
+  harnesses/gate-mutation/mutate_gates.py · MUTATIONS;
+  harnesses/ci/porting-ci.template.yml · supply-chain; ports/cjson/check.sh ·
+  step 5b; ports/cjson/rust/deny.toml; SECURITY-CHECKLIST · Per release;
+  README · harness table.
+
+---
+
+## 067. The mutants for the early modules found four rules no case could see, and a hang the port had copied
+
+- **Date:** 2026-11-14
+- **Codebase:** the cJSON port's `mutants.toml`, extended from the utils rules
+  of LESSONS #61 to modules 1–16
+- **What happened:** the file held the 23 mutants written with the `-cs`
+  modes. It now holds a wrong version of each ledgered divergence family, each
+  reverted to what the C does (NaN to INT_MIN, a setter that writes into any
+  node, children hung on scalars and keys hidden in arrays, a positional write
+  that drops a key, a failed preallocated print that leaves its prefix, the
+  tilde decoder's two C defects), and of 23 ported rules of modules 1–8 and the
+  DOM, with a gate for each matrix `check.sh` compares. Of the 34 new ones, 29
+  died on the first run. One was equivalent: rounding up the colon site's
+  reservation in the preallocated printer can move no failure boundary,
+  because whatever follows a colon reserves more (9,650 runs around the
+  boundaries, port and mutant identical). The other four were rules no case
+  could see. An object nested past the limit: every nesting case nested
+  arrays, and `parse_object` has its own copy of the guard. A double whose
+  15-digit form does not round-trip: the case written for the 17-digit
+  branch, DBL_MAX, never reaches it. A control byte whose escape has hex
+  letters: `\u0001` cannot tell `x` from `X`. And `cJSON_Compare` on two
+  different documents: `dup-eq` and `parent` only ever compare a value with
+  its own duplicate, case-sensitively, so a compare that skipped the array
+  length check passed every gate, though API-COVERAGE listed the function as
+  ported. Writing the first of those cases found more. In `dup-eq`, the
+  1000-deep object timed out on both sides. The C's object compare walks a
+  against b and then b against a, each walk recursing, so each level of
+  nesting doubles its time: 6.3 s at depth 28, a 169-byte document, and no
+  answer at depth 1000 (CWE-407). The port had reproduced it through sixteen
+  modules. And the new cases were seeds, as #62 says every case is: the
+  gate's `dup-eq` fuzz run grew a 20-deep one to 341 levels, timed the C out
+  and failed, because the class is defined by a predicate (any object nested
+  deep enough), and no list of cases can ledger it.
+- **The rule.** A mutant that survives is a rule no case can see, unless it is
+  equivalent; tell which by measuring. A case written for one shape of a rule
+  is not a case for its twin when the twin has its own code. A function
+  compared only with its own copy is compared on its diagonal: put two
+  different inputs through it, under every value of its flag. And a time limit
+  the C cannot meet is a finding about the C, not a case to drop: find out why
+  before taking it out of the matrix.
+- **Kit change:** none beyond the port; the harness held. In the port: 57
+  mutants, every one killed (the equivalent one removed with its measurement,
+  one added for the compare's reused-verdict key); four new matrix cases, and
+  a 20-deep `dup-eq` case in place of the 1000-deep one the C cannot finish;
+  shim `cjson_compare_docs` on both sides, through each library's own exports,
+  and 30 `compare-*` ABI vectors under both flag values; `dom::compare`
+  compares each pair of object nodes once (DIVERGENCES, structural elimination
+  `compare-exponential-nesting`), pinned by two unit tests; and `dup-eq`
+  fuzzes against the corrected oracle, whose ninth correction skips only
+  the second walk's recursion into a pair the first already found equal
+  (cJSON_Compare is symmetric), identical to the pristine C on 20,000 random
+  pairs under both flags.
+- **Section amended:** ports/cjson/mutants.toml; ports/cjson/oracle/gen_corpus.py;
+  ports/cjson/check.sh · step 4; ports/cjson/oracle/make_fixed_core.py;
+  ports/cjson/ffi/shim.c; ports/cjson/ffi/vectors.json;
+  ports/cjson/rust/crates/core/src/dom.rs; ports/cjson/rust/crates/ffi/src/lib.rs;
+  ports/cjson/DIVERGENCES.md; ports/cjson/API-COVERAGE.md; ports/cjson/README.md.

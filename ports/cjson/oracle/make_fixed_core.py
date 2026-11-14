@@ -2,7 +2,7 @@
 """Emit `cJSON_fixed.c` — the vendored cJSON.c with the corrections the port
 makes deliberately, so differential FUZZING has a reference that shares them.
 
-Seven sites, eight corrections:
+Eight sites, nine corrections:
 
   1. `cJSON_CreateNumber`     — no longer converts a NaN to `int`.
   2. `cJSON_SetNumberHelper`  — same NaN fix, AND it no longer writes number
@@ -15,6 +15,9 @@ Seven sites, eight corrections:
      past both of those checks.
   7. `cJSON_ReplaceItemInArray` — no longer replaces an OBJECT member by
      positional index, destroying its key.
+  8. `cJSON_Compare`          — no longer re-walks a pair it has already found
+     equal, which made it 2^depth in object nesting. Its answers do not
+     change; only whether it gives one (see COMPARE_PRISTINE below).
 
 ## 1. The NaN -> int conversion (cJSON.c:2452-2476, and again at :384)
 
@@ -504,6 +507,44 @@ CJSON_PUBLIC(cJSON_bool) cJSON_ReplaceItemInArray(cJSON *array, int which, cJSON
 
 # (what it fixes, pristine text, replacement). Each is asserted to occur EXACTLY
 # once — see main().
+# The NINTH correction, and the first that changes no output: cJSON_Compare's
+# object case walks a's members against b and then b's against a, and each
+# walk recurses, so its time doubles with each level of object nesting (6.3 s at
+# depth 28; at the 1000 the parser accepts, no answer at all). The port compares
+# each pair of object nodes once (DIVERGENCES, structural elimination
+# `compare-exponential-nesting`; LESSONS #67), so on deep objects the pristine
+# oracle times out where the port answers, and a `dup-eq` fuzz run grew a
+# 20-deep seed into 341 levels and reported exactly that. The class is
+# predicate-defined (any object nested deep enough), so it is corrected here.
+#
+# The correction is exact. The first walk compared a_element with the member
+# of b its key finds, get_object_item(b, a_element->string), and found them
+# equal, or the function would have returned. When that member IS b_element,
+# the second walk is about to compare the same pair the other way round, and
+# cJSON_Compare is symmetric (types, compare_double, strcmp, a lockstep array
+# walk, objects both ways), so the call can only say true: it is skipped. Every
+# other pair, as under the case-insensitive flag where x and X find one member,
+# is still compared.
+COMPARE_PRISTINE = """\
+                if (!cJSON_Compare(b_element, a_element, case_sensitive))
+                {
+                    return false;
+                }
+"""
+
+COMPARE_FIXED = """\
+                /* fixed: the first walk already compared a_element with the
+                 * member of b its key finds, and they were equal. If that is
+                 * b_element, this is the same pair the other way round and
+                 * cJSON_Compare is symmetric, so do not recurse into it again:
+                 * doing so made the compare 2^depth in object nesting. */
+                if ((get_object_item(b, a_element->string, case_sensitive) != b_element)
+                    && !cJSON_Compare(b_element, a_element, case_sensitive))
+                {
+                    return false;
+                }
+"""
+
 PATCHES = [
     ("cJSON_CreateNumber's NaN->int conversion", PRISTINE, FIXED),
     (
@@ -536,6 +577,11 @@ PATCHES = [
         REPLACE_ARRAY_PRISTINE,
         REPLACE_ARRAY_FIXED,
     ),
+    (
+        "cJSON_Compare re-walking every pair it has compared, 2^depth",
+        COMPARE_PRISTINE,
+        COMPARE_FIXED,
+    ),
 ]
 
 
@@ -561,7 +607,9 @@ def main():
         " * conversions, cJSON_SetNumberHelper's missing type check, and\n"
         " * cJSON_PrintPreallocated's partial write on failure\n"
         " * (DIVERGENCES.md construct-nan-*, set-nan-*,\n"
-        " * set-*-type-confusion, opts-prealloc-*). */\n"
+        " * set-*-type-confusion, opts-prealloc-*), the parent/seq/place\n"
+        " * container checks, and cJSON_Compare's 2^depth object walk\n"
+        " * (compare-exponential-nesting; no output changes). */\n"
     )
     open(OUT, "w", encoding="utf-8").write(banner + text)
     print(f"wrote {OUT}")

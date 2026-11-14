@@ -59,6 +59,11 @@ MATRIX = [
          mods=("tree",), expect_contains='"k":1'),
     # nesting AT the limit is accepted (depth 1000); 1001 is not (below)
     case("nesting-limit-ok", "print-unformatted", "[" * 1000 + "]" * 1000, 0, mods=("tree",)),
+    # ...for OBJECTS as well: parse_object carries its own copy of the guard,
+    # and with arrays alone an off-by-one in it survived (mutants.toml
+    # `object-nesting-off-by-one`, 2026-11-14).
+    case("nesting-limit-ok-objects", "print-unformatted", '{"a":' * 1000 + "1" + "}" * 1000, 0,
+         mods=("tree",)),
     # trailing garbage is ACCEPTED by cJSON (lax; parses the first value) — a
     # documented candidate divergence, captured here as the C's actual behavior.
     case("trailing-garbage-lax", "print-unformatted", '{"a":1}trailing', 0,
@@ -124,6 +129,13 @@ MATRIX = [
          mods=("scalar",), expect_contains="1.79769313486232e+308"),
     case("dbl-max-reparse-null", "print-unformatted", "1.79769313486232e+308", 0,
          mods=("scalar",), expect_contains="null"),
+    # The %1.17g branch: %1.15g does not round-trip this double, so the C
+    # prints 17 digits. No case reached that branch until 2026-11-14 — DBL_MAX
+    # does not (above: compare_double calls its lossy 15 digits equal) — so a
+    # printer that never took it survived (mutants.toml
+    # `print-number-17-fallback-dropped`).
+    case("num-needs-17-digits", "print-unformatted", "0.12345678901234567", 0,
+         mods=("scalar",), expect_contains="0.12345678901234566"),
 
     # --- string-module additions (all probed against C, 2026-07-25) ---
     case("esc-roundtrip", "print-unformatted", r'"\b\f\n\r\t x \/ \" y"', 0,
@@ -132,6 +144,11 @@ MATRIX = [
          mods=("string",), expect_contains='"a/b"'),
     case("ctrl-reescape", "print-unformatted", r'"\u0001"', 0,
          mods=("string",), expect_contains=r'"\u0001"'),
+    # ...with hex LETTERS in the escape, which the C prints lowercase (`%04x`):
+    # `\u0001` alone cannot tell `{:04x}` from `{:04X}` (mutants.toml
+    # `print-string-hex-uppercase`, 2026-11-14).
+    case("ctrl-hex-letters-reescape", "print-unformatted", r'"\u001f\u000b\u001a"', 0,
+         mods=("string",), expect_contains=r'"\u001f\u000b\u001a"'),
     # parse_hex4 returns 0 on INVALID hex → \uZZZZ becomes a NUL, and the
     # printer (walking a C string) truncates there: "a\uZZZZb" prints "a"
     case("invalid-hex-as-nul", "print-unformatted", r'"a\uZZZZb"', 0,
@@ -173,6 +190,8 @@ MATRIX = [
     # CVE-class regressions (FLAW-SCAN.md):
     case("cve-lone-surrogate", "print-unformatted", r'"\uD800"', 1, mods=("string",)),   # a167d9e OOB-read class
     case("cve-nesting-1001", "print-unformatted", "[" * 1001 + "]" * 1001, 1, mods=("tree",)),  # stack-overflow guard
+    case("cve-nesting-1001-objects", "print-unformatted", '{"a":' * 1001 + "1" + "}" * 1001, 1,
+         mods=("tree",)),  # the same guard, parse_object's copy
 ]
 
 # ---- hidden acceptance holdout (different inputs, same spirit) --------------
@@ -225,7 +244,17 @@ def main():
     # object keys (first-match can't resolve the 2nd key). Discovered by this
     # matrix's own C-baseline validation. The Rust must MATCH C's true/false,
     # which diff_run checks; asserting "true" here would be wrong.
-    dupeq = _remode(MATRIX, "dup-eq")
+    #
+    # Not every parse case can be compared: the C's cJSON_Compare is 2^depth in
+    # OBJECT nesting (DIVERGENCES, structural elimination
+    # `compare-exponential-nesting`), so at the depth `nesting-limit-ok-objects`
+    # nests it does not finish and there is no answer to compare the port's
+    # with. Depth 20 the C answers in milliseconds, so nested objects stay on
+    # the compared contract at a depth both sides can reach (LESSONS #67).
+    c_compare_does_not_finish = {"nesting-limit-ok-objects"}
+    dupeq = _remode([c for c in MATRIX if c["name"] not in c_compare_does_not_finish], "dup-eq")
+    dupeq.append({"name": "dup-eq-nesting-20-objects", "args": ["dup-eq"],
+                  "stdin": '{"a":' * 20 + "1" + "}" * 20, "expect_rc": 0, "mods": ["tree"]})
     with open(os.path.join(HERE, "matrix-dup.json"), "w") as f:
         json.dump(dup, f, indent=2)
     with open(os.path.join(HERE, "matrix-dupeq.json"), "w") as f:

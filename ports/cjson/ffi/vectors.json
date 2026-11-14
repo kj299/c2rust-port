@@ -1026,5 +1026,575 @@
         "value": 512
       }
     ]
+  },
+  {
+    "name": "compare-equal-object",
+    "function": "cjson_compare_docs",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "{\"a\":1,\"b\":[true,null]}"
+      },
+      {
+        "type": "cstr",
+        "value": "{\"a\":1,\"b\":[true,null]}"
+      },
+      {
+        "type": "int",
+        "value": 1
+      }
+    ]
+  },
+  {
+    "name": "compare-array-longer",
+    "function": "cjson_compare_docs",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "[1,2]"
+      },
+      {
+        "type": "cstr",
+        "value": "[1,2,3]"
+      },
+      {
+        "type": "int",
+        "value": 1
+      }
+    ]
+  },
+  {
+    "name": "compare-array-shorter",
+    "function": "cjson_compare_docs",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "[1,2,3]"
+      },
+      {
+        "type": "cstr",
+        "value": "[1,2]"
+      },
+      {
+        "type": "int",
+        "value": 1
+      }
+    ]
+  },
+  {
+    "name": "compare-array-order",
+    "function": "cjson_compare_docs",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "[1,2]"
+      },
+      {
+        "type": "cstr",
+        "value": "[2,1]"
+      },
+      {
+        "type": "int",
+        "value": 1
+      }
+    ]
+  },
+  {
+    "name": "compare-object-order-independent",
+    "function": "cjson_compare_docs",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "{\"a\":1,\"b\":2}"
+      },
+      {
+        "type": "cstr",
+        "value": "{\"b\":2,\"a\":1}"
+      },
+      {
+        "type": "int",
+        "value": 1
+      }
+    ]
+  },
+  {
+    "name": "compare-object-subset",
+    "function": "cjson_compare_docs",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "{\"a\":1}"
+      },
+      {
+        "type": "cstr",
+        "value": "{\"a\":1,\"b\":2}"
+      },
+      {
+        "type": "int",
+        "value": 1
+      }
+    ]
+  },
+  {
+    "name": "compare-object-superset",
+    "function": "cjson_compare_docs",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "{\"a\":1,\"b\":2}"
+      },
+      {
+        "type": "cstr",
+        "value": "{\"a\":1}"
+      },
+      {
+        "type": "int",
+        "value": 1
+      }
+    ]
+  },
+  {
+    "name": "compare-key-case",
+    "function": "cjson_compare_docs",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "{\"a\":1}"
+      },
+      {
+        "type": "cstr",
+        "value": "{\"A\":1}"
+      },
+      {
+        "type": "int",
+        "value": 1
+      }
+    ]
+  },
+  {
+    "name": "compare-key-case-ci",
+    "function": "cjson_compare_docs",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "{\"a\":1}"
+      },
+      {
+        "type": "cstr",
+        "value": "{\"A\":1}"
+      },
+      {
+        "type": "int",
+        "value": 0
+      }
+    ]
+  },
+  {
+    "name": "compare-key-case-nested",
+    "function": "cjson_compare_docs",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "{\"A\":{\"B\":1}}"
+      },
+      {
+        "type": "cstr",
+        "value": "{\"a\":{\"b\":1}}"
+      },
+      {
+        "type": "int",
+        "value": 1
+      }
+    ]
+  },
+  {
+    "name": "compare-key-case-nested-ci",
+    "function": "cjson_compare_docs",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "{\"A\":{\"B\":1}}"
+      },
+      {
+        "type": "cstr",
+        "value": "{\"a\":{\"b\":1}}"
+      },
+      {
+        "type": "int",
+        "value": 0
+      }
+    ]
+  },
+  {
+    "name": "compare-ci-collision",
+    "function": "cjson_compare_docs",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "{\"x\":{}}"
+      },
+      {
+        "type": "cstr",
+        "value": "{\"x\":{},\"X\":{\"y\":1}}"
+      },
+      {
+        "type": "int",
+        "value": 0
+      }
+    ]
+  },
+  {
+    "name": "compare-ci-collision-cs",
+    "function": "cjson_compare_docs",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "{\"x\":{}}"
+      },
+      {
+        "type": "cstr",
+        "value": "{\"x\":{},\"X\":{\"y\":1}}"
+      },
+      {
+        "type": "int",
+        "value": 1
+      }
+    ]
+  },
+  {
+    "name": "compare-ci-collision-reversed",
+    "function": "cjson_compare_docs",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "{\"x\":{},\"X\":{\"y\":1}}"
+      },
+      {
+        "type": "cstr",
+        "value": "{\"x\":{}}"
+      },
+      {
+        "type": "int",
+        "value": 0
+      }
+    ]
+  },
+  {
+    "name": "compare-ci-collision-reversed-cs",
+    "function": "cjson_compare_docs",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "{\"x\":{},\"X\":{\"y\":1}}"
+      },
+      {
+        "type": "cstr",
+        "value": "{\"x\":{}}"
+      },
+      {
+        "type": "int",
+        "value": 1
+      }
+    ]
+  },
+  {
+    "name": "compare-dup-keys-vs-single",
+    "function": "cjson_compare_docs",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "{\"a\":1,\"a\":2}"
+      },
+      {
+        "type": "cstr",
+        "value": "{\"a\":1}"
+      },
+      {
+        "type": "int",
+        "value": 1
+      }
+    ]
+  },
+  {
+    "name": "compare-dup-keys-vs-single-ci",
+    "function": "cjson_compare_docs",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "{\"a\":1,\"a\":2}"
+      },
+      {
+        "type": "cstr",
+        "value": "{\"a\":1}"
+      },
+      {
+        "type": "int",
+        "value": 0
+      }
+    ]
+  },
+  {
+    "name": "compare-number-epsilon",
+    "function": "cjson_compare_docs",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "0.30000000000000004"
+      },
+      {
+        "type": "cstr",
+        "value": "0.3"
+      },
+      {
+        "type": "int",
+        "value": 1
+      }
+    ]
+  },
+  {
+    "name": "compare-number-differ",
+    "function": "cjson_compare_docs",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "1"
+      },
+      {
+        "type": "cstr",
+        "value": "2"
+      },
+      {
+        "type": "int",
+        "value": 1
+      }
+    ]
+  },
+  {
+    "name": "compare-int-vs-double",
+    "function": "cjson_compare_docs",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "1"
+      },
+      {
+        "type": "cstr",
+        "value": "1.0"
+      },
+      {
+        "type": "int",
+        "value": 1
+      }
+    ]
+  },
+  {
+    "name": "compare-type-number-string",
+    "function": "cjson_compare_docs",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "1"
+      },
+      {
+        "type": "cstr",
+        "value": "\"1\""
+      },
+      {
+        "type": "int",
+        "value": 1
+      }
+    ]
+  },
+  {
+    "name": "compare-type-true-number",
+    "function": "cjson_compare_docs",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "true"
+      },
+      {
+        "type": "cstr",
+        "value": "1"
+      },
+      {
+        "type": "int",
+        "value": 1
+      }
+    ]
+  },
+  {
+    "name": "compare-string-nul-truncated",
+    "function": "cjson_compare_docs",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "\"a\\u0000b\""
+      },
+      {
+        "type": "cstr",
+        "value": "\"a\\u0000c\""
+      },
+      {
+        "type": "int",
+        "value": 1
+      }
+    ]
+  },
+  {
+    "name": "compare-inf-never-equal",
+    "function": "cjson_compare_docs",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "1e999"
+      },
+      {
+        "type": "cstr",
+        "value": "1e999"
+      },
+      {
+        "type": "int",
+        "value": 1
+      }
+    ]
+  },
+  {
+    "name": "compare-empty-object-vs-array",
+    "function": "cjson_compare_docs",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "{}"
+      },
+      {
+        "type": "cstr",
+        "value": "[]"
+      },
+      {
+        "type": "int",
+        "value": 1
+      }
+    ]
+  },
+  {
+    "name": "compare-empty-arrays",
+    "function": "cjson_compare_docs",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "[]"
+      },
+      {
+        "type": "cstr",
+        "value": "[]"
+      },
+      {
+        "type": "int",
+        "value": 1
+      }
+    ]
+  },
+  {
+    "name": "compare-nested-20-equal",
+    "function": "cjson_compare_docs",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":1}}}}}}}}}}}}}}}}}}}}"
+      },
+      {
+        "type": "cstr",
+        "value": "{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":1}}}}}}}}}}}}}}}}}}}}"
+      },
+      {
+        "type": "int",
+        "value": 1
+      }
+    ]
+  },
+  {
+    "name": "compare-nested-20-differ",
+    "function": "cjson_compare_docs",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":1}}}}}}}}}}}}}}}}}}}}"
+      },
+      {
+        "type": "cstr",
+        "value": "{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":2}}}}}}}}}}}}}}}}}}}}"
+      },
+      {
+        "type": "int",
+        "value": 1
+      }
+    ]
+  },
+  {
+    "name": "compare-nested-20-differ-ci",
+    "function": "cjson_compare_docs",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":1}}}}}}}}}}}}}}}}}}}}"
+      },
+      {
+        "type": "cstr",
+        "value": "{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":2}}}}}}}}}}}}}}}}}}}}"
+      },
+      {
+        "type": "int",
+        "value": 0
+      }
+    ]
+  },
+  {
+    "name": "compare-parse-failure",
+    "function": "cjson_compare_docs",
+    "returns": "int",
+    "args": [
+      {
+        "type": "cstr",
+        "value": "["
+      },
+      {
+        "type": "cstr",
+        "value": "[]"
+      },
+      {
+        "type": "int",
+        "value": 1
+      }
+    ]
   }
 ]

@@ -23,10 +23,18 @@ allow-wildcard-paths = true
 
 [licenses]
 # Allow-list, not deny-list: you must positively approve every license present.
+# This list is a starting point. cargo-deny warns about each licence on it that
+# no crate uses (`license-not-encountered`): trim it to what your lockfiles use,
+# and the warnings stop. A port's own deny.toml beside its Cargo.toml is the
+# policy the gate holds every lockfile under it to (LESSONS #66).
+allow = ["MIT", "Apache-2.0", "Apache-2.0 WITH LLVM-exception", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Unicode-3.0"]
 # NCSA (University of Illinois/NCSA, permissive, OSI-approved) is LLVM's
 # libFuzzer, which `libfuzzer-sys` vendors: every cargo-fuzz target a port builds
-# for CLAUDE.md's "no panic on input" control carries it.
-allow = ["MIT", "Apache-2.0", "Apache-2.0 WITH LLVM-exception", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Unicode-3.0", "NCSA"]
+# for CLAUDE.md's "no panic on input" control carries it. Excepted for that one
+# crate, not allowed for all, so no other crate arrives under it unreviewed.
+exceptions = [
+    { allow = ["NCSA"], crate = "libfuzzer-sys" },
+]
 confidence-threshold = 0.9
 
 [sources]

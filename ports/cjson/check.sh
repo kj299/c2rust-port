@@ -324,9 +324,16 @@ bash "$HERE/oracle/build_fixed.sh" > /dev/null
     --args minify --matrix "$HERE/oracle/matrix.json" \
     --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
     --json > "$HERE/reports/fuzz/entry-minify.json"
-# dom mode: fuzz the Compare+Duplicate invariant (dup-eq)
+# dom mode: fuzz the Compare+Duplicate invariant (dup-eq) against the CORRECTED
+# oracle. The C's cJSON_Compare is 2^depth in object nesting (LESSONS #67), and
+# the class is predicate-defined: every case is a seed (LESSONS #62), a
+# mutation that nests objects deep enough makes the pristine C time out where
+# the port answers, and the first run seeded with matrix.json's 1000-deep
+# objects grew a 20-deep one into 341 levels and failed on exactly that. Its
+# ninth correction (make_fixed_core.py) removes only the re-walk, so the
+# answers are the pristine C's (20,000 random pairs, both flags, identical).
 "$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
-    --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
+    --oracle "$HERE/oracle/cjson_oracle_fixed" --rust "$RUST_DRIVER" \
     --args dup-eq --matrix "$HERE/oracle/matrix.json" \
     --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
     --json > "$HERE/reports/fuzz/dom.json"
@@ -601,11 +608,11 @@ echo "===== 5b. supply-chain — the dependency surface ====="
 # the kit's deny template did not parse, and the port's crates and the fuzz
 # crate each needed a manifest fix. Locally a missing tool still SKIPs, loudly.
 if command -v cargo-audit >/dev/null 2>&1 && command -v cargo-deny >/dev/null 2>&1; then
+  # One call: the harness audits every lockfile under rust/, the fuzz crate's
+  # too (its own workspace, and the port's only REGISTRY dependencies), each
+  # held to rust/deny.toml (LESSONS #66). This step used to name the fuzz
+  # workspace by hand, which a port copied from the CI template did not.
   bash "$KIT/harnesses/supply-chain/run_supply_chain.sh" "$HERE/rust"
-  # The fuzz crate is its own workspace with its own Cargo.lock — and the
-  # port's only REGISTRY dependencies (libfuzzer-sys and what it pulls in), so
-  # it is audited too rather than left outside the gate.
-  bash "$KIT/harnesses/supply-chain/run_supply_chain.sh" "$HERE/rust/fuzz"
   echo "supply-chain: dependency audit clean"
 else
   echo "SKIP  supply-chain: cargo-audit/cargo-deny absent — the dependency audit"
