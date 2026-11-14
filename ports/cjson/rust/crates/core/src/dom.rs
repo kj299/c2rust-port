@@ -362,22 +362,46 @@ macro_rules! is_variant {
     };
 }
 
-is_variant!(/// `cJSON_IsNull`
-            is_null, Value::Null);
-is_variant!(/// `cJSON_IsFalse`
-            is_false, Value::False);
-is_variant!(/// `cJSON_IsTrue`
-            is_true, Value::True);
-is_variant!(/// `cJSON_IsNumber`
-            is_number, Value::Number(_));
-is_variant!(/// `cJSON_IsString`
-            is_string, Value::String(_));
-is_variant!(/// `cJSON_IsRaw`
-            is_raw, Value::Raw(_));
-is_variant!(/// `cJSON_IsArray`
-            is_array, Value::Array(_));
-is_variant!(/// `cJSON_IsObject`
-            is_object, Value::Object(_));
+is_variant!(
+    /// `cJSON_IsNull`
+    is_null,
+    Value::Null
+);
+is_variant!(
+    /// `cJSON_IsFalse`
+    is_false,
+    Value::False
+);
+is_variant!(
+    /// `cJSON_IsTrue`
+    is_true,
+    Value::True
+);
+is_variant!(
+    /// `cJSON_IsNumber`
+    is_number,
+    Value::Number(_)
+);
+is_variant!(
+    /// `cJSON_IsString`
+    is_string,
+    Value::String(_)
+);
+is_variant!(
+    /// `cJSON_IsRaw`
+    is_raw,
+    Value::Raw(_)
+);
+is_variant!(
+    /// `cJSON_IsArray`
+    is_array,
+    Value::Array(_)
+);
+is_variant!(
+    /// `cJSON_IsObject`
+    is_object,
+    Value::Object(_)
+);
 
 /// `cJSON_IsInvalid` — `cJSON_Invalid` is type 0, which no live `Value` can be:
 /// the enum makes the invalid state unrepresentable, so this is always false.
