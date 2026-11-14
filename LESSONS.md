@@ -2988,3 +2988,32 @@ points.)*
   ports/cjson/ffi/shim.c; ports/cjson/ffi/vectors.json;
   ports/cjson/rust/crates/core/src/dom.rs; ports/cjson/rust/crates/ffi/src/lib.rs;
   ports/cjson/DIVERGENCES.md; ports/cjson/API-COVERAGE.md; ports/cjson/README.md.
+
+---
+
+## 068. A toolchain nobody chose changed what the gate accepted
+
+- **Date:** 2026-11-14
+- **Codebase:** this repository's CI (`check-kit.yml`) and every Rust
+  workspace in it
+- **What happened:** CI ran `rustup toolchain install stable`, so it built
+  with whichever stable release was current. Rust 1.100 shipped on
+  2026-11-09, and its rustfmt lays out a macro call whose first argument is a
+  doc comment one argument per line. The next CI run failed
+  `cargo fmt --check` on eight `is_variant!` calls in the cJSON port's
+  `dom.rs` that no change had touched, and `main` failed it the same way. The
+  pull request that hit it carried the reformat. Nothing in the repository
+  had changed; the gate had.
+- **The rule.** A gate's verdict depends on its tools, so pin them like any
+  other input. A new compiler, formatter or lint set is a change to the gate:
+  make it a reviewed edit that comes with the reformat and lint fixes it
+  needs, never something a scheduled release does to every open branch.
+- **Kit change:** `rust-toolchain.toml` at the root pins stable 1.100.0, with
+  clippy and rustfmt, for the skeleton, `examples/adler32` and `ports/cjson`.
+  `check-kit.yml` reads the channel from that file and installs it as its
+  first step: `make check-kit` builds the skeleton whenever cargo exists, so
+  stage 1 was never toolchain-free. The nightly for miri, AddressSanitizer
+  and cargo-fuzz is still the current one, because those run as
+  `cargo +nightly`, which overrides the file.
+- **Section amended:** rust-toolchain.toml; .github/workflows/check-kit.yml ·
+  gates.

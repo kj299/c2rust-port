@@ -1,0 +1,18 @@
+# The stable toolchain every Rust workspace in this repo builds, formats and
+# lints with: the skeleton, examples/adler32 and ports/cjson, locally and in
+# CI. CI installs the channel named here (check-kit.yml reads this file), so
+# a new stable release cannot change what `cargo fmt --check` or clippy
+# accept until someone edits this line on purpose. Until 2026-11-14 CI took
+# whatever `stable` was current, and Rust 1.100's rustfmt failed `main` on
+# formatting nobody had touched (LESSONS #68).
+#
+# The nightly used for miri, AddressSanitizer and cargo-fuzz is NOT pinned
+# here: those run as `cargo +nightly ...`, which overrides this file.
+#
+# To move: change the channel, run `cargo fmt --all` and
+# `cargo clippy --all-targets -- -D warnings` in each workspace, and commit
+# the result with the bump.
+[toolchain]
+channel = "1.100.0"
+components = ["clippy", "rustfmt"]
+profile = "minimal"

@@ -71,7 +71,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ---- stage 1: no toolchain required, so it runs before we install one --
+      # The stable toolchain is the one rust-toolchain.toml pins, read from the
+      # file so the two cannot disagree. This step was `rustup toolchain install
+      # stable` in stage 2: whatever stable was current, so Rust 1.100's rustfmt
+      # failed `main` on formatting nobody had touched (LESSONS #68). It runs
+      # first because stage 1 is not toolchain-free after all: check-kit builds
+      # and lints the skeleton whenever cargo is on PATH, and with the pin in
+      # place cargo needs the pinned toolchain installed.
+      - name: install the pinned stable toolchain (rust-toolchain.toml)
+        run: |
+          set -euo pipefail
+          channel=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)
+          [ -n "$channel" ] || { echo "::error::no channel in rust-toolchain.toml"; exit 1; }
+          rustup toolchain install "$channel" --profile minimal --component clippy,rustfmt --no-self-update
+          rustup default "$channel"
+          cargo --version && rustfmt --version
+
+      # ---- stage 1: no toolchain required (though check-kit uses one if present) --
       # make + python3 (3.12) are preinstalled on the ubuntu runner. Runs every
       # harness self-test, the doc-flag drift check, and the skills-integrity
       # check. Ordered first so the cheapest and most frequently broken gate is
@@ -79,10 +95,7 @@ jobs:
       - run: python3 --version && make --version | head -1
       - run: make check-kit
 
-      # ---- stage 2: stable toolchain, shared by everything below -------------
-      # rustup + a stable toolchain are preinstalled; ensure the components.
-      - run: rustup toolchain install stable --profile minimal --component clippy,rustfmt --no-self-update
-      - run: rustup default stable
+      # ---- stage 2: the pinned stable toolchain, installed above -------------
 
       # The skeleton must pass the very lints it configures (workspace [lints]:
       # arithmetic_side_effects, cast_possible_truncation, the unsafe docs) or
