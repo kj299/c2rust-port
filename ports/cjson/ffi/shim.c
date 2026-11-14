@@ -132,3 +132,18 @@ int cjson_parse_seq(const char *first, const char *second, int second_is_null,
     free(s2);
     return len;
 }
+
+/* cJSON_Compare on two documents parsed separately, under the given flag: the
+ * export's whole contract. The driver modes that call it (`dup-eq`, `parent`)
+ * only ever compare a value with its own duplicate, and only case-sensitively,
+ * so until 2026-11-14 two different documents were never compared (a mutant
+ * that skipped the array length check survived every gate, LESSONS #67).
+ * Returns 1 or 0, or -1 when either document does not parse. */
+int cjson_compare_docs(const char *a, const char *b, int case_sensitive) {
+    cJSON *x = cJSON_Parse(a);
+    cJSON *y = cJSON_Parse(b);
+    int r = (x != NULL && y != NULL) ? (cJSON_Compare(x, y, case_sensitive) ? 1 : 0) : -1;
+    cJSON_Delete(x);
+    cJSON_Delete(y);
+    return r;
+}

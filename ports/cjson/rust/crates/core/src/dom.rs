@@ -18,6 +18,8 @@
 //! (`create_reference`/`cJSON_IsReference`) is the one DOM feature deferred to
 //! the FFI increment, where the C-ABI aliasing semantics actually matter.
 
+use std::collections::HashMap;
+
 use crate::num::compare_double;
 use crate::value::{Number, Value};
 
@@ -835,8 +837,29 @@ fn strcmp_eq(a: &[u8], b: &[u8]) -> bool {
 /// `compare_double` (epsilon), strings by NUL-truncated byte compare, objects
 /// order-INDEPENDENTLY and bidirectionally (every a-key in b AND every b-key in
 /// a — the C's "twice" subset guard), arrays elementwise same-length.
+///
+/// **The verdict is the C's; the running time is not** (DIVERGENCES,
+/// structural elimination `compare-exponential-nesting`; CWE-407). The C's
+/// object case walks a's members against b and then b's against a, and each
+/// walk recurses, so a member object is compared twice, its member four times:
+/// 2^depth. Measured on the C oracle in `dup-eq` mode, each level of nesting
+/// doubles the time, 6 s at depth 28, about 170 bytes of input; at depth 1000,
+/// which the parser accepts, it does not finish. The port reproduced that
+/// faithfully until 2026-11-14 (LESSONS #67). Every pair of object nodes is now compared
+/// once and its verdict reused: a pure function of two subtrees that nothing
+/// mutates during the call, so no verdict can change, and the work is one
+/// comparison per pair the C would visit.
 #[must_use]
 pub fn compare(a: &Value, b: &Value, case_sensitive: bool) -> bool {
+    compare_in(a, b, case_sensitive, &mut HashMap::new())
+}
+
+/// The verdicts already reached, by the ADDRESSES of the two object nodes
+/// compared, in order. Every node lives in one of the two trees the caller
+/// lent `compare`, so an address names the same node for the whole call.
+type Seen = HashMap<(*const Value, *const Value), bool>;
+
+fn compare_in(a: &Value, b: &Value, case_sensitive: bool, seen: &mut Seen) -> bool {
     match (a, b) {
         (Value::Null, Value::Null) | (Value::True, Value::True) | (Value::False, Value::False) => {
             true
@@ -848,19 +871,25 @@ pub fn compare(a: &Value, b: &Value, case_sensitive: bool) -> bool {
                 && xs
                     .iter()
                     .zip(ys)
-                    .all(|(x, y)| compare(x, y, case_sensitive))
+                    .all(|(x, y)| compare_in(x, y, case_sensitive, seen))
         }
         (Value::Object(ae), Value::Object(be)) => {
+            let key = (a as *const Value, b as *const Value);
+            if let Some(&known) = seen.get(&key) {
+                return known;
+            }
             // Bidirectional key subset check (the C's "doing this twice" guard):
             // every a-entry has a matching b-entry AND vice-versa, resolved by
             // get_object_item's first-match rule.
-            let subset = |xs: &[(Vec<u8>, Value)], other: &Value| {
+            let subset = |xs: &[(Vec<u8>, Value)], other: &Value, seen: &mut Seen| {
                 xs.iter().all(|(k, xv)| {
                     get_object_item(other, k, case_sensitive)
-                        .is_some_and(|ov| compare(xv, ov, case_sensitive))
+                        .is_some_and(|ov| compare_in(xv, ov, case_sensitive, seen))
                 })
             };
-            subset(ae, b) && subset(be, a)
+            let verdict = subset(ae, b, seen) && subset(be, a, seen);
+            seen.insert(key, verdict);
+            verdict
         }
         _ => false, // differing types
     }
@@ -1005,6 +1034,61 @@ mod tests {
         //       match, so the second `"a"` can't find its partner → FALSE.
         let dk = parse(br#"{"a":1,"a":2}"#);
         assert!(!compare(&dk, &duplicate(&dk), true));
+    }
+
+    /// CWE-407: the C's object compare is 2^depth (DIVERGENCES, structural
+    /// elimination `compare-exponential-nesting`). Nesting the parser accepts
+    /// and the C cannot compare in any time a caller would wait must finish
+    /// here, with the verdict the C would reach.
+    #[test]
+    fn compare_is_not_exponential_in_object_nesting() {
+        // Under miri, 40 levels: 2^40 re-walks would not finish either, so the
+        // smaller depth proves the same thing at an interpreter's speed.
+        let (depth, wide_depth) = if cfg!(miri) { (40, 20) } else { (1000, 200) };
+        // The parser and the compare each recurse once per level, and an
+        // unoptimized AddressSanitizer build's frames overflow a test
+        // thread's default 2 MiB at depth 1000 (in `parse_object`, before
+        // `compare` is reached), so the work runs on a thread with room for it.
+        let worker = std::thread::Builder::new()
+            .stack_size(256 << 20)
+            .spawn(move || {
+                let deep = |n: usize, leaf: &str| {
+                    parse(format!("{}{}{}", r#"{"a":"#.repeat(n), leaf, "}".repeat(n)).as_bytes())
+                };
+                let started = std::time::Instant::now();
+                let x = deep(depth, "1");
+                assert!(compare(&x, &duplicate(&x), true));
+                assert!(!compare(&x, &deep(depth, "2"), true));
+                // two members a level, so each walk has two subtrees to revisit
+                let wide = parse(
+                    format!(
+                        "{}{}{}",
+                        r#"{"a":1,"b":"#.repeat(wide_depth),
+                        "0",
+                        "}".repeat(wide_depth)
+                    )
+                    .as_bytes(),
+                );
+                assert!(compare(&wide, &duplicate(&wide), false));
+                if !cfg!(miri) {
+                    assert!(started.elapsed() < std::time::Duration::from_secs(30));
+                }
+            })
+            .expect("a thread to compare on");
+        worker.join().expect("the deep compare finished");
+    }
+
+    /// The reused verdict is keyed by BOTH nodes. Under the case-insensitive
+    /// flag `x` and `X` find the same member of `a`, so the b-to-a walk asks
+    /// about two different pairs that share a node: reusing the first pair's
+    /// verdict for the second would answer true.
+    #[test]
+    fn compare_reuses_a_verdict_only_for_the_same_pair() {
+        let a = parse(br#"{"x":{}}"#);
+        let b = parse(br#"{"x":{},"X":{"y":1}}"#);
+        assert!(!compare(&a, &b, false));
+        assert!(!compare(&b, &a, false));
+        assert!(compare(&a, &parse(br#"{"X":{}}"#), false));
     }
 
     /// The port refuses a non-container parent. **The C does not** — probed

@@ -14,8 +14,11 @@
 # matrix cannot see, and hide exactly the hole this file exists to find.
 #
 # Started 2026-10-17 with the change that put the six `-cs` utils modes,
-# cJSON_Parse and cJSON_GetErrorPtr on the compared contract; earlier modules'
-# rules are not yet here.
+# cJSON_Parse and cJSON_GetErrorPtr on the compared contract. On 2026-11-14
+# the earlier modules' rules joined them: every ledgered divergence family
+# reverted to what the C does, and a wrong version of the ported rules each
+# of modules 1-8 and the DOM modules has a case for, with a gate per matrix
+# that check.sh compares.
 
 [run]
 dir = "."
@@ -47,6 +50,86 @@ name = "abi-differential"
 cmd = ["python3", "../../harnesses/library-differential/lib_diff.py",
        "--c-lib", "ffi/libcjson_c.so", "--rust-lib", "rust/target/release/libcjson_rs.so",
        "--vectors", "ffi/vectors.json", "--ledger", "DIVERGENCES.md"]
+infra = [2]
+timeout = 300
+
+[[run.gate]]
+name = "ported-differential"
+cmd = ["python3", "../../harnesses/differential/diff_run.py",
+       "--oracle", "oracle/cjson_oracle", "--rust", "rust/target/release/rjson_driver",
+       "--matrix", "oracle/matrix-ported.json", "--ledger", "DIVERGENCES.md"]
+infra = [2]
+timeout = 300
+
+[[run.gate]]
+name = "dup-differential"
+cmd = ["python3", "../../harnesses/differential/diff_run.py",
+       "--oracle", "oracle/cjson_oracle", "--rust", "rust/target/release/rjson_driver",
+       "--matrix", "oracle/matrix-dup.json", "--ledger", "DIVERGENCES.md"]
+infra = [2]
+timeout = 300
+
+[[run.gate]]
+name = "dupeq-differential"
+cmd = ["python3", "../../harnesses/differential/diff_run.py",
+       "--oracle", "oracle/cjson_oracle", "--rust", "rust/target/release/rjson_driver",
+       "--matrix", "oracle/matrix-dupeq.json", "--ledger", "DIVERGENCES.md"]
+infra = [2]
+timeout = 300
+
+[[run.gate]]
+name = "builder-differential"
+cmd = ["python3", "../../harnesses/differential/diff_run.py",
+       "--oracle", "oracle/cjson_oracle", "--rust", "rust/target/release/rjson_driver",
+       "--matrix", "oracle/matrix-builder.json", "--ledger", "DIVERGENCES.md"]
+infra = [2]
+timeout = 300
+
+[[run.gate]]
+name = "access-differential"
+cmd = ["python3", "../../harnesses/differential/diff_run.py",
+       "--oracle", "oracle/cjson_oracle", "--rust", "rust/target/release/rjson_driver",
+       "--matrix", "oracle/matrix-access.json", "--ledger", "DIVERGENCES.md"]
+infra = [2]
+timeout = 300
+
+[[run.gate]]
+name = "construct-differential"
+cmd = ["python3", "../../harnesses/differential/diff_run.py",
+       "--oracle", "oracle/cjson_oracle", "--rust", "rust/target/release/rjson_driver",
+       "--matrix", "oracle/matrix-construct.json", "--ledger", "DIVERGENCES.md"]
+infra = [2]
+timeout = 300
+
+[[run.gate]]
+name = "set-differential"
+cmd = ["python3", "../../harnesses/differential/diff_run.py",
+       "--oracle", "oracle/cjson_oracle", "--rust", "rust/target/release/rjson_driver",
+       "--matrix", "oracle/matrix-set.json", "--ledger", "DIVERGENCES.md"]
+infra = [2]
+timeout = 300
+
+[[run.gate]]
+name = "seq-differential"
+cmd = ["python3", "../../harnesses/differential/diff_run.py",
+       "--oracle", "oracle/cjson_oracle", "--rust", "rust/target/release/rjson_driver",
+       "--matrix", "oracle/matrix-seq.json", "--ledger", "DIVERGENCES.md"]
+infra = [2]
+timeout = 300
+
+[[run.gate]]
+name = "place-differential"
+cmd = ["python3", "../../harnesses/differential/diff_run.py",
+       "--oracle", "oracle/cjson_oracle", "--rust", "rust/target/release/rjson_driver",
+       "--matrix", "oracle/matrix-place.json", "--ledger", "DIVERGENCES.md"]
+infra = [2]
+timeout = 300
+
+[[run.gate]]
+name = "parent-differential"
+cmd = ["python3", "../../harnesses/differential/diff_run.py",
+       "--oracle", "oracle/cjson_oracle", "--rust", "rust/target/release/rjson_driver",
+       "--matrix", "oracle/matrix-parent.json", "--ledger", "DIVERGENCES.md"]
 infra = [2]
 timeout = 300
 
@@ -245,3 +328,286 @@ rule = "a value replaces every duplicate, merged into the first (utils-merge-dup
 file = "rust/crates/core/src/utils.rs"
 old = "                .map(|pos| obj.remove(pos).1);\n            obj.retain(|(k, _)| !key_matches(k, key, cs));\n"
 new = "                .map(|pos| obj.remove(pos).1);\n"
+
+# ---- ledgered divergences of modules 6-16: each one reverted to the C (2026-11-14) ----
+
+[[mutant]]
+name = "tilde-one-written-one-ahead"
+rule = "a `~1` escape decodes to `/` at the key's own position (utils-tilde-add: the C writes `decoded_string[1]`)"
+[[mutant.edit]]
+file = "rust/crates/core/src/utils.rs"
+old = "                Some(b'1') => buf[d] = b'/',"
+new = "                Some(b'1') => buf[d.saturating_add(1)] = b'/',"
+
+[[mutant]]
+name = "tilde-decode-no-shift"
+rule = "the bytes after an escape shift down to close its gap (utils-tilde-add0, utils-tilde-remove: the C never copies them)"
+[[mutant.edit]]
+file = "rust/crates/core/src/utils.rs"
+old = "        } else {\n            buf[d] = buf[s];\n        }\n        d = d.saturating_add(1);"
+new = "        }\n        d = d.saturating_add(1);"
+
+[[mutant]]
+name = "nan-valueint-int-min"
+rule = "a NaN's valueint is the defined 0, not x86-64's INT_MIN (construct-nan-*, set-nan-*: LEDGER-STALE if reverted)"
+[[mutant.edit]]
+file = "rust/crates/core/src/dom.rs"
+old = "        // NaN lands here and `as` gives 0 \u2014 see the divergence note above.\n        d as i32"
+new = "        // NaN lands here and `as` gives 0 \u2014 see the divergence note above.\n        if d.is_nan() { i32::MIN } else { d as i32 }"
+
+[[mutant]]
+name = "set-number-onto-any-node"
+rule = "SetNumberValue leaves a node that is not a number alone (set-*-target-type-confusion)"
+[[mutant.edit]]
+file = "rust/crates/core/src/dom.rs"
+old = "    if matches!(v, Value::Number(_)) {\n        *v = number(d);\n    }\n    d"
+new = "    *v = number(d);\n    d"
+
+[[mutant]]
+name = "add-array-onto-scalar-reports-success"
+rule = "AddItemToArray onto a scalar is refused, not reported done (parent-*-add, seq-app-onto-scalar)"
+[[mutant.edit]]
+file = "rust/crates/core/src/dom.rs"
+old = "    if let Value::Array(items) = array {\n        items.push(item);\n        true\n    } else {\n        false\n    }"
+new = "    let scalar = !matches!(array, Value::Object(_));\n    if let Value::Array(items) = array {\n        items.push(item);\n        true\n    } else {\n        scalar\n    }"
+
+[[mutant]]
+name = "add-array-onto-object-empty-key"
+rule = "AddItemToArray onto an object adds no NULL-keyed member (parent-obj-add-array-item, seq-app-onto-object)"
+[[mutant.edit]]
+file = "rust/crates/core/src/dom.rs"
+old = "    if let Value::Array(items) = array {\n        items.push(item);\n        true\n    } else {\n        false\n    }"
+new = "    if let Value::Array(items) = array {\n        items.push(item);\n        true\n    } else if let Value::Object(entries) = array {\n        entries.push((Vec::new(), item));\n        true\n    } else {\n        false\n    }"
+
+[[mutant]]
+name = "add-object-onto-array-keyless"
+rule = "AddItemToObject onto an array is refused, not stored under a key print_array never emits (parent-arr-add-keyed)"
+[[mutant.edit]]
+file = "rust/crates/core/src/dom.rs"
+old = "    if let Value::Object(entries) = object {\n        entries.push((key.to_vec(), item));\n        entries.last_mut().map(|(_, v)| v)\n    } else {\n        None\n    }"
+new = "    if let Value::Object(entries) = object {\n        entries.push((key.to_vec(), item));\n        entries.last_mut().map(|(_, v)| v)\n    } else if let Value::Array(items) = object {\n        items.push(item);\n        items.last_mut()\n    } else {\n        None\n    }"
+
+[[mutant]]
+name = "add-object-onto-scalar-reports-success"
+rule = "AddItemToObject onto a scalar is refused, not reported done (parent-num-add, parent-doc-scalar)"
+[[mutant.edit]]
+file = "rust/crates/core/src/dom.rs"
+old = "    add_named(object, key, item).is_some()\n}"
+new = "    let scalar = !matches!(object, Value::Object(_) | Value::Array(_));\n    add_named(object, key, item).is_some() || scalar\n}"
+
+[[mutant]]
+name = "insert-onto-non-array-reports-success"
+rule = "InsertItemInArray onto a node that is not an array is refused, not reported done (place-ins-onto-scalar, place-ins-onto-object)"
+[[mutant.edit]]
+file = "rust/crates/core/src/dom.rs"
+old = "    let Value::Array(items) = array else {\n        return false;\n    };\n    // `min`, not a bounds check: past-the-end is the append path, not a failure.\n"
+new = "    let Value::Array(items) = array else {\n        return true;\n    };\n    // `min`, not a bounds check: past-the-end is the append path, not a failure.\n"
+
+[[mutant]]
+name = "replace-in-array-onto-object"
+rule = "ReplaceItemInArray onto an object is refused, not a positional write that drops the key (place-rep-onto-object)"
+[[mutant.edit]]
+file = "rust/crates/core/src/dom.rs"
+old = "    let Value::Array(items) = array else {\n        return false;\n    };\n    match items.get_mut(index) {"
+new = "    if let Value::Object(entries) = array {\n        return match entries.get_mut(index) {\n            Some(slot) => {\n                *slot = (Vec::new(), item);\n                true\n            }\n            None => false,\n        };\n    }\n    let Value::Array(items) = array else {\n        return false;\n    };\n    match items.get_mut(index) {"
+
+[[mutant]]
+name = "prealloc-leaves-partial-render"
+rule = "a failed PrintPreallocated writes nothing to the caller's buffer (opts-prealloc-*: the C leaves a shorter, terminated render)"
+[[mutant.edit]]
+file = "rust/crates/core/src/print.rs"
+old = "    if p.value(value).is_none() {\n        return false;\n    }\n    // `ensure` has already guaranteed"
+new = "    if p.value(value).is_none() {\n        let n = p.out.len().min(buffer.len().saturating_sub(1));\n        if let (Some(dst), Some(src)) = (buffer.get_mut(..n), p.out.get(..n)) {\n            dst.copy_from_slice(src);\n        }\n        if let Some(nul) = buffer.get_mut(n) {\n            *nul = 0;\n        }\n        return false;\n    }\n    // `ensure` has already guaranteed"
+
+
+# ---- ported rules of modules 1-8 and the DOM: one plausible wrong version each (2026-11-14) ----
+
+[[mutant]]
+name = "array-nesting-off-by-one"
+rule = "an array nested past CJSON_NESTING_LIMIT is rejected (cve-nesting-1001, nesting-limit-ok)"
+[[mutant.edit]]
+file = "rust/crates/core/src/parse.rs"
+old = "fn parse_array(buf: &mut ParseBuffer) -> Result<Value, ()> {\n    if buf.depth >= NESTING_LIMIT {"
+new = "fn parse_array(buf: &mut ParseBuffer) -> Result<Value, ()> {\n    if buf.depth > NESTING_LIMIT {"
+
+[[mutant]]
+name = "object-nesting-off-by-one"
+rule = "an object nested past CJSON_NESTING_LIMIT is rejected (cve-nesting-1001-objects, nesting-limit-ok-objects)"
+[[mutant.edit]]
+file = "rust/crates/core/src/parse.rs"
+old = "fn parse_object(buf: &mut ParseBuffer) -> Result<Value, ()> {\n    if buf.depth >= NESTING_LIMIT {"
+new = "fn parse_object(buf: &mut ParseBuffer) -> Result<Value, ()> {\n    if buf.depth > NESTING_LIMIT {"
+
+[[mutant]]
+name = "lone-low-surrogate-accepted"
+rule = "a lone LOW surrogate is rejected (reject-lone-low-surrogate, cve-lone-surrogate)"
+[[mutant.edit]]
+file = "rust/crates/core/src/string.rs"
+old = "    // a LOW surrogate first is invalid\n    if (0xDC00..=0xDFFF).contains(&first_code) {\n        return None;\n    }\n"
+new = ""
+
+[[mutant]]
+name = "surrogate-second-unchecked"
+rule = "a high surrogate must be followed by a LOW one (reject-surrogate-bad-second)"
+[[mutant.edit]]
+file = "rust/crates/core/src/string.rs"
+old = "        if !(0xDC00..=0xDFFF).contains(&second_code) {\n            return None;\n        }\n"
+new = ""
+
+[[mutant]]
+name = "surrogate-pair-offset-dropped"
+rule = "a surrogate pair decodes to 0x10000 plus its twenty bits (surrogate-pair, escaped-surrogate-pair)"
+[[mutant.edit]]
+file = "rust/crates/core/src/string.rs"
+old = "            0x10000u32 + (((first_code & 0x3FF) << 10) | (second_code & 0x3FF)),"
+new = "            ((first_code & 0x3FF) << 10) | (second_code & 0x3FF),"
+
+[[mutant]]
+name = "print-number-17-fallback-dropped"
+rule = "a double %1.15g does not round-trip is printed with %1.17g (num-needs-17-digits)"
+[[mutant.edit]]
+file = "rust/crates/core/src/num.rs"
+old = "            _ => fmt_g(d, 17),"
+new = "            _ => printed,"
+
+[[mutant]]
+name = "print-number-int-fast-path-dropped"
+rule = "a double equal to its valueint prints as %d, so -0 prints 0 (neg-zero)"
+[[mutant.edit]]
+file = "rust/crates/core/src/num.rs"
+old = "    } else if d == f64::from(n.i) {\n        format!(\"{}\", n.i)\n    } else {"
+new = "    } else {"
+
+[[mutant]]
+name = "print-infinity-as-number"
+rule = "an infinity prints as null (num-overflow-inf)"
+[[mutant.edit]]
+file = "rust/crates/core/src/num.rs"
+old = "    if d.is_nan() || d.is_infinite() {\n        \"null\".to_string()"
+new = "    if d.is_nan() {\n        \"null\".to_string()"
+
+[[mutant]]
+name = "bom-four-bytes-enough"
+rule = "the BOM is skipped only when five bytes are readable, so BOM plus one digit fails as in the C (bom-number)"
+[[mutant.edit]]
+file = "rust/crates/core/src/parse.rs"
+old = "    if buf.can_access(4) && buf.content.starts_with(b\"\\xEF\\xBB\\xBF\") {"
+new = "    if buf.can_access(3) && buf.content.starts_with(b\"\\xEF\\xBB\\xBF\") {"
+
+[[mutant]]
+name = "parse-rejects-trailing-garbage"
+rule = "cJSON_Parse ignores the bytes after the value (trailing-garbage-lax, trailing-after-number)"
+[[mutant.edit]]
+file = "rust/crates/core/src/parse.rs"
+old = "    if require_null_terminated {\n        skip_whitespace(&mut buf);"
+new = "    if true {\n        skip_whitespace(&mut buf);"
+
+[[mutant]]
+name = "minify-tracks-escape-parity"
+rule = "minify does not track escape parity: a backslash before a quote escapes it even when itself escaped (minify-escape-parity-quirk)"
+[[mutant.edit]]
+file = "rust/crates/core/src/minify.rs"
+old = "                    if b == b'\\\\' && json.get(i.saturating_add(1)) == Some(&b'\"') {"
+new = "                    if b == b'\\\\' && i.saturating_add(1) < json.len() {\n                        out.push(b'\\\\');\n                        out.push(json[i.saturating_add(1)]);\n                        i = i.saturating_add(2);\n                        continue;\n                    }\n                    if b == b'\\\\' && json.get(i.saturating_add(1)) == Some(&b'\"') {"
+
+[[mutant]]
+name = "minify-keeps-lone-slash"
+rule = "a lone `/` outside a string is dropped (minify-lone-slash-dropped)"
+[[mutant.edit]]
+file = "rust/crates/core/src/minify.rs"
+old = "                } else {\n                    // lone '/': the C's `else { json++; }` drops it (quirk)\n"
+new = "                } else {\n                    // lone '/': the C's `else { json++; }` drops it (quirk)\n                    out.push(b'/');\n"
+
+[[mutant]]
+name = "print-string-nul-not-truncated"
+rule = "a string prints only up to its first NUL, as the C's strlen does (nul-escape-truncates-print)"
+[[mutant.edit]]
+file = "rust/crates/core/src/string.rs"
+old = "    let end = input.iter().position(|&b| b == 0).unwrap_or(input.len());\n    let s = &input[..end];"
+new = "    let end = input.len();\n    let s = &input[..end];"
+
+[[mutant]]
+name = "print-string-hex-uppercase"
+rule = "a control byte with no short escape prints as lowercase \\u00xx (ctrl-hex-letters-reescape)"
+[[mutant.edit]]
+file = "rust/crates/core/src/string.rs"
+old = "                out.extend_from_slice(format!(\"\\\\u{:04x}\", b).as_bytes());"
+new = "                out.extend_from_slice(format!(\"\\\\u{:04X}\", b).as_bytes());"
+
+[[mutant]]
+name = "print-string-solidus-escaped"
+rule = "`/` prints unescaped (esc-slash-unescaped-out)"
+[[mutant.edit]]
+file = "rust/crates/core/src/string.rs"
+old = "            b'\\\\' => out.extend_from_slice(b\"\\\\\\\\\"),"
+new = "            b'\\\\' => out.extend_from_slice(b\"\\\\\\\\\"),\n            b'/' => out.extend_from_slice(b\"\\\\/\"),"
+
+[[mutant]]
+name = "compare-infinities-equal"
+rule = "an infinity never compares equal to itself, as in the C (dup-eq)"
+[[mutant.edit]]
+file = "rust/crates/core/src/num.rs"
+old = "    (a - b).abs() <= max_val * f64::EPSILON"
+new = "    a == b || (a - b).abs() <= max_val * f64::EPSILON"
+
+[[mutant]]
+name = "compare-objects-positionally"
+rule = "objects compare by key lookup, so duplicated keys never compare equal (dup-eq)"
+[[mutant.edit]]
+file = "rust/crates/core/src/dom.rs"
+old = "            let verdict = subset(ae, b, seen) && subset(be, a, seen);"
+new = "            let verdict = ae.len() == be.len()\n                && ae.iter().zip(be).all(|((ka, va), (kb, vb))| {\n                    (if case_sensitive { strcmp_eq(ka, kb) } else { eq_ci(ka, kb) })\n                        && compare_in(va, vb, case_sensitive, seen)\n                });"
+
+[[mutant]]
+name = "compare-arrays-length-unchecked"
+rule = "arrays of different lengths never compare equal (ABI compare-array-longer, compare-array-shorter)"
+[[mutant.edit]]
+file = "rust/crates/core/src/dom.rs"
+old = "            xs.len() == ys.len()\n                && xs"
+new = "            xs"
+
+
+[[mutant]]
+name = "compare-memo-keyed-by-one-node"
+rule = "a reused compare verdict is keyed by both nodes (ABI compare-ci-collision: under the flag, x and X find one member)"
+[[mutant.edit]]
+file = "rust/crates/core/src/dom.rs"
+old = "            let key = (a as *const Value, b as *const Value);"
+new = "            let key = (b as *const Value, b as *const Value);"
+[[mutant]]
+name = "array-item-of-object-none"
+rule = "GetArrayItem walks any container's child list, an object's included"
+[[mutant.edit]]
+file = "rust/crates/core/src/dom.rs"
+old = "        Value::Array(items) => items.get(index),\n        Value::Object(entries) => entries.get(index).map(|(_, value)| value),"
+new = "        Value::Array(items) => items.get(index),"
+
+[[mutant]]
+name = "object-item-lookup-case-sensitive"
+rule = "GetObjectItem matches keys case-insensitively"
+[[mutant.edit]]
+file = "rust/crates/core/src/dom.rs"
+old = "pub fn get_object_item<'a>(v: &'a Value, name: &[u8], case_sensitive: bool) -> Option<&'a Value> {\n    let Value::Object(entries) = v else {\n        return None;\n    };\n    entries\n        .iter()\n        .find(|(k, _)| {\n            if case_sensitive {\n                // C-string compare (strcmp): both sides truncate at the first NUL.\n                strcmp_eq(k, name)\n            } else {\n                eq_ci(k, name)\n            }"
+new = "pub fn get_object_item<'a>(v: &'a Value, name: &[u8], case_sensitive: bool) -> Option<&'a Value> {\n    let Value::Object(entries) = v else {\n        return None;\n    };\n    entries\n        .iter()\n        .find(|(k, _)| {\n            if case_sensitive {\n                // C-string compare (strcmp): both sides truncate at the first NUL.\n                strcmp_eq(k, name)\n            } else {\n                strcmp_eq(k, name)\n            }"
+
+[[mutant]]
+name = "fmt-colon-space"
+rule = "a formatted object member's colon is followed by a tab (fmt-object, fmt-nested-obj-in-array)"
+[[mutant.edit]]
+file = "rust/crates/core/src/print.rs"
+old = "            self.out.push(b':');\n            if self.format {\n                self.out.push(b'\\t');\n            }"
+new = "            self.out.push(b':');\n            if self.format {\n                self.out.push(b' ');\n            }"
+
+# No mutant for the colon site's missing NUL slot (print.rs, cJSON.c:1783):
+# rounding it up is EQUIVALENT. Whatever follows a colon reserves more than
+# the colon does, so the colon is never the tightest site and no document's
+# failure boundary moves; measured 2026-11-14, 605 documents x 2 formats x 8
+# buffer sizes around each boundary, 9,650 runs, port and mutant identical.
+
+[[mutant]]
+name = "replace-in-object-keeps-old-key"
+rule = "ReplaceItemInObject names the member by the name it was asked for"
+[[mutant.edit]]
+file = "rust/crates/core/src/dom.rs"
+old = "    slot.0 = cstr(name).to_vec();\n    slot.1 = item;"
+new = "    slot.1 = item;"

@@ -491,6 +491,40 @@ pub unsafe extern "C" fn cjson_parse_seq(
     unsafe { emit_bytes(&desc, out, out_size) }
 }
 
+/// `cJSON_Compare` on two documents parsed separately, under the given flag:
+/// through this library's own `cJSON_Parse`, `cJSON_Compare` and
+/// `cJSON_Delete`, as the C twin goes through cJSON's, so the export is what
+/// the ABI vectors compare. `dup-eq` and `parent` compare a value only with its
+/// own duplicate, case-sensitively, so before this shim no gate compared two
+/// different documents (LESSONS #67). 1 or 0, or -1 when either document does
+/// not parse.
+///
+/// # Safety
+/// `a` and `b` are valid NUL-terminated C strings.
+#[no_mangle]
+pub unsafe extern "C" fn cjson_compare_docs(
+    a: *const c_char,
+    b: *const c_char,
+    case_sensitive: c_int,
+) -> c_int {
+    // SAFETY: forwarded contract on `a`.
+    let x = unsafe { cJSON_Parse(a) };
+    // SAFETY: forwarded contract on `b`.
+    let y = unsafe { cJSON_Parse(b) };
+    let verdict = if x.is_null() || y.is_null() {
+        -1
+    } else {
+        // SAFETY: both are live handles this library just returned.
+        unsafe { cJSON_Compare(x, y, case_sensitive) }
+    };
+    // SAFETY: each is null or a handle this library returned, deleted once.
+    unsafe {
+        cJSON_Delete(x);
+        cJSON_Delete(y);
+    }
+    verdict
+}
+
 #[cfg(test)]
 mod tests {
     //! These tests exist to give MIRI something to check. The unsafe in this
@@ -675,6 +709,23 @@ mod tests {
         // SAFETY: NUL-terminated by the shim.
         let got = unsafe { CStr::from_ptr(out.as_ptr()) }.to_bytes();
         assert_eq!(got, b"first=fail@a2;second=ok:{\"k\":2}@null");
+    }
+
+    #[test]
+    fn compare_docs_shim_parses_compares_and_frees_both() {
+        let a = c(r#"{"x":[1,2]}"#);
+        let longer = c(r#"{"x":[1,2,3]}"#);
+        let upper = c(r#"{"X":[1,2]}"#);
+        let bad = c("[");
+        // SAFETY: live CStrings in; the shim frees what it parses.
+        unsafe {
+            assert_eq!(cjson_compare_docs(a.as_ptr(), a.as_ptr(), 1), 1);
+            assert_eq!(cjson_compare_docs(a.as_ptr(), longer.as_ptr(), 1), 0);
+            assert_eq!(cjson_compare_docs(a.as_ptr(), upper.as_ptr(), 1), 0);
+            assert_eq!(cjson_compare_docs(a.as_ptr(), upper.as_ptr(), 0), 1);
+            assert_eq!(cjson_compare_docs(a.as_ptr(), bad.as_ptr(), 1), -1);
+            assert_eq!(cjson_compare_docs(bad.as_ptr(), a.as_ptr(), 0), -1);
+        }
     }
 
     #[test]

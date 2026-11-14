@@ -491,6 +491,35 @@ the port diverges and the divergence is judged an intentional fix-of-C-defect.
 
 ## Structural eliminations (NOT divergences — no output change)
 
+- **`cJSON_Compare` is 2^depth in object nesting; the port is not**
+  (`compare-exponential-nesting`; cJSON.c:3061, CWE-407, inefficient
+  algorithmic complexity). The object case walks a's members against b, then
+  b's against a, "to prevent true comparison if a subset of b" (the C's own
+  comment, which calls it "just a fix for now"), and each walk recurses: a
+  member object is compared twice, its member four times. Measured on the C
+  oracle in `dup-eq` mode, each level of nesting doubles the time (6.3 s at
+  depth 28, a 169-byte document), and at the depth the parser accepts (1000) it
+  does not finish. So any caller that compares JSON it was sent can be stalled
+  by a few hundred bytes. The port reproduced the algorithm faithfully until
+  2026-11-14, when the mutants added for this module's rules showed it
+  (`nesting-limit-ok-objects` timed out on both sides in `dup-eq`). It now
+  compares each pair of object nodes once and reuses the verdict, keyed by both
+  nodes: a pure function of two subtrees nothing mutates during the call, so no
+  verdict changes. The port answers depth 1000 in milliseconds. That is not a
+  ledgered row because no case can show it: where the C finishes, the answers
+  are the same; where it does not, there is no answer to compare. The deep case
+  is left out of `dup-eq` for that reason (`gen_corpus.py`), a 20-deep one is
+  in it, and 30 ABI vectors (`compare-*`, through `cjson_compare_docs`) compare
+  two different documents under both flag values. The class is
+  predicate-defined, so the `dup-eq` fuzzer, which grew a 20-deep seed to
+  341 levels and timed the C out, runs against the corrected oracle. Its
+  ninth correction (`make_fixed_core.py`) skips only the second walk's
+  recursion into a pair the first walk already found equal: the answers
+  are the pristine C's, identical on 20,000 random pairs under both flags.
+  The assertions are
+  `dom::tests::compare_is_not_exponential_in_object_nesting` and
+  `compare_reuses_a_verdict_only_for_the_same_pair`.
+
 - **`global_error` is per thread, not per process** (`errptr-thread-local`;
   cJSON.c:92). cJSON keeps the last parse error in one unsynchronized static
   that every parse writes, so a thread reading `cJSON_GetErrorPtr` races any

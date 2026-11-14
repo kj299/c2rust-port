@@ -324,9 +324,16 @@ bash "$HERE/oracle/build_fixed.sh" > /dev/null
     --args minify --matrix "$HERE/oracle/matrix.json" \
     --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
     --json > "$HERE/reports/fuzz/entry-minify.json"
-# dom mode: fuzz the Compare+Duplicate invariant (dup-eq)
+# dom mode: fuzz the Compare+Duplicate invariant (dup-eq) against the CORRECTED
+# oracle. The C's cJSON_Compare is 2^depth in object nesting (LESSONS #67), and
+# the class is predicate-defined: every case is a seed (LESSONS #62), a
+# mutation that nests objects deep enough makes the pristine C time out where
+# the port answers, and the first run seeded with matrix.json's 1000-deep
+# objects grew a 20-deep one into 341 levels and failed on exactly that. Its
+# ninth correction (make_fixed_core.py) removes only the re-walk, so the
+# answers are the pristine C's (20,000 random pairs, both flags, identical).
 "$PY" "$KIT/harnesses/diff-fuzz/diff_fuzz.py" \
-    --oracle "$HERE/oracle/cjson_oracle" --rust "$RUST_DRIVER" \
+    --oracle "$HERE/oracle/cjson_oracle_fixed" --rust "$RUST_DRIVER" \
     --args dup-eq --matrix "$HERE/oracle/matrix.json" \
     --ledger "$HERE/DIVERGENCES.md" --iterations 2000 --timeout 5 \
     --json > "$HERE/reports/fuzz/dom.json"
